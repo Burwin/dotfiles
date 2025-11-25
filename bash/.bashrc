@@ -17,6 +17,7 @@ export SSH_AUTH_SOCK="$XDG_RUNTIME_DIR/ssh-agent.socket"
 # aliases
 alias 1rm='_1rm'
 alias v=nvim
+alias lg=lazygit
 
 # sources
 source ~/bin/1rm
