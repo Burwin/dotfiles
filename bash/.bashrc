@@ -19,6 +19,7 @@ alias 1rm='_1rm'
 alias v=nvim
 alias lg=lazygit
 alias ccs-list-secrets='~/src/secrets/ccs/list-secrets.sh'
+alias ccs-secrets=ccs-list-secrets
 
 # sources
 source ~/bin/1rm
