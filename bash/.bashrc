@@ -19,6 +19,7 @@ alias 1rm='_1rm'
 alias v=nvim
 alias lg=lazygit
 alias acme-list-secrets='~/src/secrets/acme/list-secrets.sh'
+alias acme-secrets=acme-list-secrets
 
 # sources
 source ~/bin/1rm
