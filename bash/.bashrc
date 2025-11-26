@@ -18,6 +18,7 @@ export SSH_AUTH_SOCK="$XDG_RUNTIME_DIR/ssh-agent.socket"
 alias 1rm='_1rm'
 alias v=nvim
 alias lg=lazygit
+alias ccs-list-secrets='~/src/secrets/ccs/list-secrets.sh'
 
 # sources
 source ~/bin/1rm
