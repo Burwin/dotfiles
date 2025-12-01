@@ -20,6 +20,8 @@ alias v=nvim
 alias lg=lazygit
 alias acme-list-secrets='~/src/secrets/acme/list-secrets.sh'
 alias acme-secrets=acme-list-secrets
+alias xa='~/src/snippets/linux/close-all-except.sh'
+alias sb='source ~/.bashrc'
 
 # sources
 source ~/bin/1rm
