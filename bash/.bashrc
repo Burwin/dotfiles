@@ -20,6 +20,8 @@ alias v=nvim
 alias lg=lazygit
 alias ccs-list-secrets='~/src/secrets/ccs/list-secrets.sh'
 alias ccs-secrets=ccs-list-secrets
+alias xa='~/src/snippets/linux/close-all-except.sh'
+alias sb='source ~/.bashrc'
 
 # sources
 source ~/bin/1rm
