@@ -10,6 +10,8 @@ source ~/.local/share/omarchy/default/bash/rc
 # Make an alias for invoking commands you use constantly
 # alias p='python'
 PATH="$HOME/bin:$PATH"
+PATH="$HOME/.dotnet/tools:$PATH"
+PATH="$HOME/bin/JetBrains.Rider-2025.3.3/bin:$PATH"
 
 # other configurations
 export SSH_AUTH_SOCK="$XDG_RUNTIME_DIR/ssh-agent.socket"
@@ -22,6 +24,20 @@ alias acme-list-secrets='~/src/secrets/acme/list-secrets.sh'
 alias acme-secrets=acme-list-secrets
 alias xa='~/src/snippets/linux/close-all-except.sh'
 alias sb='source ~/.bashrc'
+alias rdp=xfreerdp3
 
 # sources
 source ~/bin/1rm
+
+# The next line updates PATH for the Google Cloud SDK.
+if [ -f '/home/mbh/google-cloud-sdk/path.bash.inc' ]; then . '/home/mbh/google-cloud-sdk/path.bash.inc'; fi
+
+# The next line enables shell command completion for gcloud.
+if [ -f '/home/mbh/google-cloud-sdk/completion.bash.inc' ]; then . '/home/mbh/google-cloud-sdk/completion.bash.inc'; fi
+
+# nvm
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
+[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
+
+source /usr/share/nvm/init-nvm.sh
