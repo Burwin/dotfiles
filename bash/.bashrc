@@ -26,6 +26,9 @@ alias xa='~/src/snippets/linux/close-all-except.sh'
 alias sb='source ~/.bashrc'
 alias rdp=xfreerdp3
 
+# restart waybar
+alias wb "systemctl --user restart waybar.service"
+
 # sources
 source ~/bin/1rm
 
