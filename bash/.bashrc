@@ -27,7 +27,7 @@ alias sb='source ~/.bashrc'
 alias rdp=xfreerdp3
 
 # restart waybar
-alias wb "systemctl --user restart waybar.service"
+alias wb='systemctl --user restart waybar.service'
 
 # sources
 source ~/bin/1rm
