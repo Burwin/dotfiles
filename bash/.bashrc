@@ -44,3 +44,8 @@ export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
 
 source /usr/share/nvm/init-nvm.sh
+
+# rider background launcher
+riderd() {
+  nohup rider "$@" >/dev/null 2>&1 &
+}
