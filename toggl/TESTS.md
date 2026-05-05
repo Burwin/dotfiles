@@ -541,138 +541,284 @@ Manual smoke tests for the `toggl-group` CLI. The CLI is a thin wrapper over
 ./toggl/.local/bin/toggl-group.test.ts`. The cases below exercise input
 discovery, error paths, and the JSON output contract.
 
-`toggl-group` consumes `<worktree>/.toggl-time` only — the per-repo
-heartbeat log written by the opencode plugin. The project context that
-appears inside each heartbeat originates from the central
-`~/.local/state/toggl/state.db`, but the grouper is agnostic to that
+`toggl-group` consumes the `toggl_heartbeats` table of
+`~/.local/state/toggl/state.db` (written by the opencode plugin). The
+project context that appears inside each heartbeat originates from the
+sibling `toggl_repo_state` table, but the grouper is agnostic to that
 source.
 
 ## Setup
 
-Tests run inside a throwaway git repo and use the in-tree fixtures as
-deterministic input:
+Tests use a fully-isolated state DB via the `TOGGL_STATE_DB` env var (which
+both the CLI and `seed-heartbeats.sh` honor), so they don't touch your real
+one. The CLI resolves CWD to `realpath(git_toplevel)` and queries by that
+exact key; the seed script writes rows under a key the test chooses.
 
 ```bash
 smoke=/tmp/toggl-group-smoke
 fixtures=$HOME/src/dotfiles/toggl/test-fixtures
-rm -rf "$smoke" && mkdir -p "$smoke" && cd "$smoke" && git init -q
+seed=$fixtures/seed-heartbeats.sh
+export TOGGL_STATE_DB=/tmp/toggl-group-smoke.db
+
+rm -rf "$smoke" "$TOGGL_STATE_DB" "$TOGGL_STATE_DB-wal" "$TOGGL_STATE_DB-shm"
+mkdir -p "$smoke" && cd "$smoke" && git init -q
+
+# Seed rows keyed by realpath of the smoke worktree so the default
+# git-toplevel lookup hits.
+key=$(realpath "$smoke")
+"$seed" "$TOGGL_STATE_DB" "$key" "$fixtures/heartbeats-synthetic.jsonl"
 ```
 
-Cleanup after each run:
+Cleanup after a run:
 
 ```bash
-cd / && rm -rf /tmp/toggl-group-smoke
+unset TOGGL_STATE_DB
+cd / && rm -rf "$smoke" /tmp/toggl-group-smoke.db \
+    /tmp/toggl-group-smoke.db-wal /tmp/toggl-group-smoke.db-shm
 ```
 
 ## Cases
 
-Most cases use `--file` for portability — they work in both interactive and
-non-interactive shells. Cases that target the git-root walk (input source
-3 in `toggl-group:1`) require TTY stdin; see case 8 for that.
-
-### 1. `--file` flag → JSON array on stdout, exit 0
+### 1. Default (no args) → DB lookup for current worktree
 
 ```bash
-toggl-group --file "$fixtures/heartbeats-synthetic.jsonl" | jq 'length'
+toggl-group | jq 'length'
 echo "exit=${PIPESTATUS[0]}"
 ```
 
-**Expected:** `3` (synthetic produces three entries with the default 10-min
-buffer; see `toggl-group.test.ts` "synthetic fixture" assertions for
+**Expected:** `3` (synthetic fixture produces three entries with the default
+10-min buffer; see `toggl-group.test.ts` "synthetic fixture" assertions for
 per-entry detail), `exit=0`.
 
-### 2. stdin pipe → equivalent JSON
+### 2. `--repo PATH` from outside the worktree
 
 ```bash
-cat "$fixtures/heartbeats-synthetic.jsonl" | toggl-group | jq 'length'
+cd /
+toggl-group --repo "$smoke" | jq 'length'
 ```
 
-**Expected:** `3`. Stdin and `--file` are interchangeable.
+**Expected:** `3`. Same result as case 1; the explicit path bypasses the
+git-toplevel discovery.
 
-### 3. stdin and `--file` produce identical output
+### 3. Default vs `--repo` produce identical output
 
 ```bash
-diff \
-    <(toggl-group --file "$fixtures/heartbeats-synthetic.jsonl") \
-    <(cat "$fixtures/heartbeats-synthetic.jsonl" | toggl-group)
+cd "$smoke"
+diff <(toggl-group) <(toggl-group --repo "$smoke")
 echo "exit=$?"
 ```
 
-**Expected:** No diff output, `exit=0`.
+**Expected:** No diff, `exit=0`.
 
-### 4. Malformed JSONL line → warning on stderr, valid lines still grouped
+### 4. `--all` includes other worktrees
 
 ```bash
-{ echo "not json"; cat "$fixtures/heartbeats-synthetic.jsonl"; } > broken.jsonl
-toggl-group --file broken.jsonl 2>&1 >/dev/null | head -1
-toggl-group --file broken.jsonl 2>/dev/null | jq 'length'
+# Seed a second throwaway worktree with the live fixture (different
+# project/task/ts than the synthetic seed, so groupEvents won't merge them).
+smoke2=/tmp/toggl-group-smoke-2
+mkdir -p "$smoke2" && (cd "$smoke2" && git init -q)
+key2=$(realpath "$smoke2")
+"$seed" "$TOGGL_STATE_DB" "$key2" "$fixtures/heartbeats-live.jsonl"
+
+cd "$smoke"
+echo "(default → 3:)"
+toggl-group | jq 'length'
+
+echo "(--all → 7:)"
+toggl-group --all | jq 'length'
+
+echo "(tasks across all worktrees:)"
+toggl-group --all | jq '[.[].task] | unique | sort'
+
+# Cleanup the second seed.
+rm -rf "$smoke2"
 ```
 
-**Expected:**
+**Expected:** Default returns `3` (synthetic-only). `--all` returns `7` —
+3 from the synthetic seed (TASK-1/TASK-2) plus 4 from the live seed
+(MASTER-1607/1608/1621). Unique task list:
+`["MASTER-1607","MASTER-1608","MASTER-1621","TASK-1","TASK-2"]`.
 
-- Stderr first line: `toggl-group: /tmp/toggl-group-smoke/broken.jsonl: line 1: invalid JSON (...)`
-- jq length: `3` (the 8 valid lines still group into the same three entries).
+> **Why a different fixture for the second seed?** `groupEvents` dedupes
+> heartbeats by (ts, event, trigger, session_id, project_id, task). Seeding
+> the synthetic fixture under a second worktree would produce duplicate
+> heartbeats that the deduper collapses, masking the cross-worktree merge
+> behavior. The live fixture has distinct timestamps and tasks, so its
+> rows survive dedup and `--all` shows the actual cross-worktree union.
 
-### 5. `--file` with missing path → exit 1
+### 5. `--since` / `--until` filters at the SQL level
+
+The synthetic fixture spans 2026-01-15T10:00:00Z to 2026-01-15T11:00:33Z.
 
 ```bash
-toggl-group --file /tmp/does-not-exist.jsonl 2>&1
+cd "$smoke"
+echo "(--since after the last event → 0:)"
+toggl-group --since 2026-01-15T12:00:00Z | jq 'length'
+
+echo "(--until before the first event → 0:)"
+toggl-group --until 2026-01-15T09:00:00Z | jq 'length'
+
+echo "(--since 10:30 → drops the first TASK-1 entry:)"
+toggl-group --since 2026-01-15T10:30:00Z | jq '.[].task'
+```
+
+**Expected:** `0`, `0`, then `"TASK-1"` and `"TASK-2"` (the 10:00–10:08
+entry is filtered out by ts >= 10:30; the 10:20 TASK-1 entry and the 11:00
+TASK-2 entry remain).
+
+### 6. State DB missing → exit 1
+
+```bash
+mv "$TOGGL_STATE_DB" "$TOGGL_STATE_DB.bak"
+mv "$TOGGL_STATE_DB-wal" "$TOGGL_STATE_DB-wal.bak" 2>/dev/null
+mv "$TOGGL_STATE_DB-shm" "$TOGGL_STATE_DB-shm.bak" 2>/dev/null
+
+cd "$smoke"
+toggl-group 2>&1
 echo "exit=$?"
+
+mv "$TOGGL_STATE_DB.bak" "$TOGGL_STATE_DB"
+mv "$TOGGL_STATE_DB-wal.bak" "$TOGGL_STATE_DB-wal" 2>/dev/null
+mv "$TOGGL_STATE_DB-shm.bak" "$TOGGL_STATE_DB-shm" 2>/dev/null
 ```
 
-**Expected:** stderr `toggl-group: /tmp/does-not-exist.jsonl not found`,
+**Expected:** stderr `toggl-group: state DB not found at <TOGGL_STATE_DB>`,
 `exit=1`.
 
-### 6. `--file` without an argument → exit 1
+### 7. Worktree with no rows → empty array, exit 0
 
 ```bash
-toggl-group --file 2>&1
+empty=/tmp/toggl-group-empty
+mkdir -p "$empty" && (cd "$empty" && git init -q)
+cd "$empty"
+toggl-group
 echo "exit=$?"
+rm -rf "$empty"
 ```
 
-**Expected:** stderr `toggl-group: --file requires a path`, `exit=1`.
+**Expected:** `[]` on stdout, `exit=0`. No matching rows is not an error.
 
-### 7. Empty stdin (non-TTY) → empty array, exit 0
-
-```bash
-echo -n "" | toggl-group
-echo "exit=$?"
-```
-
-**Expected:** `[]` on stdout, `exit=0`. Empty input is not an error; it
-maps to zero entries.
-
-### 8. No args, `.toggl-time` in git root → JSON via git-root walk
-
-This case targets the third input source (git toplevel walk). It only
-fires when `process.stdin.isTTY` is true, so run it from an interactive
-shell with no stdin redirect:
+### 8. Outside any git repo, no `--repo`/`--all` → exit 1
 
 ```bash
-cp "$fixtures/heartbeats-synthetic.jsonl" .toggl-time
-toggl-group | jq 'length'
-```
-
-**Expected:** `3`. Same JSON as case 1.
-
-In a non-interactive context (CI, `bash -c`, sub-pipes), stdin is a
-non-TTY pipe and the CLI reads from it instead of walking the git tree;
-expect `[]` in that case. To force the git-root path under a non-TTY
-shell, allocate a pty:
-
-```bash
-script -qec 'toggl-group | jq length' /dev/null < /dev/null | tr -d '\r'
-```
-
-### 9. `.toggl-time` missing in git root → exit 1 (TTY only)
-
-Like case 8, this fires only with a TTY stdin:
-
-```bash
-rm -f .toggl-time
+cd /
 toggl-group 2>&1
 echo "exit=$?"
 ```
 
-**Expected (TTY):** stderr `toggl-group: /tmp/toggl-group-smoke/.toggl-time not found`,
+**Expected:** stderr `toggl-group: not in a git repo (try --repo PATH or --all)`,
+`exit=1`.
+
+### 9. Unknown flag → exit 1
+
+```bash
+toggl-group --bogus 2>&1
+echo "exit=$?"
+```
+
+**Expected:** stderr `toggl-group: unknown argument: --bogus`, `exit=1`.
+
+### 10. Invalid `--since` value → exit 1
+
+```bash
+toggl-group --since not-a-date 2>&1
+echo "exit=$?"
+```
+
+**Expected:** stderr `toggl-group: --since value not parseable as a date: not-a-date`,
+`exit=1`.
+
+### 11. `--all` and `--repo` together → exit 1
+
+```bash
+toggl-group --all --repo /tmp 2>&1
+echo "exit=$?"
+```
+
+**Expected:** stderr `toggl-group: --all and --repo are mutually exclusive`,
+`exit=1`.
+
+# toggl-time-migrate tests
+
+Manual smoke tests for the `toggl-time-migrate` CLI. The migrator finds
+legacy `<worktree>/.toggl-time` JSONL files under one or more roots and
+imports each line into `~/.local/state/toggl/state.db`, optionally deleting
+the originals.
+
+## Setup
+
+Tests use a fully-isolated state DB so they don't touch your real one. The
+migrator honors the `TOGGL_STATE_DB` env var, so we can fully redirect it:
+
+```bash
+smoke=/tmp/toggl-time-migrate-smoke
+export TOGGL_STATE_DB=/tmp/toggl-time-migrate-smoke.db
+fixtures=$HOME/src/dotfiles/toggl/test-fixtures
+rm -rf "$smoke" "$TOGGL_STATE_DB" "$TOGGL_STATE_DB-wal" "$TOGGL_STATE_DB-shm"
+mkdir -p "$smoke/repo-a" "$smoke/repo-b" "$smoke/repo-empty" "$smoke/repo-mixed"
+
+cp "$fixtures/heartbeats-synthetic.jsonl" "$smoke/repo-a/.toggl-time"
+cp "$fixtures/heartbeats-synthetic.jsonl" "$smoke/repo-b/.toggl-time"
+: > "$smoke/repo-empty/.toggl-time"
+{ echo "not json"; cat "$fixtures/heartbeats-synthetic.jsonl"; } > "$smoke/repo-mixed/.toggl-time"
+```
+
+Cleanup:
+
+```bash
+unset TOGGL_STATE_DB
+rm -rf /tmp/toggl-time-migrate-smoke /tmp/toggl-time-migrate-smoke.db \
+    /tmp/toggl-time-migrate-smoke.db-wal /tmp/toggl-time-migrate-smoke.db-shm
+```
+
+## Cases
+
+### 1. `--dry-run` lists imports, doesn't touch the DB
+
+```bash
+toggl-time-migrate --root "$smoke" --dry-run
+ls -la "$TOGGL_STATE_DB" 2>&1 | head -1
+```
+
+**Expected:** stderr line flagging `repo-mixed` line 1 as invalid; stdout
+`import …` lines for all four repos with row counts (`rows=8` for a, b,
+mixed; `rows=0` for empty); `summary (dry-run): imported_rows=24
+skipped_rows=1 files_deleted=0`. The DB file does NOT exist after a
+dry-run.
+
+### 2. Real run with `--delete` writes rows + removes only successful sources
+
+```bash
+toggl-time-migrate --root "$smoke" --delete
+echo "(rows by worktree:)"
+sqlite3 -separator '|' "$TOGGL_STATE_DB" \
+    "SELECT worktree_path, COUNT(*) FROM toggl_heartbeats GROUP BY worktree_path ORDER BY worktree_path;"
+echo "(remaining .toggl-time files:)"
+find "$smoke" -name .toggl-time -print
+```
+
+**Expected:** three keyed worktrees in the DB (repo-a 8, repo-b 8,
+repo-mixed 8). `repo-empty` contributes zero rows but its file is removed
+(0 skipped == clean). `summary: imported_rows=24 skipped_rows=1
+files_deleted=3` — three successful files deleted (a, b, empty).
+`repo-mixed/.toggl-time` remains on disk (it had a skipped line, so the
+migrator preserves it for re-attempt).
+
+### 3. Missing root → warning, exit 0
+
+```bash
+toggl-time-migrate --root /no/such/root --dry-run; echo "exit=$?"
+```
+
+**Expected:** stderr `toggl-time-migrate: root /no/such/root not found, skipping`
+and `summary (dry-run): imported_rows=0 skipped_rows=0 files_deleted=0`.
+`exit=0` — a missing root is a warning, not a hard error.
+
+### 4. Unknown flag → exit 1
+
+```bash
+toggl-time-migrate --bogus 2>&1; echo "exit=$?"
+```
+
+**Expected:** stderr `toggl-time-migrate: unknown argument: --bogus`,
 `exit=1`.

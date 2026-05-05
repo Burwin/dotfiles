@@ -1,5 +1,10 @@
 # Plan: Centralize `.toggl` state in `~/.local/state/toggl/state.db`
 
+> **Status**: Implemented. The follow-up that also centralizes `.toggl-time`
+> heartbeats into the same DB (table `toggl_heartbeats`) is captured in
+> `PLAN-heartbeats.md`. The "heartbeat log stays per-worktree" claim below
+> is therefore superseded.
+
 Move per-worktree `<repo>/.toggl` JSON files into a single SQLite store, keyed
 by canonical worktree path. Hard cut after a one-shot migration. The
 heartbeat log (`.toggl-time`) stays per-worktree.

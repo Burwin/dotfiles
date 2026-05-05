@@ -1,84 +1,163 @@
 #!/usr/bin/env bun
-// toggl-group — print grouped time entries from .toggl-time as JSON.
+// toggl-group — print grouped time entries from `toggl_heartbeats` as JSON.
 //
 // Usage:
-//   toggl-group           Read <git-root>/.toggl-time of CWD.
-//   toggl-group --file P  Read from path P.
-//   ... | toggl-group     Read from stdin when piped (TTY check).
+//   toggl-group                  Read rows for the realpath of git toplevel of CWD.
+//   toggl-group --repo PATH      Read rows for the given worktree (realpath'd).
+//   toggl-group --all            Read rows from every worktree.
+//   toggl-group --since ISO      Filter rows where ts >= ISO (8601 UTC).
+//   toggl-group --until ISO      Filter rows where ts <= ISO.
 //
 // Output: JSON array of Entry on stdout (pretty, 2-space indent).
-//         Per-line parse warnings on stderr, prefixed `toggl-group: <source>:`.
-// Exit codes: 0 success, 1 hard error (no input found, --file unreadable,
-//             not in a git repo with no stdin and no --file).
+//         Per-row parse warnings on stderr, prefixed `toggl-group: <source>:`.
+// Exit codes: 0 success, 1 hard error (state DB missing, --repo argument
+//             missing, not in a git repo and no --repo/--all flag, invalid
+//             --since/--until value, unknown flag).
 //
-// Behavior is intentionally minimal: no window flags, no --buffer override,
-// no table rendering. The lib's pure functions handle all the logic; this
-// script only wires input discovery to a JSON dump. See toggl-group.lib.ts
-// for the contract.
+// State source: ~/.local/state/toggl/state.db, table `toggl_heartbeats`.
+// Written by the opencode plugin in
+// `opencode/.config/opencode/plugins/toggl-time.ts`. See toggl-group.lib.ts
+// for the grouping contract.
+//
+// The DB path can be overridden via the TOGGL_STATE_DB env var (matching
+// the convention used by toggl-state.lib.sh and consumers like
+// toggl-time-migrate). The default is ~/.local/state/toggl/state.db.
 
+import { Database } from "bun:sqlite"
 import { execFileSync } from "node:child_process"
-import { existsSync, readFileSync } from "node:fs"
-import { join, resolve } from "node:path"
-import { groupEvents, parseHeartbeats } from "./toggl-group.lib.ts"
+import { existsSync, realpathSync } from "node:fs"
+import { homedir } from "node:os"
+import { join } from "node:path"
+import {
+  groupEvents,
+  heartbeatsFromRows,
+  type HeartbeatRow,
+} from "./toggl-group.lib.ts"
 
-const findGitRoot = (start: string): string | null => {
-  try {
-    return execFileSync("git", ["rev-parse", "--show-toplevel"], {
-      cwd: start,
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"],
-    }).trim()
-  } catch {
-    return null
-  }
+const STATE_DB =
+  process.env.TOGGL_STATE_DB ||
+  join(homedir(), ".local/state/toggl/state.db")
+
+const die = (msg: string): never => {
+  console.error(`toggl-group: ${msg}`)
+  process.exit(1)
 }
 
-const readStdin = async (): Promise<string> => {
-  const chunks: Buffer[] = []
-  for await (const chunk of process.stdin) {
-    chunks.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk)
-  }
-  return Buffer.concat(chunks).toString("utf8")
-}
+// parseArgs — minimal argv walker. Returns the resolved query mode and bounds.
+type Mode =
+  | { kind: "worktree"; path: string; source: string }
+  | { kind: "all"; source: string }
 
-const readInput = async (): Promise<{ source: string; jsonl: string }> => {
-  // 1. Explicit --file flag wins.
-  const fileIdx = process.argv.indexOf("--file")
-  if (fileIdx !== -1) {
-    const arg = process.argv[fileIdx + 1]
-    if (!arg) {
-      console.error("toggl-group: --file requires a path")
-      process.exit(1)
+const parseArgs = (
+  argv: string[],
+): { mode: Mode; since?: string; until?: string } => {
+  let repo: string | undefined
+  let all = false
+  let since: string | undefined
+  let until: string | undefined
+  for (let i = 2; i < argv.length; i++) {
+    const a = argv[i]
+    switch (a) {
+      case "--repo":
+        if (!argv[i + 1]) die("--repo requires a path")
+        repo = argv[++i]
+        break
+      case "--all":
+        all = true
+        break
+      case "--since":
+        if (!argv[i + 1]) die("--since requires an ISO timestamp")
+        since = argv[++i]
+        break
+      case "--until":
+        if (!argv[i + 1]) die("--until requires an ISO timestamp")
+        until = argv[++i]
+        break
+      default:
+        die(`unknown argument: ${a}`)
     }
-    const abs = resolve(arg)
-    if (!existsSync(abs)) {
-      console.error(`toggl-group: ${abs} not found`)
-      process.exit(1)
+  }
+  if (all && repo) die("--all and --repo are mutually exclusive")
+
+  // Validate ISO bounds eagerly so a typo bombs early instead of silently
+  // matching everything via SQLite's lexicographic comparison.
+  for (const [name, val] of [
+    ["--since", since],
+    ["--until", until],
+  ] as const) {
+    if (val !== undefined && Number.isNaN(Date.parse(val))) {
+      die(`${name} value not parseable as a date: ${val}`)
     }
-    return { source: abs, jsonl: readFileSync(abs, "utf8") }
   }
-  // 2. Stdin if piped (no TTY on stdin).
-  if (!process.stdin.isTTY) {
-    return { source: "<stdin>", jsonl: await readStdin() }
+
+  let mode: Mode
+  if (all) {
+    mode = { kind: "all", source: "<all>" }
+  } else if (repo) {
+    let resolved: string
+    try {
+      resolved = realpathSync(repo)
+    } catch {
+      // --repo PATH may point at a dir that's been moved/deleted; fall back
+      // to the literal so the lookup still tries the user-provided string.
+      resolved = repo
+    }
+    mode = { kind: "worktree", path: resolved, source: resolved }
+  } else {
+    let root: string
+    try {
+      root = execFileSync("git", ["rev-parse", "--show-toplevel"], {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+      }).trim()
+    } catch {
+      die("not in a git repo (try --repo PATH or --all)")
+    }
+    let resolved: string
+    try {
+      resolved = realpathSync(root)
+    } catch {
+      resolved = root
+    }
+    mode = { kind: "worktree", path: resolved, source: resolved }
   }
-  // 3. Walk up to git toplevel and read .toggl-time there.
-  const root = findGitRoot(process.cwd())
-  if (!root) {
-    console.error(
-      "toggl-group: not in a git repo and no input piped (try --file)",
-    )
-    process.exit(1)
-  }
-  const togglTime = join(root, ".toggl-time")
-  if (!existsSync(togglTime)) {
-    console.error(`toggl-group: ${togglTime} not found`)
-    process.exit(1)
-  }
-  return { source: togglTime, jsonl: readFileSync(togglTime, "utf8") }
+  return { mode, since, until }
 }
 
-const { source, jsonl } = await readInput()
-const { events, warnings } = parseHeartbeats(jsonl)
-for (const w of warnings) console.error(`toggl-group: ${source}: ${w}`)
+const { mode, since, until } = parseArgs(process.argv)
+
+if (!existsSync(STATE_DB)) {
+  die(`state DB not found at ${STATE_DB}`)
+}
+
+const db = new Database(STATE_DB, { readonly: true })
+
+const select =
+  "SELECT ts, event, trigger, session_id, client_name, project_id, " +
+  "project_name, task, details FROM toggl_heartbeats"
+const where: string[] = []
+const params: Array<string> = []
+if (mode.kind === "worktree") {
+  where.push("worktree_path = ?")
+  params.push(mode.path)
+}
+if (since) {
+  where.push("ts >= ?")
+  params.push(since)
+}
+if (until) {
+  where.push("ts <= ?")
+  params.push(until)
+}
+const sql =
+  select +
+  (where.length ? ` WHERE ${where.join(" AND ")}` : "") +
+  " ORDER BY ts ASC, id ASC"
+
+const rows = db.query(sql).all(...params) as HeartbeatRow[]
+db.close?.()
+
+const { events, warnings } = heartbeatsFromRows(rows)
+for (const w of warnings) console.error(`toggl-group: ${mode.source}: ${w}`)
 const entries = groupEvents(events)
 process.stdout.write(JSON.stringify(entries, null, 2) + "\n")

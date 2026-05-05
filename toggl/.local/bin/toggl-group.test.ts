@@ -15,6 +15,8 @@ import {
   formatLocalDate,
   formatLocalTime,
   groupEvents,
+  heartbeatsFromRows,
+  type HeartbeatRow,
   parseHeartbeats,
   splitEntryAtMidnight,
 } from "./toggl-group.lib.ts"
@@ -141,6 +143,105 @@ describe("parseHeartbeats", () => {
   test("details is dropped when not an object", () => {
     const r = parseHeartbeats(event({ details: "string-not-object" }))
     expect(r.events[0]?.details).toBeUndefined()
+  })
+})
+
+describe("heartbeatsFromRows", () => {
+  // row(overrides) — single SELECT-shaped row with sane defaults. Column
+  // shape mirrors the actual `bun:sqlite` output: NULL columns appear as
+  // `null`, numbers as numbers, JSON details as a TEXT string.
+  const row = (overrides: Partial<HeartbeatRow> = {}): HeartbeatRow => ({
+    ts: "2026-01-01T00:00:00.000Z",
+    event: "start",
+    trigger: "chat.message",
+    session_id: "ses_X",
+    client_name: "Acme",
+    project_id: 1,
+    project_name: "Alpha",
+    task: "TASK-X",
+    details: null,
+    ...overrides,
+  })
+
+  test("empty input → no events, no warnings", () => {
+    expect(heartbeatsFromRows([])).toEqual({ events: [], warnings: [] })
+  })
+
+  test("minimal row with NULL details → details undefined", () => {
+    const r = heartbeatsFromRows([row()])
+    expect(r.warnings).toEqual([])
+    expect(r.events).toHaveLength(1)
+    expect(r.events[0]?.details).toBeUndefined()
+    expect(r.events[0]?.session_id).toBe("ses_X")
+  })
+
+  test("session_id NULL → undefined on the parsed event", () => {
+    const r = heartbeatsFromRows([row({ session_id: null })])
+    expect(r.warnings).toEqual([])
+    expect(r.events[0]?.session_id).toBeUndefined()
+  })
+
+  test("valid JSON details TEXT → parsed object", () => {
+    const r = heartbeatsFromRows([
+      row({ details: '{"agent":"plan","model":{"providerID":"opencode"}}' }),
+    ])
+    expect(r.warnings).toEqual([])
+    expect(r.events[0]?.details).toEqual({
+      agent: "plan",
+      model: { providerID: "opencode" },
+    })
+  })
+
+  test("invalid JSON details TEXT → warning + details undefined", () => {
+    const r = heartbeatsFromRows([row({ details: "{not json" })])
+    expect(r.events).toHaveLength(1)
+    expect(r.events[0]?.details).toBeUndefined()
+    expect(r.warnings).toHaveLength(1)
+    expect(r.warnings[0]).toMatch(/^row 1: invalid JSON in details/)
+  })
+
+  test("JSON details that is not an object → details undefined, no warning", () => {
+    // Arrays and primitives are valid JSON but not the shape we promise to
+    // expose as Heartbeat.details (Record<string, unknown>). Drop silently.
+    const r = heartbeatsFromRows([row({ details: "[1,2,3]" })])
+    expect(r.warnings).toEqual([])
+    expect(r.events[0]?.details).toBeUndefined()
+  })
+
+  test("empty-string details → undefined, no warning", () => {
+    const r = heartbeatsFromRows([row({ details: "" })])
+    expect(r.warnings).toEqual([])
+    expect(r.events[0]?.details).toBeUndefined()
+  })
+
+  test("missing required field → row warning, row dropped", () => {
+    const r = heartbeatsFromRows([row({ project_id: null as unknown as number })])
+    expect(r.events).toEqual([])
+    expect(r.warnings).toHaveLength(1)
+    expect(r.warnings[0]).toMatch(/^row 1: missing or invalid required fields/)
+  })
+
+  test("invalid event value → warning, row dropped", () => {
+    const r = heartbeatsFromRows([row({ event: "wat" as unknown as "start" })])
+    expect(r.events).toEqual([])
+    expect(r.warnings).toHaveLength(1)
+  })
+
+  test("unparseable ts → warning, row dropped", () => {
+    const r = heartbeatsFromRows([row({ ts: "nope" })])
+    expect(r.events).toEqual([])
+    expect(r.warnings[0]).toMatch(/^row 1: unparseable ts/)
+  })
+
+  test("warning row index is 1-based across mixed input", () => {
+    const r = heartbeatsFromRows([
+      row(),
+      row({ event: "wat" as unknown as "start" }),
+      row(),
+    ])
+    expect(r.events).toHaveLength(2)
+    expect(r.warnings).toHaveLength(1)
+    expect(r.warnings[0]).toMatch(/^row 2:/)
   })
 })
 

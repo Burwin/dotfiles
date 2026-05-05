@@ -1,25 +1,31 @@
-// toggl-group.lib.ts — pure functions that turn `.toggl-time` JSONL heartbeats
-// into time entries grouped by (project_id, task), merging short idle gaps.
+// toggl-group.lib.ts — pure functions that turn heartbeat events into time
+// entries grouped by (project_id, task), merging short idle gaps.
 //
-// The `.toggl-time` file is written by the opencode plugin in
-// `opencode/.config/opencode/plugins/toggl-time.ts`. Each line records a
-// transition between busy and waiting. We treat every event as a heartbeat:
-// proof the agent (or user, since the user is typing during "idle") was
-// active at that moment. If two consecutive heartbeats on the same
-// (project_id, task) are within `bufferMs`, they belong to the same entry —
-// the gap between them is "thinking time" and counts as work.
+// Heartbeats are written by the opencode plugin in
+// `opencode/.config/opencode/plugins/toggl-time.ts` into the
+// `toggl_heartbeats` table of `~/.local/state/toggl/state.db`. Each row
+// records a transition between busy and waiting. We treat every event as a
+// heartbeat: proof the agent (or user, since the user is typing during
+// "idle") was active at that moment. If two consecutive heartbeats on the
+// same (project_id, task) are within `bufferMs`, they belong to the same
+// entry — the gap between them is "thinking time" and counts as work.
 //
-// Note: the project context (client_name, project_id, project_name, task)
-// embedded in each heartbeat originates from the central state DB at
-// `~/.local/state/toggl/state.db` (managed by `toggl-set`/`toggl-migrate`),
-// not from a per-repo `.toggl` file as in earlier versions. This module is
-// agnostic to the source — it only consumes the heartbeat stream.
+// The `toggl-group` CLI reads rows directly via `bun:sqlite` and feeds them
+// to `groupEvents` here. The `parseHeartbeats(jsonl)` helper below is
+// retained for `toggl-time-migrate` (which still parses legacy `.toggl-time`
+// JSONL files during the one-shot migration) and for the unit tests, which
+// consume the in-tree JSONL fixtures.
+//
+// Both project context (client_name, project_id, project_name, task) and
+// heartbeat data live in the same state DB (`toggl_repo_state` and
+// `toggl_heartbeats` respectively), but this module is agnostic to the
+// source — it only consumes the heartbeat stream.
 //
 // Contract:
-//   1. Pure. No filesystem or network I/O. Caller passes the raw JSONL string.
+//   1. Pure. No filesystem or network I/O. Caller passes raw JSONL or rows.
 //   2. Stable. Same input → same output, regardless of host TZ unless
 //      `splitAtLocalMidnight` is true and `timeZone` defaults to local.
-//   3. Forgiving. Malformed lines are reported via `warnings`, not thrown.
+//   3. Forgiving. Malformed lines/rows are reported via `warnings`, not thrown.
 //
 // See ../../TESTS.md and ./toggl-group.test.ts for behavior fixtures.
 
@@ -63,6 +69,77 @@ export const defaultOptions = (): GroupOptions => ({
   splitAtLocalMidnight: true,
   timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
 })
+
+// HeartbeatRow — the column shape returned by `bun:sqlite` for a SELECT on
+// the `toggl_heartbeats` table. Fields are typed exactly as SQLite emits
+// them: NULL columns appear as `null`, not `undefined`.
+export type HeartbeatRow = {
+  ts: unknown
+  event: unknown
+  trigger: unknown
+  session_id: unknown
+  client_name: unknown
+  project_id: unknown
+  project_name: unknown
+  task: unknown
+  details: unknown
+}
+
+// heartbeatsFromRows — converts SELECT rows into Heartbeat records, with the
+// same forgiving validation contract as parseHeartbeats. `details` is parsed
+// from JSON text on a best-effort basis; a malformed JSON value yields a
+// warning and the row is kept with `details` undefined.
+export function heartbeatsFromRows(rows: HeartbeatRow[]): {
+  events: Heartbeat[]
+  warnings: string[]
+} {
+  const events: Heartbeat[] = []
+  const warnings: string[] = []
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i]!
+    if (
+      typeof r.ts !== "string" ||
+      (r.event !== "start" && r.event !== "pause") ||
+      typeof r.trigger !== "string" ||
+      typeof r.client_name !== "string" ||
+      typeof r.project_id !== "number" ||
+      typeof r.project_name !== "string" ||
+      typeof r.task !== "string"
+    ) {
+      warnings.push(`row ${i + 1}: missing or invalid required fields`)
+      continue
+    }
+    if (Number.isNaN(Date.parse(r.ts))) {
+      warnings.push(`row ${i + 1}: unparseable ts ${JSON.stringify(r.ts)}`)
+      continue
+    }
+    let details: Record<string, unknown> | undefined
+    if (typeof r.details === "string" && r.details !== "") {
+      try {
+        const parsed = JSON.parse(r.details)
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+          details = parsed as Record<string, unknown>
+        }
+      } catch (e) {
+        warnings.push(
+          `row ${i + 1}: invalid JSON in details (${(e as Error).message})`,
+        )
+      }
+    }
+    events.push({
+      ts: r.ts,
+      event: r.event,
+      trigger: r.trigger,
+      session_id: typeof r.session_id === "string" ? r.session_id : undefined,
+      client_name: r.client_name,
+      project_id: r.project_id,
+      project_name: r.project_name,
+      task: r.task,
+      details,
+    })
+  }
+  return { events, warnings }
+}
 
 // parseHeartbeats — parses a JSONL string into Heartbeat records. Skips blank
 // lines silently. Lines that fail JSON.parse, or that lack the required
