@@ -59,29 +59,31 @@ matches lowercase data). Currently:
    5  189469205   Prospecting                       Bamboo
 ```
 
-### 4. Substring on name → single match → auto-select
+### 4. Substring on name → single match → auto-select (empty task)
 
 ```bash
 rm -f .toggl
-toggl-set reports 2>/dev/null
+printf '\n' | toggl-set reports 2>/dev/null
 cat .toggl
 ```
 
-**Expected:** no prompt is rendered. `.toggl` is written with:
+**Expected:** no project prompt is rendered (auto-select fires). The task
+prompt accepts an empty line, so `task` lands as `null`. `.toggl`:
 
 ```json
 {
   "project_id": 215051643,
   "project_name": "Reports Automation",
-  "client_name": "AWT"
+  "client_name": "AWT",
+  "task": null
 }
 ```
 
-### 5. Substring on name → 1 match → auto-select (Internal/Bamboo)
+### 5. Substring on name → 1 match → auto-select (Internal/Bamboo, empty task)
 
 ```bash
 rm -f .toggl
-toggl-set intern 2>/dev/null
+printf '\n' | toggl-set intern 2>/dev/null
 cat .toggl
 ```
 
@@ -91,11 +93,12 @@ cat .toggl
 {
   "project_id": 186133116,
   "project_name": "Internal",
-  "client_name": "Bamboo"
+  "client_name": "Bamboo",
+  "task": null
 }
 ```
 
-### 6. Pre-existing .toggl + single match → overwrite (no prompt)
+### 6. Pre-existing .toggl + single match → overwrite (no project prompt)
 
 ```bash
 cat > .toggl <<'JSON'
@@ -105,19 +108,21 @@ cat > .toggl <<'JSON'
   "client_name": "Bamboo"
 }
 JSON
-toggl-set reports 2>/dev/null
+printf '\n' | toggl-set reports 2>/dev/null
 cat .toggl
 ```
 
 **Expected:** stdout includes the `Current $repo_root/.toggl:` preamble showing
 the PTO/Bamboo JSON above (since `.toggl` pre-exists), no `Select project`
-prompt is rendered, and `.toggl` afterwards is:
+prompt is rendered, the task prompt accepts the empty line, and `.toggl`
+afterwards is:
 
 ```json
 {
   "project_id": 215051643,
   "project_name": "Reports Automation",
-  "client_name": "AWT"
+  "client_name": "AWT",
+  "task": null
 }
 ```
 
@@ -203,6 +208,86 @@ full 31-row list. Substring search requires contiguous characters, unlike
 the earlier fuzzy implementation that would have matched `bmb` against
 `Bamboo`.
 
+### 11. Auto-select prompts for task; non-empty input is stored
+
+```bash
+rm -f .toggl
+printf 'Run smoke tests\n' | toggl-set reports 2>/dev/null
+cat .toggl
+```
+
+**Expected:** auto-select fires, then the script reads the task line from
+stdin. `.toggl` afterwards is:
+
+```json
+{
+  "project_id": 215051643,
+  "project_name": "Reports Automation",
+  "client_name": "AWT",
+  "task": "Run smoke tests"
+}
+```
+
+### 12. Re-select same project with empty input → task preserved (bracket default)
+
+```bash
+cat > .toggl <<'JSON'
+{
+  "project_id": 215051643,
+  "project_name": "Reports Automation",
+  "client_name": "AWT",
+  "task": "Existing task description"
+}
+JSON
+printf '\n' | toggl-set reports 2>/dev/null
+cat .toggl
+```
+
+**Expected:** `.toggl` is unchanged — the empty input at the task prompt is
+treated as "keep the bracket-default" because the selected project id matches
+the existing one:
+
+```json
+{
+  "project_id": 215051643,
+  "project_name": "Reports Automation",
+  "client_name": "AWT",
+  "task": "Existing task description"
+}
+```
+
+(The task prompt itself is `Task description [Existing task description]: `,
+but `read -p` only renders that string when stdin is a TTY, so it does not
+appear under piped tests. The preserved JSON is the observable evidence.)
+
+### 13. Switch projects with empty input → task cleared to null
+
+```bash
+cat > .toggl <<'JSON'
+{
+  "project_id": 215051643,
+  "project_name": "Reports Automation",
+  "client_name": "AWT",
+  "task": "Existing task description"
+}
+JSON
+printf '\n' | toggl-set intern 2>/dev/null
+cat .toggl
+```
+
+**Expected:** because the selected id (Internal) differs from the current id
+(Reports Automation), the task prompt is plain (no bracket default) and the
+empty input falls through to `null`:
+
+```json
+{
+  "project_id": 186133116,
+  "project_name": "Internal",
+  "client_name": "Bamboo",
+  "task": null
+}
+```
+
 ## Run all cases
 
 ```bash
@@ -220,17 +305,17 @@ echo "" | toggl-set zzzzzzzz 2>/dev/null | grep -E '^[[:space:]]+[0-9]+[[:space:
 echo "=== 3. case-insensitive match on client_name ('BAMBOO') ==="
 echo "" | toggl-set BAMBOO 2>/dev/null | grep -E '^[[:space:]]+[0-9]+[[:space:]]'
 
-echo "=== 4. substring on name ('reports') -> auto-select ==="
+echo "=== 4. substring on name ('reports') -> auto-select (empty task) ==="
 rm -f .toggl
-toggl-set reports 2>/dev/null
+printf '\n' | toggl-set reports 2>/dev/null
 echo "(.toggl after:)"; cat .toggl 2>/dev/null
 
-echo "=== 5. substring on name ('intern') -> 1 match -> auto-select ==="
+echo "=== 5. substring on name ('intern') -> 1 match -> auto-select (empty task) ==="
 rm -f .toggl
-toggl-set intern 2>/dev/null
+printf '\n' | toggl-set intern 2>/dev/null
 cat .toggl 2>/dev/null
 
-echo "=== 6. pre-existing .toggl + single match -> overwrite ==="
+echo "=== 6. pre-existing .toggl + single match -> overwrite (empty task) ==="
 cat > .toggl <<'JSON'
 {
   "project_id": 216557449,
@@ -238,7 +323,7 @@ cat > .toggl <<'JSON'
   "client_name": "Bamboo"
 }
 JSON
-toggl-set reports 2>/dev/null
+printf '\n' | toggl-set reports 2>/dev/null
 echo "(.toggl after:)"; cat .toggl
 
 echo "=== 7. multi-match including current -> green at row 1 ==="
@@ -282,6 +367,35 @@ echo "=== 10. subsequence ('bmb') no longer matches ==="
 echo "" | toggl-set bmb 2>&1 >/dev/null | head -1
 echo "(rows shown -> should be full list = 31:)"
 echo "" | toggl-set bmb 2>/dev/null | grep -E '^[[:space:]]+[0-9]+[[:space:]]' | wc -l
+
+echo "=== 11. auto-select prompts for task; non-empty input is stored ==="
+rm -f .toggl
+printf 'Run smoke tests\n' | toggl-set reports 2>/dev/null
+echo "(.toggl after:)"; cat .toggl
+
+echo "=== 12. re-select same project + empty input -> task preserved ==="
+cat > .toggl <<'JSON'
+{
+  "project_id": 215051643,
+  "project_name": "Reports Automation",
+  "client_name": "AWT",
+  "task": "Existing task description"
+}
+JSON
+printf '\n' | toggl-set reports 2>/dev/null
+echo "(.toggl after:)"; cat .toggl
+
+echo "=== 13. switch projects + empty input -> task null ==="
+cat > .toggl <<'JSON'
+{
+  "project_id": 215051643,
+  "project_name": "Reports Automation",
+  "client_name": "AWT",
+  "task": "Existing task description"
+}
+JSON
+printf '\n' | toggl-set intern 2>/dev/null
+echo "(.toggl after:)"; cat .toggl
 
 cd / && rm -rf "$smoke"
 ```

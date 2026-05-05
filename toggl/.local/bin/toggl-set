@@ -79,6 +79,7 @@ fi
 current_id=""
 current_name=""
 current_client=""
+current_task=""
 if [[ -f "$repo_root/.toggl" ]]; then
     echo "Current $repo_root/.toggl:"
     jq . "$repo_root/.toggl" 2>/dev/null || cat "$repo_root/.toggl"
@@ -86,33 +87,55 @@ if [[ -f "$repo_root/.toggl" ]]; then
     current_id=$(jq -r '.project_id // empty' "$repo_root/.toggl" 2>/dev/null || true)
     current_name=$(jq -r '.project_name // empty' "$repo_root/.toggl" 2>/dev/null || true)
     current_client=$(jq -r '.client_name // ""' "$repo_root/.toggl" 2>/dev/null || true)
+    current_task=$(jq -r '.task // ""' "$repo_root/.toggl" 2>/dev/null || true)
 fi
 
 # 5. Auto-select when the substring filter narrowed to exactly one project.
 write_toggl() {
-    local id=$1 name=$2 client=$3
-    if [[ -z "$client" ]]; then
-        jq -n \
-            --argjson project_id "$id" \
-            --arg project_name "$name" \
-            '{project_id: $project_id, project_name: $project_name, client_name: null}' \
-            > "$repo_root/.toggl"
-    else
-        jq -n \
-            --argjson project_id "$id" \
-            --arg project_name "$name" \
-            --arg client_name "$client" \
-            '{project_id: $project_id, project_name: $project_name, client_name: $client_name}' \
-            > "$repo_root/.toggl"
-    fi
+    local id=$1 name=$2 client=$3 task=$4
+    jq -n \
+        --argjson project_id "$id" \
+        --arg project_name "$name" \
+        --arg client_name "$client" \
+        --arg task "$task" \
+        '{
+            project_id: $project_id,
+            project_name: $project_name,
+            client_name: (if $client_name == "" then null else $client_name end),
+            task: (if $task == "" then null else $task end)
+        }' \
+        > "$repo_root/.toggl"
     echo
     echo "Wrote $repo_root/.toggl:"
     jq . "$repo_root/.toggl"
 }
 
+# prompt_task — read a task description from stdin, populating the script-level
+# `task` variable. When re-selecting the same project, shows the existing task
+# as a [bracket default]; an empty input keeps it. EOF cancels the operation.
+prompt_task() {
+    local selected_id=$1
+    local p
+    if [[ -n "$current_task" ]] && [[ "$selected_id" == "$current_id" ]]; then
+        p="Task description [$current_task]: "
+    else
+        p="Task description: "
+    fi
+    if ! read -rp "$p" task; then
+        echo
+        echo "Cancelled (EOF)."
+        exit 0
+    fi
+    if [[ -z "$task" ]] && [[ -n "$current_task" ]] && [[ "$selected_id" == "$current_id" ]]; then
+        task="$current_task"
+    fi
+}
+
 if (( had_filter_match )) && (( ${#projects[@]} == 1 )); then
     IFS=$'\t' read -r id name client <<<"${projects[0]}"
-    write_toggl "$id" "$name" "$client"
+    task=""
+    prompt_task "$id"
+    write_toggl "$id" "$name" "$client" "$task"
     exit 0
 fi
 
@@ -182,4 +205,6 @@ fi
 
 # 8. Extract chosen row and write
 IFS=$'\t' read -r id name client <<<"${projects[$((choice - 1))]}"
-write_toggl "$id" "$name" "$client"
+task=""
+prompt_task "$id"
+write_toggl "$id" "$name" "$client" "$task"
