@@ -4,26 +4,19 @@
 #
 # Usage: toggl-set [query]
 #   With no query: lists all active projects for selection.
-#   With a query: fuzzy-filters projects (via fzf -f) on id, name, and client_name.
-#                 Multi-word queries are AND-tokens (e.g. "bamboo intern").
+#   With a query: case-insensitive substring filter on project name OR client name.
 #                 If exactly one project matches, it is auto-selected and written.
 #                 If no projects match, falls back to the full list.
 #
 # Data source: ~/src/bamboo/tools/src/toggl/toggl.db (populated by `toggl-sync`).
 # If a desired project is missing, run `toggl-sync` first to refresh the DB.
 #
-# Required tools: bash, git, sqlite3, jq, fzf (only when a query is supplied).
+# Required tools: bash, git, sqlite3, jq, awk.
 
 set -euo pipefail
 
 DB="$HOME/src/bamboo/tools/src/toggl/toggl.db"
 query="$*"
-
-# 0. fzf is only required when filtering
-if [[ -n "$query" ]] && ! command -v fzf >/dev/null; then
-    echo "Error: 'fzf' is required for fuzzy filtering. Install fzf, or call toggl-set without args." >&2
-    exit 1
-fi
 
 # 1. Locate git repo root
 if ! repo_root=$(git rev-parse --show-toplevel 2>/dev/null); then
@@ -52,11 +45,15 @@ if (( ${#projects[@]} == 0 )); then
     exit 1
 fi
 
-# 3b. Apply fuzzy filter if a query was supplied. fzf scans the entire TAB-delimited
-#     line, so the match field is effectively id+name+client_name combined.
+# 3b. Apply substring filter if a query was supplied. Case-insensitive match
+#     against the name (column 2) or client_name (column 3) only — id is excluded.
 had_filter_match=0
 if [[ -n "$query" ]]; then
-    mapfile -t filtered < <(printf '%s\n' "${projects[@]}" | fzf -f "$query")
+    mapfile -t filtered < <(
+        printf '%s\n' "${projects[@]}" |
+            awk -F'\t' -v q="${query,,}" \
+                'index(tolower($2), q) || index(tolower($3), q)'
+    )
     if (( ${#filtered[@]} > 0 )); then
         projects=("${filtered[@]}")
         had_filter_match=1
@@ -72,7 +69,7 @@ if [[ -f "$repo_root/.toggl" ]]; then
     echo
 fi
 
-# 5. Auto-select when the fuzzy filter narrowed to exactly one project.
+# 5. Auto-select when the substring filter narrowed to exactly one project.
 write_toggl() {
     local id=$1 name=$2 client=$3
     if [[ -z "$client" ]]; then
