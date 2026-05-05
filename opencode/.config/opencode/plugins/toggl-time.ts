@@ -15,15 +15,41 @@ import path from "node:path"
  * `<repo>/.toggl` files via `toggl-migrate`).
  *
  * Trigger map — all signals come from the documented `event` hook
- * (https://opencode.ai/docs/plugins#events) plus the `chat.message` hook:
+ * (https://opencode.ai/docs/plugins#events) plus the `chat.message` hook.
+ * Coverage goal: every documented event has an explicit case in the
+ * switch — start, pause, or no-op with rationale — so docs drift surfaces
+ * quickly and intent is greppable.
  *
  *   start  ← chat.message                          (new user prompt)
  *   start  ← permission.replied (response ≠ reject) (agent resumes after grant)
  *   start  ← question.replied                       (agent resumes after answer)
+ *   start  ← command.executed                       (slash command run)
+ *   start  ← file.edited                            (file edited; activity signal)
+ *   start  ← session.compacted                      (compaction done; agent auto-continues)
+ *   start  ← todo.updated                           (agent updated todos; activity signal)
  *   pause  ← session.idle                           (turn finished)
  *   pause  ← session.error                          (error halted the agent)
  *   pause  ← permission.asked                       (waiting for permission)
  *   pause  ← question.asked                         (waiting for question answer)
+ *
+ * No-op events (explicit cases in the switch with one-line rationale):
+ *
+ *   - High-frequency stream events (would dominate the table with per-token
+ *     rows and break start/pause semantics): `message.part.updated`,
+ *     `message.part.removed`, `message.updated`, `message.removed`,
+ *     `tui.prompt.append`.
+ *   - Session lifecycle/non-transitions (covered by more-specific cases or
+ *     informational only): `session.created`, `session.deleted`,
+ *     `session.updated`, `session.diff`, `session.status` (overloaded;
+ *     races with `session.idle`).
+ *   - No-sessionID / unrelated to user work: `installation.updated`,
+ *     `server.connected`, `lsp.client.diagnostics`, `lsp.updated`,
+ *     `file.watcher.updated`.
+ *   - TUI noise: `tui.command.execute`, `tui.toast.show`.
+ *
+ * The `default:` arm stays as a forward-compat safety net — when opencode
+ * adds a new event type upstream, that event silently no-ops here and
+ * the comment on the default arm tells future readers to classify it.
  *
  * Property shape note: the v1 SDK type definitions imported via
  * `@opencode-ai/plugin@1.4.7` predate the v2 event names that the runtime
@@ -271,6 +297,7 @@ export const TogglTimePlugin: Plugin = async ({ worktree }) => {
       const e = event as unknown as { type: string; properties?: any }
       const p = e.properties ?? {}
       switch (e.type) {
+        // --- Pause triggers (agent halted, waiting for input) ---
         case "session.idle":
           await log("pause", e.type, p.sessionID)
           break
@@ -296,6 +323,13 @@ export const TogglTimePlugin: Plugin = async ({ worktree }) => {
                   : undefined),
           })
           break
+        case "question.asked":
+          await log("pause", e.type, p.sessionID, {
+            header: p.questions?.[0]?.header,
+          })
+          break
+
+        // --- Start triggers (agent / user resumed work) ---
         case "permission.replied": {
           // v1: `{ permissionID, response }`, v2: `{ requestID, reply }`
           const reply = p.reply ?? p.response
@@ -306,11 +340,6 @@ export const TogglTimePlugin: Plugin = async ({ worktree }) => {
           })
           break
         }
-        case "question.asked":
-          await log("pause", e.type, p.sessionID, {
-            header: p.questions?.[0]?.header,
-          })
-          break
         case "question.replied": {
           // properties.answers is `Array<Array<string>>`. Surface the first
           // selection of the first question for diagnostics; nothing if absent.
@@ -323,6 +352,87 @@ export const TogglTimePlugin: Plugin = async ({ worktree }) => {
           )
           break
         }
+        case "command.executed":
+          // Slash command run — user-driven activity. v2 properties:
+          // `{ name, sessionID, arguments, messageID }`. Surface command
+          // name + (truncated) arguments; both guarded by typeof since v1
+          // type defs don't describe this shape.
+          await log("start", e.type, p.sessionID, {
+            command: typeof p.name === "string" ? p.name : undefined,
+            arguments:
+              typeof p.arguments === "string" ? p.arguments : undefined,
+          })
+          break
+        case "file.edited":
+          // File edited (agent or user). v2 properties: `{ file: string }`
+          // — note no sessionID, so heartbeat row will have session_id NULL.
+          // Worktree gating still applies via canonicalWorktree → ctx.
+          await log("start", e.type, p.sessionID, {
+            file: typeof p.file === "string" ? p.file : undefined,
+          })
+          break
+        case "session.compacted":
+          // Compaction finished. The agent typically auto-continues, so
+          // this is a work-resuming signal. v2 properties: `{ sessionID }`.
+          await log("start", e.type, p.sessionID)
+          break
+        case "todo.updated":
+          // Agent updated the todo list — discrete activity. Useful as a
+          // backup start signal in sessions that arrive without a
+          // chat.message (rare). v2 properties: `{ sessionID, todos }`.
+          await log("start", e.type, p.sessionID, {
+            todo_count: Array.isArray(p.todos) ? p.todos.length : undefined,
+          })
+          break
+
+        // --- No-op: high-frequency stream events ---
+        // Logging these would flood the heartbeats table with per-token
+        // rows and erase the start/pause distinction `toggl-group` relies
+        // on. The agent's busy-state is already bracketed by chat.message
+        // → session.idle.
+        case "message.part.updated": // fires per streaming token
+        case "message.part.removed": // companion to part.updated
+        case "message.updated": // per-message stream event
+        case "message.removed": // UI/state change, not a transition
+        case "tui.prompt.append": // fires per keystroke in the TUI prompt
+          break
+
+        // --- No-op: session lifecycle / not a transition ---
+        // The actual work-start signal is chat.message (covered above);
+        // these are bookkeeping or already-covered transitions.
+        case "session.created": // first chat.message is the real start
+        case "session.deleted": // terminal — no work happens after
+        case "session.updated": // too generic; covered by specific cases
+        case "session.diff": // informational
+        case "session.status": // overloaded; races with session.idle
+          break
+
+        // --- No-op: no sessionID / unrelated to user work ---
+        // These fire from infrastructure/lifecycle, not user activity.
+        // Logging would attribute non-work events to the worktree's toggl
+        // context.
+        case "installation.updated": // opencode self-update
+        case "server.connected": // server lifecycle
+        case "lsp.client.diagnostics": // language server output
+        case "lsp.updated": // language server state
+        case "file.watcher.updated": // filesystem watcher noise
+          break
+
+        // --- No-op: TUI noise ---
+        // command.executed (above) covers the meaningful slash-command
+        // case; the rest are display-only.
+        case "tui.command.execute": // too generic vs command.executed
+        case "tui.toast.show": // UI display only
+          break
+
+        default:
+          // Forward-compat safety net. If opencode adds a new event type
+          // to https://opencode.ai/docs/plugins#events, it lands here and
+          // silently no-ops. Re-classify as start / pause / explicit no-op
+          // when that happens. Also catches v2-only events the docs page
+          // doesn't list yet (e.g. question.rejected, tui.session.select,
+          // mcp.*, vcs.*, pty.*, worktree.*, workspace.*).
+          break
       }
     },
   }
