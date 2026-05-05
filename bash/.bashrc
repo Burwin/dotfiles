@@ -49,3 +49,20 @@ source /usr/share/nvm/init-nvm.sh
 riderd() {
   nohup rider "$@" >/dev/null 2>&1 &
 }
+
+# music stations
+alias classical='mpv https://live.ideastream.org/wclv.mp3'
+alias catholic='mpv http://traditionalcatholicradio.org:8000/main'
+
+# opencode
+export PATH=/home/mbh/.opencode/bin:$PATH
+
+# tmux
+# Rename original Omarchy function so we can call it safely
+eval "$(declare -f tdl | sed 's/^tdl/original_tdl/')"
+
+tdl() {
+    original_tdl "$@"
+    sleep 0.7
+    tmux resize-pane -t 0 -x 62%     # ← Change this number to adjust width
+}
