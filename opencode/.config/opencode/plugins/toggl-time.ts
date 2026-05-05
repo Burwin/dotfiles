@@ -10,29 +10,23 @@ import path from "node:path"
  * `<worktree>/.toggl` context (client_name, project_id, project_name, task)
  * is configured by `toggl-set`.
  *
- * Trigger map (hook origin in parens):
+ * Trigger map — all signals come from the documented `event` hook
+ * (https://opencode.ai/docs/plugins#events) plus the `chat.message` hook:
  *
- *   start  ← chat.message                                (chat.message hook)
- *   start  ← permission.replied (reply ≠ reject)         (event bus)
- *   start  ← question.reply                              (tool.execute.after, tool === "question")
- *   pause  ← session.idle                                (event bus)
- *   pause  ← session.error                               (event bus)
- *   pause  ← permission.ask                              (permission.ask hook)
- *   pause  ← question.ask                                (tool.execute.before, tool === "question")
+ *   start  ← chat.message                          (new user prompt)
+ *   start  ← permission.replied (response ≠ reject) (agent resumes after grant)
+ *   start  ← question.replied                       (agent resumes after answer)
+ *   pause  ← session.idle                           (turn finished)
+ *   pause  ← session.error                          (error halted the agent)
+ *   pause  ← permission.asked                       (waiting for permission)
+ *   pause  ← question.asked                         (waiting for question answer)
  *
- * Architecture note: opencode's runtime delivers ask-side signals through
- * dedicated *hooks* (`permission.ask`, `tool.execute.before/after`), not
- * via the generic `event` bus. The bus reliably fires `session.idle`,
- * `session.error`, and `permission.replied`; ask-side events
- * (`permission.asked`, `question.asked`) were observed empirically (May
- * 2026) to never reach the bus. See ./notify.ts for the matching split.
- *
- * Permission shape note: the v1 SDK `Permission` payload (typed via
- * `@opencode-ai/plugin@1.4.7`) uses `type`/`pattern`/`title`. A future v2
- * `PermissionRequest` payload uses `permission`/`patterns`/no-title. The
- * `permission.ask` hook below reads either shape. The `permission.replied`
- * event also has v1 (`permissionID`/`response`) vs v2 (`requestID`/`reply`)
- * shapes — observed v2 in the wild — so we accept both.
+ * Property shape note: the v1 SDK type definitions imported via
+ * `@opencode-ai/plugin@1.4.7` predate the v2 event names that the runtime
+ * actually delivers. The switch below casts `event` to a permissive shape
+ * and reads fields under both v1 (`type`/`pattern`/`title`/`permissionID`/
+ * `response`) and v2 (`permission`/`patterns`/`requestID`/`reply`) keys, so
+ * both shapes are accepted.
  *
  * Gating: every log call re-reads `.toggl` so that a `toggl-set` mid-session
  * takes effect immediately. If the file is missing, malformed, or any of
@@ -127,60 +121,37 @@ export const TogglTimePlugin: Plugin = async ({ worktree }) => {
         model: input.model,
       })
     },
-    "permission.ask": async (input) => {
-      // v1 Permission: { id, type, pattern, sessionID, title, ... }
-      // v2 PermissionRequest: { id, permission, patterns, sessionID, ... }
-      const i = input as unknown as {
-        id?: unknown
-        type?: unknown
-        permission?: unknown
-        title?: unknown
-        pattern?: unknown
-        patterns?: unknown
-        sessionID?: unknown
-      }
-      const patterns = Array.isArray(i.patterns)
-        ? i.patterns
-        : typeof i.pattern === "string"
-          ? [i.pattern]
-          : Array.isArray(i.pattern)
-            ? i.pattern
-            : undefined
-      await log(
-        "pause",
-        "permission.ask",
-        typeof i.sessionID === "string" ? i.sessionID : undefined,
-        {
-          permission_id: i.id,
-          permission_type: i.type ?? i.permission,
-          title: i.title,
-          patterns,
-        },
-      )
-      // Intentionally does NOT mutate `output.status` — pure observer.
-    },
-    "tool.execute.before": async (input, output) => {
-      if (input.tool !== "question") return
-      const header = output.args?.questions?.[0]?.header
-      await log("pause", "question.ask", input.sessionID, {
-        header: typeof header === "string" ? header : undefined,
-      })
-    },
-    "tool.execute.after": async (input) => {
-      if (input.tool !== "question") return
-      // The tool's structured answer isn't surfaced to the after-hook in a
-      // shape worth logging; recording the resume edge is the point.
-      await log("start", "question.reply", input.sessionID)
-    },
     event: async ({ event }) => {
-      // Only reply-side events reach the bus reliably. Ask-side events
-      // (permission.asked / question.asked) are documented in v2 typings but
-      // never observed at runtime — handled via the hooks above instead.
+      // v1 type definitions don't describe v2 event names like
+      // `permission.asked` and `question.asked`, but the runtime delivers
+      // them per the docs. Cast once and dispatch on a free-form string.
       const e = event as unknown as { type: string; properties?: any }
       const p = e.properties ?? {}
       switch (e.type) {
         case "session.idle":
           await log("pause", e.type, p.sessionID)
+          break
+        case "session.error":
+          await log("pause", e.type, p.sessionID, {
+            error_name: p.error?.name,
+          })
+          break
+        case "permission.asked":
+          await log("pause", e.type, p.sessionID, {
+            permission_id: p.id,
+            // v1: `type`, v2: `permission`
+            permission_type: p.type ?? p.permission,
+            // v1 only
+            title: p.title,
+            // v2: `patterns: string[]`; v1: `pattern: string | string[]`
+            patterns:
+              p.patterns ??
+              (typeof p.pattern === "string"
+                ? [p.pattern]
+                : Array.isArray(p.pattern)
+                  ? p.pattern
+                  : undefined),
+          })
           break
         case "permission.replied": {
           // v1: `{ permissionID, response }`, v2: `{ requestID, reply }`
@@ -192,11 +163,23 @@ export const TogglTimePlugin: Plugin = async ({ worktree }) => {
           })
           break
         }
-        case "session.error":
+        case "question.asked":
           await log("pause", e.type, p.sessionID, {
-            error_name: p.error?.name,
+            header: p.questions?.[0]?.header,
           })
           break
+        case "question.replied": {
+          // properties.answers is `Array<Array<string>>`. Surface the first
+          // selection of the first question for diagnostics; nothing if absent.
+          const reply = p.answers?.[0]?.[0]
+          await log(
+            "start",
+            e.type,
+            p.sessionID,
+            reply !== undefined ? { reply } : undefined,
+          )
+          break
+        }
       }
     },
   }
