@@ -1,6 +1,8 @@
 #!/bin/bash
-# toggl-set — interactively pick an active Toggl project and write
-# .toggl at the git repo root with project_id, project_name, and client_name.
+# toggl-set — interactively pick an active Toggl project and write a row in
+# the central state DB at ~/.local/state/toggl/state.db, keyed by realpath
+# of the current git toplevel. Stores project_id, project_name,
+# client_name, and task — same fields the legacy <repo>/.toggl held.
 #
 # Usage: toggl-set [query]
 #   With no query: lists all active projects for selection.
@@ -8,27 +10,33 @@
 #                 If exactly one project matches, it is auto-selected and written.
 #                 If no projects match, falls back to the full list.
 #
-#   When `.toggl` already exists, the current project is promoted to index 1 of
-#   any rendered table — highlighted green when it's still in the filter result,
-#   red when it isn't. Color emission honors $NO_COLOR / $FORCE_COLOR / TTY.
+#   When the current repo already has a row, the current project is promoted
+#   to index 1 of any rendered table — highlighted green when it's still in
+#   the filter result, red when it isn't. Color emission honors $NO_COLOR /
+#   $FORCE_COLOR / TTY.
 #
-# Data source: ~/src/bamboo/tools/src/toggl/toggl.db (populated by `toggl-pull`).
-# If a desired project is missing, run `toggl-pull` first to refresh the DB.
+# Project list source: ~/src/bamboo/tools/src/toggl/toggl.db (populated by
+# `toggl-pull`). State store: ~/.local/state/toggl/state.db (this script
+# writes; toggl-time and tmux read; toggl-migrate seeds it).
 #
-# Required tools: bash, git, sqlite3, jq, awk.
+# Required tools: bash, git, sqlite3, jq, awk, realpath.
 
 set -euo pipefail
+
+# shellcheck source=./toggl-state.lib.sh
+source "$(dirname "$(realpath "$0")")/toggl-state.lib.sh"
 
 DB="$HOME/src/bamboo/tools/src/toggl/toggl.db"
 query="$*"
 
-# 1. Locate git repo root
-if ! repo_root=$(git rev-parse --show-toplevel 2>/dev/null); then
+# 1. Locate git repo root and canonicalize for use as the state-DB key.
+if ! repo_root_raw=$(git rev-parse --show-toplevel 2>/dev/null); then
     echo "Error: not inside a git repository" >&2
     exit 1
 fi
+repo_root=$(realpath "$repo_root_raw")
 
-# 2. Verify the local Toggl DB exists
+# 2. Verify the local Toggl project DB exists.
 if [[ ! -f "$DB" ]]; then
     echo "Error: $DB not found. Run 'toggl-pull' first." >&2
     exit 1
@@ -42,6 +50,9 @@ if [[ -z "${NO_COLOR:-}" ]]; then
         color=1
     fi
 fi
+
+# 2c. Ensure the state DB and table exist before any read attempt.
+toggl_state_init
 
 # 3. Load active projects (id<TAB>name<TAB>client_name) into a bash array.
 #    Empty string in column 3 means client_name was NULL in the DB.
@@ -75,24 +86,36 @@ if [[ -n "$query" ]]; then
     fi
 fi
 
-# 4. Show current .toggl contents and capture for promotion in step 5b.
+# 4. Show current state-DB row (if any) and capture for promotion in step 5b.
 current_id=""
 current_name=""
 current_client=""
 current_task=""
-if [[ -f "$repo_root/.toggl" ]]; then
-    echo "Current $repo_root/.toggl:"
-    jq . "$repo_root/.toggl" 2>/dev/null || cat "$repo_root/.toggl"
+current_row=$(toggl_state_get "$repo_root")
+if [[ -n "$current_row" ]]; then
+    IFS=$'\t' read -r current_id current_name current_client current_task <<<"$current_row"
+    echo "Current project ($repo_root):"
+    # Render JSON-shaped for visual continuity with the legacy .toggl preamble.
+    jq -n \
+        --argjson project_id "$current_id" \
+        --arg project_name "$current_name" \
+        --arg client_name "$current_client" \
+        --arg task "$current_task" \
+        '{
+            project_id: $project_id,
+            project_name: $project_name,
+            client_name: (if $client_name == "" then null else $client_name end),
+            task:        (if $task == "" then null else $task end)
+        }'
     echo
-    current_id=$(jq -r '.project_id // empty' "$repo_root/.toggl" 2>/dev/null || true)
-    current_name=$(jq -r '.project_name // empty' "$repo_root/.toggl" 2>/dev/null || true)
-    current_client=$(jq -r '.client_name // ""' "$repo_root/.toggl" 2>/dev/null || true)
-    current_task=$(jq -r '.task // ""' "$repo_root/.toggl" 2>/dev/null || true)
 fi
 
 # 5. Auto-select when the substring filter narrowed to exactly one project.
-write_toggl() {
+write_state() {
     local id=$1 name=$2 client=$3 task=$4
+    toggl_state_set "$repo_root" "$id" "$name" "$client" "$task"
+    echo
+    echo "Wrote state for $repo_root:"
     jq -n \
         --argjson project_id "$id" \
         --arg project_name "$name" \
@@ -102,12 +125,8 @@ write_toggl() {
             project_id: $project_id,
             project_name: $project_name,
             client_name: (if $client_name == "" then null else $client_name end),
-            task: (if $task == "" then null else $task end)
-        }' \
-        > "$repo_root/.toggl"
-    echo
-    echo "Wrote $repo_root/.toggl:"
-    jq . "$repo_root/.toggl"
+            task:        (if $task == "" then null else $task end)
+        }'
 }
 
 # prompt_task — read a task description from stdin, populating the script-level
@@ -135,14 +154,14 @@ if (( had_filter_match )) && (( ${#projects[@]} == 1 )); then
     IFS=$'\t' read -r id name client <<<"${projects[0]}"
     task=""
     prompt_task "$id"
-    write_toggl "$id" "$name" "$client" "$task"
+    write_state "$id" "$name" "$client" "$task"
     exit 0
 fi
 
-# 5b. Promote current project (from .toggl) to index 1 of the rendered table,
+# 5b. Promote current project (from state DB) to index 1 of the rendered table,
 #     so it shows up first regardless of alphabetical client/name ordering.
 #     current_in_set distinguishes "in filter result" (green) from "not in
-#     filter result, synthesized from .toggl" (red).
+#     filter result, synthesized from state row" (red).
 current_in_set=0
 if [[ -n "$current_id" ]]; then
     promoted=()
@@ -175,7 +194,7 @@ for i in "${!projects[@]}"; do
         if (( current_in_set )); then
             esc_open=$'\033[32m'  # green: current is in filter result
         else
-            esc_open=$'\033[31m'  # red: current was synthesized from .toggl
+            esc_open=$'\033[31m'  # red: current was synthesized from state row
         fi
         esc_close=$'\033[0m'
     fi
@@ -207,4 +226,4 @@ fi
 IFS=$'\t' read -r id name client <<<"${projects[$((choice - 1))]}"
 task=""
 prompt_task "$id"
-write_toggl "$id" "$name" "$client" "$task"
+write_state "$id" "$name" "$client" "$task"
