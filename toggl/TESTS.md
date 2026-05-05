@@ -121,7 +121,66 @@ prompt is rendered, and `.toggl` afterwards is:
 }
 ```
 
-### 7. id-only query no longer matches (id is excluded from scope)
+### 7. Pre-existing .toggl + multi-match including current → green at row 1
+
+```bash
+cat > .toggl <<'JSON'
+{
+  "project_id": 216328138,
+  "project_name": "Personal",
+  "client_name": "Bamboo"
+}
+JSON
+
+# Row count is still 5 (Personal is in result; no synthesis).
+echo "" | toggl-set bamboo 2>/dev/null | grep -E '^[[:space:]]+[0-9]+[[:space:]]' | wc -l
+
+# Index 1 must be Personal (id 216328138). Without promotion it would be
+# Internal (alphabetical sort within Bamboo).
+echo "" | toggl-set bamboo 2>/dev/null | grep -E '^[[:space:]]+1[[:space:]]'
+
+# With FORCE_COLOR=1, row 1 carries green ANSI (\x1b[32m).
+echo "" | FORCE_COLOR=1 toggl-set bamboo 2>/dev/null | \
+    grep -E '^[[:space:]]+1[[:space:]]' | grep -c $'\x1b\[32m'
+```
+
+**Expected:**
+
+- `5` rows (Personal already in the Bamboo filter result; no duplicate added).
+- Row 1: `   1  216328138   Personal                          Bamboo`
+  (Personal promoted from its natural position 4 to position 1.)
+- Color count: `1` (one green ANSI escape in row 1 when `FORCE_COLOR=1`).
+- Plain piped output (no `FORCE_COLOR`) contains no ANSI codes — TTY check off.
+
+### 8. Pre-existing .toggl + multi-match excluding current → red at row 1
+
+```bash
+cat > .toggl <<'JSON'
+{
+  "project_id": 215051643,
+  "project_name": "Reports Automation",
+  "client_name": "AWT"
+}
+JSON
+
+# Row count is 6: 5 Bamboo + Reports Automation prepended (synthesized).
+echo "" | toggl-set bamboo 2>/dev/null | grep -E '^[[:space:]]+[0-9]+[[:space:]]' | wc -l
+
+# Index 1 must be Reports Automation (id 215051643).
+echo "" | toggl-set bamboo 2>/dev/null | grep -E '^[[:space:]]+1[[:space:]]'
+
+# With FORCE_COLOR=1, row 1 carries red ANSI (\x1b[31m).
+echo "" | FORCE_COLOR=1 toggl-set bamboo 2>/dev/null | \
+    grep -E '^[[:space:]]+1[[:space:]]' | grep -c $'\x1b\[31m'
+```
+
+**Expected:**
+
+- `6` rows (5 Bamboo matches + the synthesized Reports Automation row).
+- Row 1: `   1  215051643   Reports Automation                AWT`
+- Color count: `1` (one red ANSI escape in row 1 when `FORCE_COLOR=1`).
+
+### 9. id-only query no longer matches (id is excluded from scope)
 
 ```bash
 echo "" | toggl-set 215051643 2>&1 >/dev/null | head -1
@@ -132,7 +191,7 @@ echo "" | toggl-set 215051643 2>/dev/null | grep -E '^[[:space:]]+[0-9]+[[:space
 and the rendered table is the full 31 rows. The `id` column is intentionally
 not part of the substring scope; only `name` and `client_name` are.
 
-### 8. Subsequence query no longer matches
+### 10. Subsequence query no longer matches
 
 ```bash
 echo "" | toggl-set bmb 2>&1 >/dev/null | head -1
@@ -182,12 +241,44 @@ JSON
 toggl-set reports 2>/dev/null
 echo "(.toggl after:)"; cat .toggl
 
-echo "=== 7. id-only query no longer matches ==="
+echo "=== 7. multi-match including current -> green at row 1 ==="
+cat > .toggl <<'JSON'
+{
+  "project_id": 216328138,
+  "project_name": "Personal",
+  "client_name": "Bamboo"
+}
+JSON
+echo "(row count -> should be 5:)"
+echo "" | toggl-set bamboo 2>/dev/null | grep -E '^[[:space:]]+[0-9]+[[:space:]]' | wc -l
+echo "(row 1 -> should be Personal/216328138:)"
+echo "" | toggl-set bamboo 2>/dev/null | grep -E '^[[:space:]]+1[[:space:]]'
+echo "(green ANSI count in row 1 -> should be 1:)"
+echo "" | FORCE_COLOR=1 toggl-set bamboo 2>/dev/null | \
+    grep -E '^[[:space:]]+1[[:space:]]' | grep -c $'\x1b\[32m'
+
+echo "=== 8. multi-match excluding current -> red at row 1 ==="
+cat > .toggl <<'JSON'
+{
+  "project_id": 215051643,
+  "project_name": "Reports Automation",
+  "client_name": "AWT"
+}
+JSON
+echo "(row count -> should be 6:)"
+echo "" | toggl-set bamboo 2>/dev/null | grep -E '^[[:space:]]+[0-9]+[[:space:]]' | wc -l
+echo "(row 1 -> should be Reports Automation/215051643:)"
+echo "" | toggl-set bamboo 2>/dev/null | grep -E '^[[:space:]]+1[[:space:]]'
+echo "(red ANSI count in row 1 -> should be 1:)"
+echo "" | FORCE_COLOR=1 toggl-set bamboo 2>/dev/null | \
+    grep -E '^[[:space:]]+1[[:space:]]' | grep -c $'\x1b\[31m'
+
+echo "=== 9. id-only query no longer matches ==="
 echo "" | toggl-set 215051643 2>&1 >/dev/null | head -1
 echo "(rows shown -> should be full list = 31:)"
 echo "" | toggl-set 215051643 2>/dev/null | grep -E '^[[:space:]]+[0-9]+[[:space:]]' | wc -l
 
-echo "=== 8. subsequence ('bmb') no longer matches ==="
+echo "=== 10. subsequence ('bmb') no longer matches ==="
 echo "" | toggl-set bmb 2>&1 >/dev/null | head -1
 echo "(rows shown -> should be full list = 31:)"
 echo "" | toggl-set bmb 2>/dev/null | grep -E '^[[:space:]]+[0-9]+[[:space:]]' | wc -l
