@@ -73,3 +73,8 @@ tdl() {
     sleep 0.7
     tmux resize-pane -t 0 -x 62%     # ← Change this number to adjust width
 }
+
+# Machine-local, non-dotfiled exports (e.g. OPENCODE_IDLE_NTFY_TOPIC).
+# This file is intentionally outside the dotfiles repo so secrets never get
+# committed. Loaded last so it can override anything set above.
+[[ -f ~/.bashrc.local ]] && source ~/.bashrc.local
