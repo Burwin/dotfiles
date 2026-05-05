@@ -23,6 +23,21 @@ import type { Plugin } from "@opencode-ai/plugin"
  * notify-send never bubbles up and crashes the plugin runtime — opencode
  * keeps working silently in that case.
  *
+ * Auto-dismiss (mako only): every toast we raise has its mako notification
+ * id captured via `notify-send -p` and stored in a per-session list. The
+ * default switch arm below runs `makoctl dismiss -n <id>` for each tracked
+ * id whenever any non-halting event arrives for that session — i.e. as
+ * soon as the agent / user demonstrably resumes work, the residual alert
+ * is cleared. `session.status` is explicitly skipped because it is
+ * overloaded (fires for idle, busy, and retry) and would otherwise race
+ * with `session.idle` and dismiss the toast we just raised. Tracking is
+ * intentionally session-level, not per-toast: two outstanding alerts for
+ * one session both clear on the first response — by then you're engaged
+ * with that session anyway. `makoctl dismiss` is best-effort (stale or
+ * expired ids are harmless no-ops, errors swallowed). ntfy phone alerts
+ * are NOT dismissed — phones don't reliably know you've returned to the
+ * laptop.
+ *
  * ntfy: best-effort, never crashes the plugin runtime. Configured via env:
  *
  *   OPENCODE_IDLE_NTFY_TOPIC (required)
@@ -94,19 +109,64 @@ const pingNtfy = async (title: string, body: string, tags?: string) => {
 }
 
 export const NotifyPlugin: Plugin = async ({ $ }) => {
+  // sessionID → mako notification ids currently on screen for that session.
+  // Cleared wholesale on the first non-halting event for the session (see
+  // the `default` arm of the event switch). `delete()` on dismiss keeps the
+  // map bounded over a long-lived process.
+  const notificationIDs = new Map<string, number[]>()
+
   // Single entry point that fans out to both transports in parallel.
   // notify-send keeps its `urgency` arg unchanged; ntfy ignores urgency
-  // and uses default priority (3) for every event.
+  // and uses default priority (3) for every event. When `sessionID` is
+  // provided, the mako notification id printed by `notify-send -p` is
+  // captured and appended to that session's id list so the default switch
+  // arm can later dismiss it.
   const notify = async (
     urgency: "low" | "normal" | "critical",
     title: string,
     body: string,
     tags?: string,
+    sessionID?: string,
   ) => {
-    await Promise.all([
-      $`notify-send -a opencode -u ${urgency} ${title} ${body}`.nothrow(),
+    // `.text()` auto-calls `.quiet()` so the printed id no longer leaks to
+    // the user's terminal. `.nothrow()` keeps the existing crash-proof
+    // contract for missing/failing notify-send; the trailing `.catch(() =>
+    // "")` is belt-and-braces for shell-spawn failures (e.g. notify-send
+    // not on PATH at all) which can throw even with `.nothrow()`.
+    const [stdoutText] = await Promise.all([
+      $`notify-send -a opencode -u ${urgency} -p ${title} ${body}`
+        .nothrow()
+        .text()
+        .catch(() => ""),
       pingNtfy(title, body, tags),
     ])
+    if (sessionID) {
+      const id = Number.parseInt(stdoutText.trim(), 10)
+      if (Number.isFinite(id)) {
+        const arr = notificationIDs.get(sessionID) ?? []
+        arr.push(id)
+        notificationIDs.set(sessionID, arr)
+      }
+    }
+  }
+
+  // Best-effort dismissal of every tracked toast for a session. Stale or
+  // already-expired ids are harmless no-ops in mako, so we don't bother
+  // diffing against `makoctl list`. `delete` runs before the awaited
+  // dismisses so a slow `makoctl` cannot cause a duplicate dismiss on a
+  // re-entrant event.
+  const dismissAll = async (sessionID: string) => {
+    const ids = notificationIDs.get(sessionID)
+    if (!ids || ids.length === 0) return
+    notificationIDs.delete(sessionID)
+    await Promise.all(
+      ids.map((id) =>
+        $`makoctl dismiss -n ${id}`
+          .nothrow()
+          .quiet()
+          .catch(() => {}),
+      ),
+    )
   }
 
   return {
@@ -123,10 +183,17 @@ export const NotifyPlugin: Plugin = async ({ $ }) => {
             "OpenCode",
             "Session idle — ready for input",
             "robot",
+            p.sessionID,
           )
           break
         case "session.error":
-          await notify("critical", "OpenCode", "Session error", "warning")
+          await notify(
+            "critical",
+            "OpenCode",
+            "Session error",
+            "warning",
+            p.sessionID,
+          )
           break
         case "permission.asked": {
           // Body resolution: v1 `title` (descriptive), then v2 `permission`
@@ -137,7 +204,7 @@ export const NotifyPlugin: Plugin = async ({ $ }) => {
           const body = detail
             ? `Permission requested: ${detail}`
             : "Permission requested"
-          await notify("critical", "OpenCode", body, "lock")
+          await notify("critical", "OpenCode", body, "lock", p.sessionID)
           break
         }
         case "question.asked": {
@@ -147,9 +214,24 @@ export const NotifyPlugin: Plugin = async ({ $ }) => {
             typeof header === "string" && header.trim()
               ? `Question: ${header.trim()}`
               : "Question awaiting answer"
-          await notify("critical", "OpenCode", body, "question")
+          await notify("critical", "OpenCode", body, "question", p.sessionID)
           break
         }
+        case "session.status":
+          // Overloaded event: fires for status=idle, status=busy, status=retry.
+          // Skip so we don't race with `session.idle` (both fire near-
+          // simultaneously at end-of-turn) and dismiss the toast we just
+          // raised. The next "real" session event (message.updated,
+          // tool.execute.before, etc.) hits the default arm and dismisses
+          // within milliseconds anyway.
+          break
+        default:
+          // Halting events handled explicitly above; anything else for a
+          // known session means the agent / user is moving again ⇒ clear
+          // the toasts. Events without a sessionID (installation.updated,
+          // server.connected, file.watcher.updated, etc.) are silently
+          // ignored.
+          if (p.sessionID) await dismissAll(p.sessionID)
       }
     },
   }
