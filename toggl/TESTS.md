@@ -95,7 +95,33 @@ cat .toggl
 }
 ```
 
-### 6. id-only query no longer matches (id is excluded from scope)
+### 6. Pre-existing .toggl + single match → overwrite (no prompt)
+
+```bash
+cat > .toggl <<'JSON'
+{
+  "project_id": 216557449,
+  "project_name": "PTO",
+  "client_name": "Bamboo"
+}
+JSON
+toggl-set reports 2>/dev/null
+cat .toggl
+```
+
+**Expected:** stdout includes the `Current $repo_root/.toggl:` preamble showing
+the PTO/Bamboo JSON above (since `.toggl` pre-exists), no `Select project`
+prompt is rendered, and `.toggl` afterwards is:
+
+```json
+{
+  "project_id": 215051643,
+  "project_name": "Reports Automation",
+  "client_name": "AWT"
+}
+```
+
+### 7. id-only query no longer matches (id is excluded from scope)
 
 ```bash
 echo "" | toggl-set 215051643 2>&1 >/dev/null | head -1
@@ -106,7 +132,7 @@ echo "" | toggl-set 215051643 2>/dev/null | grep -E '^[[:space:]]+[0-9]+[[:space
 and the rendered table is the full 31 rows. The `id` column is intentionally
 not part of the substring scope; only `name` and `client_name` are.
 
-### 7. Subsequence query no longer matches
+### 8. Subsequence query no longer matches
 
 ```bash
 echo "" | toggl-set bmb 2>&1 >/dev/null | head -1
@@ -145,12 +171,23 @@ rm -f .toggl
 toggl-set intern 2>/dev/null
 cat .toggl 2>/dev/null
 
-echo "=== 6. id-only query no longer matches ==="
+echo "=== 6. pre-existing .toggl + single match -> overwrite ==="
+cat > .toggl <<'JSON'
+{
+  "project_id": 216557449,
+  "project_name": "PTO",
+  "client_name": "Bamboo"
+}
+JSON
+toggl-set reports 2>/dev/null
+echo "(.toggl after:)"; cat .toggl
+
+echo "=== 7. id-only query no longer matches ==="
 echo "" | toggl-set 215051643 2>&1 >/dev/null | head -1
 echo "(rows shown -> should be full list = 31:)"
 echo "" | toggl-set 215051643 2>/dev/null | grep -E '^[[:space:]]+[0-9]+[[:space:]]' | wc -l
 
-echo "=== 7. subsequence ('bmb') no longer matches ==="
+echo "=== 8. subsequence ('bmb') no longer matches ==="
 echo "" | toggl-set bmb 2>&1 >/dev/null | head -1
 echo "(rows shown -> should be full list = 31:)"
 echo "" | toggl-set bmb 2>/dev/null | grep -E '^[[:space:]]+[0-9]+[[:space:]]' | wc -l
