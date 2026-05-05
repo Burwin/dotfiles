@@ -19,7 +19,7 @@ cd / && rm -rf /tmp/toggl-set-smoke
 ```
 
 The active Toggl DB at `~/src/bamboo/tools/src/toggl/toggl.db` is consulted
-read-only, so these tests do not require `toggl-sync` and never mutate it.
+read-only, so these tests do not require `toggl-pull` and never mutate it.
 
 ## Cases
 
