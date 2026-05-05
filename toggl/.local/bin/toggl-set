@@ -12,8 +12,8 @@
 #   any rendered table — highlighted green when it's still in the filter result,
 #   red when it isn't. Color emission honors $NO_COLOR / $FORCE_COLOR / TTY.
 #
-# Data source: ~/src/bamboo/tools/src/toggl/toggl.db (populated by `toggl-sync`).
-# If a desired project is missing, run `toggl-sync` first to refresh the DB.
+# Data source: ~/src/bamboo/tools/src/toggl/toggl.db (populated by `toggl-pull`).
+# If a desired project is missing, run `toggl-pull` first to refresh the DB.
 #
 # Required tools: bash, git, sqlite3, jq, awk.
 
@@ -30,7 +30,7 @@ fi
 
 # 2. Verify the local Toggl DB exists
 if [[ ! -f "$DB" ]]; then
-    echo "Error: $DB not found. Run 'toggl-sync' first." >&2
+    echo "Error: $DB not found. Run 'toggl-pull' first." >&2
     exit 1
 fi
 
@@ -54,7 +54,7 @@ mapfile -t projects < <(
 )
 
 if (( ${#projects[@]} == 0 )); then
-    echo "No active projects found in DB. Run 'toggl-sync' to refresh." >&2
+    echo "No active projects found in DB. Run 'toggl-pull' to refresh." >&2
     exit 1
 fi
 
