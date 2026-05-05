@@ -399,3 +399,188 @@ echo "(.toggl after:)"; cat .toggl
 
 cd / && rm -rf "$smoke"
 ```
+
+# toggl-group tests
+
+Manual smoke tests for the `toggl-group` CLI. The CLI is a thin wrapper over
+`toggl-group.lib.ts`; the lib's behavior is covered by `bun test
+./toggl/.local/bin/toggl-group.test.ts`. The cases below exercise input
+discovery, error paths, and the JSON output contract.
+
+## Setup
+
+Tests run inside a throwaway git repo and use the in-tree fixtures as
+deterministic input:
+
+```bash
+smoke=/tmp/toggl-group-smoke
+fixtures=$HOME/src/dotfiles/toggl/test-fixtures
+rm -rf "$smoke" && mkdir -p "$smoke" && cd "$smoke" && git init -q
+```
+
+Cleanup after each run:
+
+```bash
+cd / && rm -rf /tmp/toggl-group-smoke
+```
+
+## Cases
+
+Most cases use `--file` for portability — they work in both interactive and
+non-interactive shells. Cases that target the git-root walk (input source
+3 in `toggl-group:1`) require TTY stdin; see case 8 for that.
+
+### 1. `--file` flag → JSON array on stdout, exit 0
+
+```bash
+toggl-group --file "$fixtures/heartbeats-synthetic.jsonl" | jq 'length'
+echo "exit=${PIPESTATUS[0]}"
+```
+
+**Expected:** `3` (synthetic produces three entries with the default 10-min
+buffer; see `toggl-group.test.ts` "synthetic fixture" assertions for
+per-entry detail), `exit=0`.
+
+### 2. stdin pipe → equivalent JSON
+
+```bash
+cat "$fixtures/heartbeats-synthetic.jsonl" | toggl-group | jq 'length'
+```
+
+**Expected:** `3`. Stdin and `--file` are interchangeable.
+
+### 3. stdin and `--file` produce identical output
+
+```bash
+diff \
+    <(toggl-group --file "$fixtures/heartbeats-synthetic.jsonl") \
+    <(cat "$fixtures/heartbeats-synthetic.jsonl" | toggl-group)
+echo "exit=$?"
+```
+
+**Expected:** No diff output, `exit=0`.
+
+### 4. Malformed JSONL line → warning on stderr, valid lines still grouped
+
+```bash
+{ echo "not json"; cat "$fixtures/heartbeats-synthetic.jsonl"; } > broken.jsonl
+toggl-group --file broken.jsonl 2>&1 >/dev/null | head -1
+toggl-group --file broken.jsonl 2>/dev/null | jq 'length'
+```
+
+**Expected:**
+
+- Stderr first line: `toggl-group: /tmp/toggl-group-smoke/broken.jsonl: line 1: invalid JSON (...)`
+- jq length: `3` (the 8 valid lines still group into the same three entries).
+
+### 5. `--file` with missing path → exit 1
+
+```bash
+toggl-group --file /tmp/does-not-exist.jsonl 2>&1
+echo "exit=$?"
+```
+
+**Expected:** stderr `toggl-group: /tmp/does-not-exist.jsonl not found`,
+`exit=1`.
+
+### 6. `--file` without an argument → exit 1
+
+```bash
+toggl-group --file 2>&1
+echo "exit=$?"
+```
+
+**Expected:** stderr `toggl-group: --file requires a path`, `exit=1`.
+
+### 7. Empty stdin (non-TTY) → empty array, exit 0
+
+```bash
+echo -n "" | toggl-group
+echo "exit=$?"
+```
+
+**Expected:** `[]` on stdout, `exit=0`. Empty input is not an error; it
+maps to zero entries.
+
+### 8. No args, `.toggl-time` in git root → JSON via git-root walk
+
+This case targets the third input source (git toplevel walk). It only
+fires when `process.stdin.isTTY` is true, so run it from an interactive
+shell with no stdin redirect:
+
+```bash
+cp "$fixtures/heartbeats-synthetic.jsonl" .toggl-time
+toggl-group | jq 'length'
+```
+
+**Expected:** `3`. Same JSON as case 1.
+
+In a non-interactive context (CI, `bash -c`, sub-pipes), stdin is a
+non-TTY pipe and the CLI reads from it instead of walking the git tree;
+expect `[]` in that case. To force the git-root path under a non-TTY
+shell, allocate a pty:
+
+```bash
+script -qec 'toggl-group | jq length' /dev/null < /dev/null | tr -d '\r'
+```
+
+### 9. `.toggl-time` missing in git root → exit 1 (TTY only)
+
+Like case 8, this fires only with a TTY stdin:
+
+```bash
+rm -f .toggl-time
+toggl-group 2>&1
+echo "exit=$?"
+```
+
+**Expected (TTY):** stderr `toggl-group: /tmp/toggl-group-smoke/.toggl-time not found`,
+`exit=1`.
+
+## Run all cases
+
+```bash
+smoke=/tmp/toggl-group-smoke
+fixtures=$HOME/src/dotfiles/toggl/test-fixtures
+rm -rf "$smoke" && mkdir -p "$smoke" && cd "$smoke" && git init -q
+
+echo "=== 1. --file -> JSON length ==="
+toggl-group --file "$fixtures/heartbeats-synthetic.jsonl" | jq 'length'
+
+echo "=== 2. stdin pipe -> JSON length ==="
+cat "$fixtures/heartbeats-synthetic.jsonl" | toggl-group | jq 'length'
+
+echo "=== 3. stdin == --file (no diff) ==="
+diff \
+    <(toggl-group --file "$fixtures/heartbeats-synthetic.jsonl") \
+    <(cat "$fixtures/heartbeats-synthetic.jsonl" | toggl-group)
+echo "exit=$?"
+
+echo "=== 4. malformed line -> warning + valid grouping ==="
+{ echo "not json"; cat "$fixtures/heartbeats-synthetic.jsonl"; } > broken.jsonl
+toggl-group --file broken.jsonl 2>&1 >/dev/null | head -1
+echo "(length:)"
+toggl-group --file broken.jsonl 2>/dev/null | jq 'length'
+
+echo "=== 5. --file missing path -> exit 1 ==="
+toggl-group --file /tmp/does-not-exist.jsonl 2>&1
+echo "exit=$?"
+
+echo "=== 6. --file without arg -> exit 1 ==="
+toggl-group --file 2>&1
+echo "exit=$?"
+
+echo "=== 7. empty stdin -> [] ==="
+echo -n "" | toggl-group
+echo "exit=$?"
+
+echo "=== 8. git-root walk (TTY) -> JSON length 3 ==="
+cp "$fixtures/heartbeats-synthetic.jsonl" .toggl-time
+script -qec 'toggl-group | jq length' /dev/null < /dev/null | tr -d '\r'
+
+echo "=== 9. .toggl-time missing in git root (TTY) -> exit 1 ==="
+rm -f .toggl-time
+script -qec 'toggl-group; echo exit=$?' /dev/null < /dev/null 2>&1 | tr -d '\r'
+
+cd / && rm -rf "$smoke"
+```
