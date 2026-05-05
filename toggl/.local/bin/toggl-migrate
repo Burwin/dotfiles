@@ -1,0 +1,133 @@
+#!/bin/bash
+# toggl-migrate — import legacy <repo>/.toggl JSON files into the central
+# state DB at ~/.local/state/toggl/state.db, optionally deleting the
+# originals afterwards.
+#
+# Usage: toggl-migrate [--root DIR]... [--delete] [--dry-run]
+#   --root DIR    Roots to scan for .toggl files. Repeatable.
+#                 Default: $HOME/src
+#   --delete      Remove each .toggl after a successful DB write.
+#   --dry-run     Print intended actions; do not write the DB and do not
+#                 delete anything.
+#
+# Each .toggl is keyed in the DB by `realpath` of its parent directory —
+# matching the canonical-path convention used by toggl-set, toggl-time, and
+# the tmux script.
+#
+# Exit codes:
+#   0  Success (even when nothing was imported).
+#   1  Argument error.
+#
+# Required tools: bash, jq, find, realpath, sqlite3.
+
+set -euo pipefail
+
+# shellcheck source=./toggl-state.lib.sh
+source "$(dirname "$(realpath "$0")")/toggl-state.lib.sh"
+
+roots=()
+delete=0
+dry_run=0
+
+while (($#)); do
+    case "$1" in
+        --root)
+            shift
+            if [[ -z "${1:-}" ]]; then
+                echo "toggl-migrate: --root requires a directory" >&2
+                exit 1
+            fi
+            roots+=("$1")
+            shift
+            ;;
+        --delete)
+            delete=1
+            shift
+            ;;
+        --dry-run)
+            dry_run=1
+            shift
+            ;;
+        -h|--help)
+            sed -n '2,20p' "$0"
+            exit 0
+            ;;
+        *)
+            echo "toggl-migrate: unknown argument: $1" >&2
+            exit 1
+            ;;
+    esac
+done
+
+if (( ${#roots[@]} == 0 )); then
+    roots=("$HOME/src")
+fi
+
+# Initialize the DB unless we're in dry-run. We still want toggl_state_init
+# to be a no-op on an existing table, but in dry-run we don't even want to
+# touch the disk for a fresh machine.
+if (( ! dry_run )); then
+    toggl_state_init
+fi
+
+imported=0
+skipped=0
+deleted=0
+
+# Walk each root. Use -print0 + read -d '' for safety against weird paths.
+for root in "${roots[@]}"; do
+    if [[ ! -d "$root" ]]; then
+        echo "toggl-migrate: root $root not found, skipping" >&2
+        continue
+    fi
+    while IFS= read -r -d '' f; do
+        # Validate JSON.
+        if ! parsed=$(jq -c . "$f" 2>/dev/null); then
+            echo "toggl-migrate: $f: invalid JSON, skipping" >&2
+            ((skipped++)) || true
+            continue
+        fi
+
+        id=$(jq -r '.project_id // empty' <<<"$parsed")
+        name=$(jq -r '.project_name // empty' <<<"$parsed")
+        client=$(jq -r '.client_name // ""' <<<"$parsed")
+        task=$(jq -r '.task // ""' <<<"$parsed")
+
+        if [[ -z "$id" ]] || ! [[ "$id" =~ ^[0-9]+$ ]]; then
+            echo "toggl-migrate: $f: missing or non-numeric project_id, skipping" >&2
+            ((skipped++)) || true
+            continue
+        fi
+        if [[ -z "$name" ]]; then
+            echo "toggl-migrate: $f: missing project_name, skipping" >&2
+            ((skipped++)) || true
+            continue
+        fi
+
+        key=$(realpath "$(dirname "$f")")
+
+        # Render a one-line summary regardless of mode.
+        printf 'import %s\n  path=%s id=%s name=%s client=%s task=%s\n' \
+            "$f" "$key" "$id" "$name" "${client:-<null>}" "${task:-<null>}"
+
+        if (( dry_run )); then
+            ((imported++)) || true
+            continue
+        fi
+
+        toggl_state_set "$key" "$id" "$name" "$client" "$task"
+        ((imported++)) || true
+
+        if (( delete )); then
+            rm -f -- "$f"
+            ((deleted++)) || true
+        fi
+    done < <(find "$root" -type f -name .toggl -print0 2>/dev/null)
+done
+
+echo
+if (( dry_run )); then
+    echo "summary (dry-run): imported=$imported skipped=$skipped deleted=0"
+else
+    echo "summary: imported=$imported skipped=$skipped deleted=$deleted"
+fi

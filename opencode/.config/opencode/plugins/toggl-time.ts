@@ -1,5 +1,6 @@
 import type { Plugin } from "@opencode-ai/plugin"
 import { promises as fs } from "node:fs"
+import os from "node:os"
 import path from "node:path"
 
 /**
@@ -7,8 +8,10 @@ import path from "node:path"
  *
  * Appends start/pause events to `<worktree>/.toggl-time` (JSONL) every time
  * the agent transitions between busy and waiting, but only when a complete
- * `<worktree>/.toggl` context (client_name, project_id, project_name, task)
- * is configured by `toggl-set`.
+ * Toggl context (client_name, project_id, project_name, task) is configured
+ * for the realpath of the worktree in the central state DB at
+ * `~/.local/state/toggl/state.db`. Set the row via `toggl-set` (or seed from
+ * the legacy `<repo>/.toggl` files via `toggl-migrate`).
  *
  * Trigger map — all signals come from the documented `event` hook
  * (https://opencode.ai/docs/plugins#events) plus the `chat.message` hook:
@@ -28,13 +31,18 @@ import path from "node:path"
  * `response`) and v2 (`permission`/`patterns`/`requestID`/`reply`) keys, so
  * both shapes are accepted.
  *
- * Gating: every log call re-reads `.toggl` so that a `toggl-set` mid-session
- * takes effect immediately. If the file is missing, malformed, or any of
+ * Gating: every log call re-queries the state DB so that a `toggl-set`
+ * mid-session takes effect immediately. If the row is missing, or any of
  * `client_name` / `project_id` / `project_name` / `task` is empty/null,
  * nothing is written.
  *
- * Robustness: every filesystem operation is try/caught — the plugin is
- * best-effort and must never bring the runtime down (mirrors the
+ * Runtime: opencode is shipped as a Bun-compiled binary, so plugins import
+ * `bun:sqlite` directly. We dynamic-import it inside a try/catch so a
+ * Node-runtime fallback degrades to silent no-op rather than crashing the
+ * plugin host.
+ *
+ * Robustness: every filesystem and SQL operation is try/caught — the plugin
+ * is best-effort and must never bring the runtime down (mirrors the
  * `.nothrow()` philosophy of ./notify.ts).
  */
 
@@ -45,22 +53,69 @@ type TogglContext = {
   task: string
 }
 
-const readToggl = async (togglPath: string): Promise<TogglContext | null> => {
-  let raw: string
+type StateRow = {
+  project_id: number
+  project_name: string
+  client_name: string | null
+  task: string | null
+}
+
+type SqliteQuery = {
+  get: (...params: unknown[]) => unknown
+}
+
+type SqliteDb = {
+  query: (sql: string) => SqliteQuery
+  close?: () => void
+}
+
+const STATE_DB = path.join(os.homedir(), ".local/state/toggl/state.db")
+
+let dbPromise: Promise<SqliteDb | null> | null = null
+
+const openDb = async (): Promise<SqliteDb | null> => {
+  // Cache one Database handle per plugin lifetime. Re-opens on each
+  // resolution would dominate the per-event cost; opening once is fine
+  // because SQLite readers don't block on writers.
+  if (dbPromise) return dbPromise
+  dbPromise = (async () => {
+    try {
+      // Dynamic import so a non-Bun host (tests, future Node-based runtime)
+      // doesn't break the entire plugin file at parse time.
+      const mod = (await import("bun:sqlite")) as {
+        Database: new (
+          path: string,
+          options?: { readonly?: boolean; create?: boolean },
+        ) => SqliteDb
+      }
+      // readonly + create:false: if state.db doesn't exist (fresh machine,
+      // never ran toggl-set or toggl-migrate), throw → cache null →
+      // plugin silently no-ops, mirroring the legacy "no .toggl" behavior.
+      return new mod.Database(STATE_DB, { readonly: true, create: false })
+    } catch {
+      return null
+    }
+  })()
+  return dbPromise
+}
+
+const readToggl = async (
+  canonicalWorktree: string,
+): Promise<TogglContext | null> => {
+  const db = await openDb()
+  if (!db) return null
+  let row: StateRow | undefined
   try {
-    raw = await fs.readFile(togglPath, "utf8")
+    row = db
+      .query(
+        "SELECT project_id, project_name, client_name, task FROM toggl_repo_state WHERE worktree_path = ?",
+      )
+      .get(canonicalWorktree) as StateRow | undefined
   } catch {
     return null
   }
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(raw)
-  } catch {
-    return null
-  }
-  if (!parsed || typeof parsed !== "object") return null
-  const o = parsed as Record<string, unknown>
-  const { project_id, project_name, client_name, task } = o
+  if (!row) return null
+  const { project_id, project_name, client_name, task } = row
   if (
     typeof project_id !== "number" ||
     typeof project_name !== "string" ||
@@ -84,8 +139,18 @@ const trimDetails = (details?: Record<string, unknown>) => {
 }
 
 export const TogglTimePlugin: Plugin = async ({ worktree }) => {
-  const togglPath = path.join(worktree, ".toggl")
   const logPath = path.join(worktree, ".toggl-time")
+
+  // Resolve worktree → canonical absolute path once. This must agree with
+  // the path that toggl-set writes (which is realpath of git-toplevel).
+  // realpath fails on non-existent paths; if that ever happens here,
+  // fall back to the literal worktree string so we still try a lookup.
+  let canonicalWorktree: string
+  try {
+    canonicalWorktree = await fs.realpath(worktree)
+  } catch {
+    canonicalWorktree = worktree
+  }
 
   const log = async (
     eventKind: "start" | "pause",
@@ -93,7 +158,7 @@ export const TogglTimePlugin: Plugin = async ({ worktree }) => {
     sessionID: string | undefined,
     details?: Record<string, unknown>,
   ) => {
-    const ctx = await readToggl(togglPath)
+    const ctx = await readToggl(canonicalWorktree)
     if (!ctx) return
     const entry: Record<string, unknown> = {
       ts: new Date().toISOString(),

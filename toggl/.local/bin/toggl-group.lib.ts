@@ -9,6 +9,12 @@
 // (project_id, task) are within `bufferMs`, they belong to the same entry —
 // the gap between them is "thinking time" and counts as work.
 //
+// Note: the project context (client_name, project_id, project_name, task)
+// embedded in each heartbeat originates from the central state DB at
+// `~/.local/state/toggl/state.db` (managed by `toggl-set`/`toggl-migrate`),
+// not from a per-repo `.toggl` file as in earlier versions. This module is
+// agnostic to the source — it only consumes the heartbeat stream.
+//
 // Contract:
 //   1. Pure. No filesystem or network I/O. Caller passes the raw JSONL string.
 //   2. Stable. Same input → same output, regardless of host TZ unless
