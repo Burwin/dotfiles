@@ -40,10 +40,13 @@ if [ -f '/home/mbh/google-cloud-sdk/completion.bash.inc' ]; then . '/home/mbh/go
 
 # nvm
 export NVM_DIR="$HOME/.nvm"
+
+set -h # temporarily re-enable hashing
 [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
 [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
 
 source /usr/share/nvm/init-nvm.sh
+set +h # restore Omarchy's disabled hashing
 
 # rider background launcher
 riderd() {
