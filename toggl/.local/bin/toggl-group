@@ -1,0 +1,84 @@
+#!/usr/bin/env bun
+// toggl-group — print grouped time entries from .toggl-time as JSON.
+//
+// Usage:
+//   toggl-group           Read <git-root>/.toggl-time of CWD.
+//   toggl-group --file P  Read from path P.
+//   ... | toggl-group     Read from stdin when piped (TTY check).
+//
+// Output: JSON array of Entry on stdout (pretty, 2-space indent).
+//         Per-line parse warnings on stderr, prefixed `toggl-group: <source>:`.
+// Exit codes: 0 success, 1 hard error (no input found, --file unreadable,
+//             not in a git repo with no stdin and no --file).
+//
+// Behavior is intentionally minimal: no window flags, no --buffer override,
+// no table rendering. The lib's pure functions handle all the logic; this
+// script only wires input discovery to a JSON dump. See toggl-group.lib.ts
+// for the contract.
+
+import { execFileSync } from "node:child_process"
+import { existsSync, readFileSync } from "node:fs"
+import { join, resolve } from "node:path"
+import { groupEvents, parseHeartbeats } from "./toggl-group.lib.ts"
+
+const findGitRoot = (start: string): string | null => {
+  try {
+    return execFileSync("git", ["rev-parse", "--show-toplevel"], {
+      cwd: start,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim()
+  } catch {
+    return null
+  }
+}
+
+const readStdin = async (): Promise<string> => {
+  const chunks: Buffer[] = []
+  for await (const chunk of process.stdin) {
+    chunks.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk)
+  }
+  return Buffer.concat(chunks).toString("utf8")
+}
+
+const readInput = async (): Promise<{ source: string; jsonl: string }> => {
+  // 1. Explicit --file flag wins.
+  const fileIdx = process.argv.indexOf("--file")
+  if (fileIdx !== -1) {
+    const arg = process.argv[fileIdx + 1]
+    if (!arg) {
+      console.error("toggl-group: --file requires a path")
+      process.exit(1)
+    }
+    const abs = resolve(arg)
+    if (!existsSync(abs)) {
+      console.error(`toggl-group: ${abs} not found`)
+      process.exit(1)
+    }
+    return { source: abs, jsonl: readFileSync(abs, "utf8") }
+  }
+  // 2. Stdin if piped (no TTY on stdin).
+  if (!process.stdin.isTTY) {
+    return { source: "<stdin>", jsonl: await readStdin() }
+  }
+  // 3. Walk up to git toplevel and read .toggl-time there.
+  const root = findGitRoot(process.cwd())
+  if (!root) {
+    console.error(
+      "toggl-group: not in a git repo and no input piped (try --file)",
+    )
+    process.exit(1)
+  }
+  const togglTime = join(root, ".toggl-time")
+  if (!existsSync(togglTime)) {
+    console.error(`toggl-group: ${togglTime} not found`)
+    process.exit(1)
+  }
+  return { source: togglTime, jsonl: readFileSync(togglTime, "utf8") }
+}
+
+const { source, jsonl } = await readInput()
+const { events, warnings } = parseHeartbeats(jsonl)
+for (const w of warnings) console.error(`toggl-group: ${source}: ${w}`)
+const entries = groupEvents(events)
+process.stdout.write(JSON.stringify(entries, null, 2) + "\n")
