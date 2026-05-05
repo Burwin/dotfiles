@@ -1,0 +1,94 @@
+#!/bin/bash
+# toggl-set — interactively pick an active Toggl project and write
+# .toggl at the git repo root with project_id, project_name, and client_name.
+#
+# Data source: ~/src/bamboo/tools/src/toggl/toggl.db (populated by `toggl-sync`).
+# If a desired project is missing, run `toggl-sync` first to refresh the DB.
+
+set -euo pipefail
+
+DB="$HOME/src/bamboo/tools/src/toggl/toggl.db"
+
+# 1. Locate git repo root
+if ! repo_root=$(git rev-parse --show-toplevel 2>/dev/null); then
+    echo "Error: not inside a git repository" >&2
+    exit 1
+fi
+
+# 2. Verify the local Toggl DB exists
+if [[ ! -f "$DB" ]]; then
+    echo "Error: $DB not found. Run 'toggl-sync' first." >&2
+    exit 1
+fi
+
+# 3. Load active projects (id<TAB>name<TAB>client_name) into a bash array.
+#    Empty string in column 3 means client_name was NULL in the DB.
+mapfile -t projects < <(
+    sqlite3 -separator $'\t' "$DB" \
+        "SELECT id, name, COALESCE(client_name, '')
+         FROM toggl_projects
+         WHERE active = 1
+         ORDER BY client_name, name"
+)
+
+if (( ${#projects[@]} == 0 )); then
+    echo "No active projects found in DB. Run 'toggl-sync' to refresh." >&2
+    exit 1
+fi
+
+# 4. Show current .toggl contents if one already exists
+if [[ -f "$repo_root/.toggl" ]]; then
+    echo "Current $repo_root/.toggl:"
+    jq . "$repo_root/.toggl" 2>/dev/null || cat "$repo_root/.toggl"
+    echo
+fi
+
+# 5. Render numbered table
+printf '%4s  %-10s  %-32s  %s\n' "idx" "id" "name" "client_name"
+printf '%4s  %-10s  %-32s  %s\n' "---" "----------" "--------------------------------" "-----------"
+
+for i in "${!projects[@]}"; do
+    IFS=$'\t' read -r id name client <<<"${projects[$i]}"
+    printf '%4d  %-10s  %-32s  %s\n' $((i + 1)) "$id" "$name" "$client"
+done
+
+# 6. Prompt for selection (handle EOF/Ctrl-D cleanly under set -e)
+echo
+if ! read -rp "Select project [1-${#projects[@]}, empty to cancel]: " choice; then
+    echo
+    echo "Cancelled (EOF)."
+    exit 0
+fi
+
+if [[ -z "$choice" ]]; then
+    echo "Cancelled."
+    exit 0
+fi
+
+if ! [[ "$choice" =~ ^[0-9]+$ ]] || (( choice < 1 || choice > ${#projects[@]} )); then
+    echo "Error: invalid selection: $choice" >&2
+    exit 1
+fi
+
+# 7. Extract chosen row
+IFS=$'\t' read -r id name client <<<"${projects[$((choice - 1))]}"
+
+# 8. Write .toggl. Emit client_name as JSON null when DB had NULL.
+if [[ -z "$client" ]]; then
+    jq -n \
+        --argjson project_id "$id" \
+        --arg project_name "$name" \
+        '{project_id: $project_id, project_name: $project_name, client_name: null}' \
+        > "$repo_root/.toggl"
+else
+    jq -n \
+        --argjson project_id "$id" \
+        --arg project_name "$name" \
+        --arg client_name "$client" \
+        '{project_id: $project_id, project_name: $project_name, client_name: $client_name}' \
+        > "$repo_root/.toggl"
+fi
+
+echo
+echo "Wrote $repo_root/.toggl:"
+jq . "$repo_root/.toggl"
