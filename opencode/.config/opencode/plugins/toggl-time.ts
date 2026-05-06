@@ -66,7 +66,7 @@ import path from "node:path"
  * Storage: previously this plugin appended JSONL to `<worktree>/.toggl-time`.
  * That file format is now superseded by the `toggl_heartbeats` table; the
  * one-shot `toggl-time-migrate` imported any pre-existing JSONL into the
- * DB. See toggl/PLAN-heartbeats.md.
+ * DB. See docs/archive/toggl/PLAN-heartbeats.md.
  *
  * Bootstrap: on first open we ensure both tables exist and that
  * `journal_mode=WAL` is enabled. The DDL below MUST stay in sync with
