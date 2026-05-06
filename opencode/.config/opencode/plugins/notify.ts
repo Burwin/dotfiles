@@ -17,6 +17,14 @@ import type { Plugin } from "@opencode-ai/plugin"
  *   permission.asked    critical   "Permission requested: <detail>"   tag: lock
  *   question.asked      critical   "Question: <header>"               tag: question
  *
+ * Title: the bold first line of every toast (and the title of every ntfy
+ * push) is the current tmux session name, resolved once at plugin load
+ * via `tmux display-message -p '#S'`. When opencode is launched outside
+ * tmux the lookup degrades silently and the title falls back to
+ * "OpenCode". The session name makes it possible to tell at a glance
+ * which terminal needs attention when juggling several concurrent
+ * opencode runs across tmux windows or separate phones.
+ *
  * notify-send: the `-a opencode` flag tags the notification's app-name so
  * mako rules can style/route opencode toasts independently if desired
  * (see ~/.config/mako/config). `.nothrow()` ensures a missing or failing
@@ -109,6 +117,30 @@ const pingNtfy = async (title: string, body: string, tags?: string) => {
 }
 
 export const NotifyPlugin: Plugin = async ({ $ }) => {
+  // Tmux session name, resolved once at plugin load and used as every
+  // toast/push title (see docstring). The lookup is gated on `TMUX`
+  // being set in the env: `tmux display-message` connects to the
+  // default server even when invoked outside a client and returns the
+  // most-recently-active session, which would otherwise mislabel
+  // notifications from an opencode launched outside tmux. `.nothrow()`
+  // plus the empty-string fallback also handles a dead tmux server. We
+  // trim then strip CR/LF belt-and-braces for HTTP header safety on the
+  // ntfy `Title:` header — tmux session names are conventionally
+  // [A-Za-z0-9_-] but `rename-session` accepts anything, and a stray
+  // newline would corrupt the request line.
+  const tmuxSession = process.env.TMUX
+    ? (
+        await $`tmux display-message -p '#S'`
+          .nothrow()
+          .quiet()
+          .text()
+          .catch(() => "")
+      )
+        .trim()
+        .replace(/[\r\n]+/g, " ")
+    : ""
+  const titleBase = tmuxSession || "OpenCode"
+
   // sessionID → mako notification ids currently on screen for that session.
   // Cleared wholesale on the first non-halting event for the session (see
   // the `default` arm of the event switch). `delete()` on dismiss keeps the
@@ -180,7 +212,7 @@ export const NotifyPlugin: Plugin = async ({ $ }) => {
         case "session.idle":
           await notify(
             "normal",
-            "OpenCode",
+            titleBase,
             "Session idle — ready for input",
             "robot",
             p.sessionID,
@@ -189,7 +221,7 @@ export const NotifyPlugin: Plugin = async ({ $ }) => {
         case "session.error":
           await notify(
             "critical",
-            "OpenCode",
+            titleBase,
             "Session error",
             "warning",
             p.sessionID,
@@ -204,7 +236,7 @@ export const NotifyPlugin: Plugin = async ({ $ }) => {
           const body = detail
             ? `Permission requested: ${detail}`
             : "Permission requested"
-          await notify("critical", "OpenCode", body, "lock", p.sessionID)
+          await notify("critical", titleBase, body, "lock", p.sessionID)
           break
         }
         case "question.asked": {
@@ -214,7 +246,7 @@ export const NotifyPlugin: Plugin = async ({ $ }) => {
             typeof header === "string" && header.trim()
               ? `Question: ${header.trim()}`
               : "Question awaiting answer"
-          await notify("critical", "OpenCode", body, "question", p.sessionID)
+          await notify("critical", titleBase, body, "question", p.sessionID)
           break
         }
         case "session.status":
