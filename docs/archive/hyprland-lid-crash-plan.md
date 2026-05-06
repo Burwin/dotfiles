@@ -1,8 +1,16 @@
 # Hyprland lid-switch crash — fix plan
 
-Status: **draft, not yet executed**.
-Date: 2026-05-06.
-Owner: mbh.
+> **Status:** implemented; archived 2026-05-06.
+>
+> Implementation lives in:
+> - `~/.config/hypr/bindings.conf:47-50` — `unbind` of the omarchy default
+>   lid bindings + `bindl` overrides using atomic `hyprctl keyword monitor`.
+> - `hypr/.config/hypr/bindings.conf` (this dotfiles repo) — same content;
+>   the live `~/.config/hypr/bindings.conf` is now a symlink into the
+>   dotfiles tree, so the override survives `omarchy refresh hyprland`.
+>   The "Dotfiles consideration" section below is therefore satisfied.
+>
+> Preserved for decision history.
 
 ## Symptom
 
