@@ -1,6 +1,8 @@
 # Global gitignore. Loaded automatically by git from
 # $XDG_CONFIG_HOME/git/ignore (default location, no core.excludesFile needed).
 
-# Per-repo agent-time log emitted by ~/.config/opencode/plugins/toggl-time.ts.
-# Always machine-generated, never want this committed in any repo.
+# Legacy per-repo agent-time log (the toggl-time opencode plugin used to
+# write JSONL here before heartbeats moved to a central SQLite DB). Kept
+# as cheap insurance against committing stragglers; safe to remove once
+# you're confident no `.toggl-time` files remain on disk.
 /.toggl-time
