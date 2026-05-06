@@ -1,9 +1,21 @@
 # Plan: Centralize `.toggl` state in `~/.local/state/toggl/state.db`
 
-> **Status**: Implemented. The follow-up that also centralizes `.toggl-time`
-> heartbeats into the same DB (table `toggl_heartbeats`) is captured in
-> `PLAN-heartbeats.md`. The "heartbeat log stays per-worktree" claim below
-> is therefore superseded.
+> **Status:** implemented; archived 2026-05-06.
+>
+> Implementation lives in:
+> - `toggl/.local/bin/toggl-state.lib.sh` — DDL + helpers + WAL bootstrap
+> - `toggl/.local/bin/toggl-set` — DB-backed picker (writes `toggl_repo_state`)
+> - `toggl/.local/bin/toggl-migrate` — one-shot legacy `.toggl` JSON importer
+> - `tmux/.config/tmux/toggl_project.sh` — git-toplevel-then-walk lookup
+> - `opencode/.config/opencode/plugins/toggl-time.ts` — DB read path
+>
+> Follow-up that also centralizes `.toggl-time` heartbeats into the same
+> DB (table `toggl_heartbeats`) is captured in `PLAN-heartbeats.md`; the
+> "heartbeat log stays per-worktree" claim below is therefore superseded.
+>
+> Preserved for decision history. Cross-references in this document are
+> historical — notably `TESTS.md` was replaced by `*.test.ts` files
+> alongside each implementation in the test refactor.
 
 Move per-worktree `<repo>/.toggl` JSON files into a single SQLite store, keyed
 by canonical worktree path. Hard cut after a one-shot migration. The

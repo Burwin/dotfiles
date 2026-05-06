@@ -1,5 +1,15 @@
 # Plan: Expand `toggl-time.ts` to handle every documented event
 
+> **Status:** implemented; archived 2026-05-06.
+>
+> Implementation lives in:
+> - `opencode/.config/opencode/plugins/toggl-time.ts` — full switch coverage
+>   (the four new `start` cases land at lines 355–386; the explicit no-op
+>   groups at lines 393–426; the forward-compat `default:` arm at 428–435)
+>
+> Preserved for decision history. Cross-references in this document are
+> historical.
+
 Make `opencode/.config/opencode/plugins/toggl-time.ts` exhaustive against the
 event list at <https://opencode.ai/docs/plugins/#events>: every documented
 event gets an explicit case in the switch, classified as `start`, `pause`,

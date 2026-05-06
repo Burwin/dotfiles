@@ -1,5 +1,20 @@
 # PLAN-dismiss: auto-dismiss mako toasts when the user responds
 
+> **Status:** implemented; archived 2026-05-06.
+>
+> Implementation lives in:
+> - `opencode/.config/opencode/plugins/notify.ts` — entrypoint owns `$`-bound
+>   side effects (notify-send, makoctl dismiss); see the `tracker = makeDismissTracker(...)`
+>   wiring + the `dismiss`/`notify` switch arms.
+> - `opencode/.config/opencode/plugins/notify.lib.ts` — pure helpers:
+>   `dispatchEvent` (event → action mapping incl. session.status no-op),
+>   `makeDismissTracker` (per-session id list with delete-before-await semantics).
+> - `opencode/.config/opencode/plugins/notify.test.ts` — automated subset of
+>   the Verification list at the bottom of this doc; the manual UI items
+>   are annotated inline.
+>
+> Preserved for decision history.
+
 Augment the existing opencode notify plugin so that every mako toast it
 raises is tracked by mako notification id, and is automatically
 dismissed (`makoctl dismiss -n <id>`) when any non-halting event for the

@@ -1,5 +1,19 @@
 # PLAN-ntfy: phone alerts for opencode events via ntfy
 
+> **Status:** implemented; archived 2026-05-06.
+>
+> Implementation lives in:
+> - `opencode/.config/opencode/plugins/notify.ts` — env reads
+>   (OPENCODE_IDLE_NTFY_{SERVER,TOPIC,TOKEN}) + parallel notify-send/ntfy fan-out.
+> - `opencode/.config/opencode/plugins/notify.lib.ts` — `pingNtfy` (best-effort
+>   POST with 5s AbortSignal.timeout, errors swallowed).
+> - `opencode/.config/opencode/plugins/notify.test.ts` — automated subset of
+>   the Verification list (no-op-when-topic-unset, error swallowing, URL
+>   encoding, header construction). Manual phone-push items are annotated
+>   inline.
+>
+> Preserved for decision history.
+
 Augment the existing opencode notify plugin so that, in addition to the
 desktop `notify-send` (mako) toast, every notification also pings
 [ntfy](https://ntfy.sh) — giving phone alerts for session.idle,

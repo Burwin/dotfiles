@@ -1,5 +1,19 @@
 # Plan: Centralize `.toggl-time` heartbeats in `~/.local/state/toggl/state.db`
 
+> **Status:** implemented; archived 2026-05-06.
+>
+> Implementation lives in:
+> - `toggl/.local/bin/toggl-state.lib.sh` — `toggl_heartbeats` DDL + indexes + helpers
+> - `toggl/.local/bin/toggl-time-migrate` — one-shot legacy `.toggl-time` JSONL importer
+> - `toggl/.local/bin/toggl-group` — DB-driven CLI (`--repo`, `--all`, `--since`, `--until`)
+> - `toggl/.local/bin/toggl-group.lib.ts` — `parseHeartbeats`, `heartbeatsFromRows`, `groupEvents`
+> - `toggl/.local/bin/toggl-group.test.ts` + `toggl-group.cli.test.ts` — lib + CLI tests
+> - `opencode/.config/opencode/plugins/toggl-time.ts` — DB INSERT path + inline DDL bootstrap
+>
+> Preserved for decision history. Cross-references in this document are
+> historical — notably `TESTS.md` was replaced by `*.test.ts` files
+> alongside each implementation in the test refactor.
+
 Move per-worktree `<repo>/.toggl-time` JSONL files into a new `toggl_heartbeats`
 table inside the existing state DB, mirroring the `.toggl` →
 `toggl_repo_state` migration captured in `PLAN.md`. One-shot
