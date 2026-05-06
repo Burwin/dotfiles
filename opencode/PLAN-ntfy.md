@@ -114,18 +114,26 @@ Top-of-file docstring expands to cover:
 
 ## Verification
 
+Items 1, 2, and 5 are covered by the automated suite at
+`opencode/.config/opencode/plugins/notify.test.ts`. Items 3 and 4 are
+end-to-end checks that need a real ntfy server + a subscribed phone, so
+they remain manual.
+
 1. **No regression when ntfy unset.** `opencode` starts and behaves
    exactly as today when `OPENCODE_IDLE_NTFY_TOPIC` is unset.
+   *Automated:* `pingNtfy > no-op when topic is unset`.
 2. **Type check / parse.** `notify.ts` still type-checks against
-   `@opencode-ai/plugin@1.4.7` (no new TS errors).
+   `@opencode-ai/plugin` (no new TS errors).
+   *Automated:* `notify.ts entrypoint > parses cleanly via bun build`.
 3. **Idle ping.** With `OPENCODE_IDLE_NTFY_TOPIC` set and the ntfy app subscribed on
    the phone, finishing a turn produces both a mako toast and a 🤖
-   phone notification titled "OpenCode" with body
-   "Session idle — ready for input".
+   phone notification titled with the tmux session name and body
+   "Session idle — ready for input". *Manual.*
 4. **Permission ping.** Triggering an unapproved bash command produces
    both a mako toast and a 🔒 phone notification with body
-   "Permission requested: <detail>".
+   "Permission requested: <detail>". *Manual.*
 5. **Resilience.** Pointing `OPENCODE_IDLE_NTFY_SERVER` at a deliberately dead host
    (e.g. `http://127.0.0.1:1`) still leaves the desktop toast working;
    the phone alert is dropped after the 5s timeout without affecting
    subsequent events.
+   *Automated:* `pingNtfy > swallows fetch errors / promise rejections`.

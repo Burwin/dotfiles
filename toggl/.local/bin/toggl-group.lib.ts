@@ -27,7 +27,8 @@
 //      `splitAtLocalMidnight` is true and `timeZone` defaults to local.
 //   3. Forgiving. Malformed lines/rows are reported via `warnings`, not thrown.
 //
-// See ../../TESTS.md and ./toggl-group.test.ts for behavior fixtures.
+// See ./toggl-group.test.ts for the lib-level behavior fixtures and
+// ./toggl-group.cli.test.ts for the CLI-level smoke tests.
 
 export type Heartbeat = {
   ts: string // ISO 8601 UTC, e.g. "2026-05-05T17:21:42.619Z"

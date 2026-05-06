@@ -26,7 +26,10 @@ set -euo pipefail
 # shellcheck source=./toggl-state.lib.sh
 source "$(dirname "$(realpath "$0")")/toggl-state.lib.sh"
 
-DB="$HOME/src/bamboo/tools/src/toggl/toggl.db"
+# Active-projects DB. The TOGGL_PROJECT_DB env var is honored both for
+# tests (so they can pin a fixture DB with a known set of projects) and
+# for users who want their pulled-projects DB elsewhere.
+DB="${TOGGL_PROJECT_DB:-$HOME/src/bamboo/tools/src/toggl/toggl.db}"
 query="$*"
 
 # 1. Locate git repo root and canonicalize for use as the state-DB key.
