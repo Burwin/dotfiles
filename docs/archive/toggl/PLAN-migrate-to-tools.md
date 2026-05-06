@@ -1,6 +1,27 @@
 # Plan: Migrate toggl/opencode time-tracking from `dotfiles` to `bamboo/tools`
 
-> **Status:** planned, not yet executed.
+> **Status:** implemented; archived 2026-05-06.
+>
+> Implementation lives in:
+> - `bamboo/tools` commit `7ea88da` — landed the toggl-* CLIs, the
+>   `toggl-time.ts` opencode plugin, and the renamed `toggl-tmux-status`
+>   under `src/opencode/{bin,plugins,test-fixtures}/`; rewrote `install.sh`
+>   to handle the `~/.config/opencode` dir-symlink → real-dir conversion
+>   and `~/.local/bin/` symlinks.
+> - `dotfiles` commit `487b7cb` — dropped the `toggl/` tree, the
+>   `toggl_project.{sh,test.ts}` tmux scripts, and the dotfiles copy of
+>   `toggl-time.ts`; updated `tmux.conf` to invoke bare `toggl-tmux-status`,
+>   and rewrote the public README to point at the private repo.
+> - `dotfiles` commit `b43a722` — added
+>   `~/.config/environment.d/path.conf` so the user-systemd PATH includes
+>   `~/.local/bin/`, which is what makes the bare `toggl-tmux-status`
+>   invocation in `tmux.conf` resolve under tmux's non-interactive
+>   `#()` shell. (See §2c — the original plan assumed Omarchy's bash rc
+>   would handle this; it doesn't, because non-interactive shells skip
+>   `.bashrc`.)
+>
+> Preserved for decision history. Path references inside this document
+> point at pre-migration locations.
 
 Move every piece of the per-machine Toggl time-tracking system out of the
 public `dotfiles` repo and into the private `bamboo/tools` repo. After this
