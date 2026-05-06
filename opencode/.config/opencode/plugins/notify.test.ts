@@ -1,7 +1,7 @@
 // notify.test.ts — bun:test suite for ./notify.lib.ts and the parse-check
 // for the plugin entrypoint at ./notify.ts. Replaces the automatable subset
 // of the manual verification steps formerly listed in
-// ../../../../opencode/PLAN-ntfy.md and PLAN-dismiss.md.
+// docs/archive/opencode/PLAN-ntfy.md and PLAN-dismiss.md.
 //
 // Run from the repo root: `bun test ./opencode/.config/opencode/plugins/notify.test.ts`.
 //

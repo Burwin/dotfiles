@@ -23,7 +23,8 @@
 #                                            session_id / details_json store NULL.
 #   toggl_heartbeat_count <worktree-path>  - print integer row count for a worktree.
 #
-# Schema: see PLAN.md (toggl_repo_state) + PLAN-heartbeats.md (toggl_heartbeats)
+# Schema: see docs/archive/toggl/PLAN.md (toggl_repo_state) +
+#   docs/archive/toggl/PLAN-heartbeats.md (toggl_heartbeats)
 # and the DDL in toggl_state_init below.
 #
 # NOTE: the opencode plugin (opencode/.config/opencode/plugins/toggl-time.ts)
