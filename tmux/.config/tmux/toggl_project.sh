@@ -33,7 +33,11 @@
 POP='#[fg=blue,bold]'
 MUTED='#[fg=brightblack,nobold]'
 
-STATE_DB="$HOME/.local/state/toggl/state.db"
+# State DB path. The TOGGL_STATE_DB env var is honored both for tests (so
+# they can point at an isolated DB) and for users who want to keep state
+# elsewhere; the default matches the convention used by toggl-state.lib.sh
+# and every other tool in the toggl/ tree.
+STATE_DB="${TOGGL_STATE_DB:-$HOME/.local/state/toggl/state.db}"
 
 # sql_quote — wrap a string as a SQL-safe single-quoted literal. Inlined
 # rather than sourced from toggl-state.lib.sh to keep this script

@@ -219,34 +219,50 @@ Top-of-file docstring gains a paragraph documenting:
 
 ## Verification
 
+Items 1, 2, 7, 8, 9, and 10 have an automated counterpart in
+`opencode/.config/opencode/plugins/notify.test.ts` (against the lib at
+`./notify.lib.ts`). Items 3–6 are end-to-end UI checks that need a
+running mako/desktop and a real opencode session, so they stay manual.
+
 1. **No regression when ntfy unset.** Plugin starts and behaves exactly
    as today; toasts still raise on idle / error / permission /
    question. ntfy fan-out is silent if `OPENCODE_IDLE_NTFY_TOPIC` is
    unset.
+   *Automated:* `pingNtfy > no-op when topic is unset` +
+   `dispatchEvent` arms covering idle/error/permission.asked/question.asked.
 2. **Type check / parse.** `notify.ts` still type-checks against
-   `@opencode-ai/plugin@1.4.7` (we only add cases to the runtime-string
+   `@opencode-ai/plugin` (we only add cases to the runtime-string
    switch).
+   *Automated:* `notify.ts entrypoint > parses cleanly via bun build`.
 3. **No premature dismissal at end-of-turn.** Finish a turn ⇒ idle
    toast appears ⇒ toast must remain visible until the user does
    something. Watch `makoctl list` for several seconds. If it
    disappears immediately, expand the guard to include
-   `case "todo.updated": case "session.diff": break;`.
+   `case "todo.updated": case "session.diff": break;`. *Manual.*
 4. **Idle dismiss.** Idle toast on screen ⇒ submit a new prompt ⇒
-   toast disappears. `makoctl list` confirms.
+   toast disappears. `makoctl list` confirms. *Manual.*
 5. **Permission dismiss.** Trigger an unapproved bash command ⇒
    permission toast appears ⇒ approve / deny in opencode ⇒ toast
-   disappears.
+   disappears. *Manual.*
 6. **Question dismiss.** Trigger a `question.asked` flow ⇒ toast
-   appears ⇒ reply or reject ⇒ toast disappears.
+   appears ⇒ reply or reject ⇒ toast disappears. *Manual.*
 7. **Multi-toast collapse.** Have idle + permission toast on screen
    for one session ⇒ respond to permission ⇒ both toasts disappear
    (per the "session-level" intent).
+   *Automated:* `makeDismissTracker > tryAdd appends; dismissAll fires
+   once per tracked id`.
 8. **Per-session isolation.** Run two opencode sessions in two
    terminals. Both go idle. Respond in only session A ⇒ session A's
    toast disappears, session B's stays.
+   *Automated:* `makeDismissTracker > per-session isolation`.
 9. **Stale-id tolerance.** Manually `makoctl dismiss --all` while a
    tracked toast exists, then submit a prompt ⇒ no error in opencode
    logs, plugin keeps working for subsequent events.
+   *Automated:* `makeDismissTracker > a thrown / rejected dismiss for
+   one id doesn't poison the others`.
 10. **Missing `makoctl` simulation.** Temporarily rename `makoctl` (or
     run with a pruned `PATH`) ⇒ toasts still appear, dismiss attempts
     fail silently, plugin keeps running.
+    *Automated (proxy):* same tracker tests as item 9 — the lib's
+    error-tolerance contract is what protects against missing makoctl
+    at runtime.

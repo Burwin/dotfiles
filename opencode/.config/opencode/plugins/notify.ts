@@ -1,4 +1,5 @@
 import type { Plugin } from "@opencode-ai/plugin"
+import { dispatchEvent, makeDismissTracker, pingNtfy } from "./notify.lib.ts"
 
 /**
  * Native OS notifications + optional ntfy phone alerts for opencode on Linux
@@ -32,19 +33,19 @@ import type { Plugin } from "@opencode-ai/plugin"
  * keeps working silently in that case.
  *
  * Auto-dismiss (mako only): every toast we raise has its mako notification
- * id captured via `notify-send -p` and stored in a per-session list. The
- * default switch arm below runs `makoctl dismiss -n <id>` for each tracked
- * id whenever any non-halting event arrives for that session — i.e. as
- * soon as the agent / user demonstrably resumes work, the residual alert
- * is cleared. `session.status` is explicitly skipped because it is
- * overloaded (fires for idle, busy, and retry) and would otherwise race
- * with `session.idle` and dismiss the toast we just raised. Tracking is
- * intentionally session-level, not per-toast: two outstanding alerts for
- * one session both clear on the first response — by then you're engaged
- * with that session anyway. `makoctl dismiss` is best-effort (stale or
- * expired ids are harmless no-ops, errors swallowed). ntfy phone alerts
- * are NOT dismissed — phones don't reliably know you've returned to the
- * laptop.
+ * id captured via `notify-send -p` and stored in a per-session list (see
+ * `makeDismissTracker` in ./notify.lib.ts). The default dispatch arm runs
+ * `makoctl dismiss -n <id>` for each tracked id whenever any non-halting
+ * event arrives for that session — i.e. as soon as the agent / user
+ * demonstrably resumes work, the residual alert is cleared. `session.status`
+ * is explicitly skipped because it is overloaded (fires for idle, busy, and
+ * retry) and would otherwise race with `session.idle` and dismiss the toast
+ * we just raised. Tracking is intentionally session-level, not per-toast:
+ * two outstanding alerts for one session both clear on the first response —
+ * by then you're engaged with that session anyway. `makoctl dismiss` is
+ * best-effort (stale or expired ids are harmless no-ops, errors swallowed).
+ * ntfy phone alerts are NOT dismissed — phones don't reliably know you've
+ * returned to the laptop.
  *
  * ntfy: best-effort, never crashes the plugin runtime. Configured via env:
  *
@@ -68,15 +69,19 @@ import type { Plugin } from "@opencode-ai/plugin"
  * native `fetch` is used; no curl subprocess and no extra deps.
  *
  * Priority: every event currently uses ntfy's default priority (3). Change
- * at the single call site in `pingNtfy` if you ever want a louder/quieter
- * alert (e.g. priority 5 to bypass Do Not Disturb on Android).
+ * at the single call site in `pingNtfy` (./notify.lib.ts) if you ever want
+ * a louder/quieter alert (e.g. priority 5 to bypass Do Not Disturb on Android).
  *
  * Permission shape note: the `event.properties` for `permission.asked`
  * empirically carries v2 SDK keys (`permission` for the action type,
  * `patterns` array, no `title`) but the v1 type definitions imported via
- * `@opencode-ai/plugin@1.4.7` describe a different shape. We accept either
- * shape — `title` if present (descriptive), `permission` as the v2 fallback,
- * generic body otherwise.
+ * `@opencode-ai/plugin@1.4.7` describe a different shape. The mapping in
+ * `dispatchEvent` (./notify.lib.ts) accepts either shape — `title` if
+ * present, `permission` as the v2 fallback, generic body otherwise.
+ *
+ * Testability: the bulk of this plugin's logic lives in ./notify.lib.ts
+ * and is exercised by ./notify.test.ts. This file owns env-var resolution
+ * + the `$`-bound side effects only.
  */
 
 // Module-level config: read once at plugin load. Trailing slashes on
@@ -89,31 +94,10 @@ const OPENCODE_IDLE_NTFY_SERVER = (
 const OPENCODE_IDLE_NTFY_TOPIC = process.env.OPENCODE_IDLE_NTFY_TOPIC
 const OPENCODE_IDLE_NTFY_TOKEN = process.env.OPENCODE_IDLE_NTFY_TOKEN
 
-const pingNtfy = async (title: string, body: string, tags?: string) => {
-  if (!OPENCODE_IDLE_NTFY_TOPIC) return
-  const headers: Record<string, string> = {
-    Title: title,
-    "Content-Type": "text/plain; charset=utf-8",
-  }
-  if (tags) headers.Tags = tags
-  if (OPENCODE_IDLE_NTFY_TOKEN) {
-    headers.Authorization = `Bearer ${OPENCODE_IDLE_NTFY_TOKEN}`
-  }
-  try {
-    // encodeURIComponent is purely defensive — ntfy topics are restricted
-    // to [A-Za-z0-9_-] per the spec, but if someone ever set
-    // OPENCODE_IDLE_NTFY_TOPIC to a malformed value we still produce a
-    // syntactically valid URL.
-    const url = `${OPENCODE_IDLE_NTFY_SERVER}/${encodeURIComponent(OPENCODE_IDLE_NTFY_TOPIC)}`
-    await fetch(url, {
-      method: "POST",
-      headers,
-      body,
-      signal: AbortSignal.timeout(5000),
-    })
-  } catch {
-    // best-effort: a missing/dead ntfy server must never crash the plugin
-  }
+const ntfyConfig = {
+  server: OPENCODE_IDLE_NTFY_SERVER,
+  topic: OPENCODE_IDLE_NTFY_TOPIC,
+  token: OPENCODE_IDLE_NTFY_TOKEN,
 }
 
 export const NotifyPlugin: Plugin = async ({ $ }) => {
@@ -141,129 +125,49 @@ export const NotifyPlugin: Plugin = async ({ $ }) => {
     : ""
   const titleBase = tmuxSession || "OpenCode"
 
-  // sessionID → mako notification ids currently on screen for that session.
-  // Cleared wholesale on the first non-halting event for the session (see
-  // the `default` arm of the event switch). `delete()` on dismiss keeps the
-  // map bounded over a long-lived process.
-  const notificationIDs = new Map<string, number[]>()
-
-  // Single entry point that fans out to both transports in parallel.
-  // notify-send keeps its `urgency` arg unchanged; ntfy ignores urgency
-  // and uses default priority (3) for every event. When `sessionID` is
-  // provided, the mako notification id printed by `notify-send -p` is
-  // captured and appended to that session's id list so the default switch
-  // arm can later dismiss it.
-  const notify = async (
-    urgency: "low" | "normal" | "critical",
-    title: string,
-    body: string,
-    tags?: string,
-    sessionID?: string,
-  ) => {
-    // `.text()` auto-calls `.quiet()` so the printed id no longer leaks to
-    // the user's terminal. `.nothrow()` keeps the existing crash-proof
-    // contract for missing/failing notify-send; the trailing `.catch(() =>
-    // "")` is belt-and-braces for shell-spawn failures (e.g. notify-send
-    // not on PATH at all) which can throw even with `.nothrow()`.
-    const [stdoutText] = await Promise.all([
-      $`notify-send -a opencode -u ${urgency} -p ${title} ${body}`
-        .nothrow()
-        .text()
-        .catch(() => ""),
-      pingNtfy(title, body, tags),
-    ])
-    if (sessionID) {
-      const id = Number.parseInt(stdoutText.trim(), 10)
-      if (Number.isFinite(id)) {
-        const arr = notificationIDs.get(sessionID) ?? []
-        arr.push(id)
-        notificationIDs.set(sessionID, arr)
-      }
-    }
-  }
-
-  // Best-effort dismissal of every tracked toast for a session. Stale or
-  // already-expired ids are harmless no-ops in mako, so we don't bother
-  // diffing against `makoctl list`. `delete` runs before the awaited
-  // dismisses so a slow `makoctl` cannot cause a duplicate dismiss on a
-  // re-entrant event.
-  const dismissAll = async (sessionID: string) => {
-    const ids = notificationIDs.get(sessionID)
-    if (!ids || ids.length === 0) return
-    notificationIDs.delete(sessionID)
-    await Promise.all(
-      ids.map((id) =>
-        $`makoctl dismiss -n ${id}`
-          .nothrow()
-          .quiet()
-          .catch(() => {}),
-      ),
-    )
-  }
+  // The dismiss tracker holds the per-session mako-id lists. The injected
+  // dismiss callback drives `makoctl dismiss -n <id>` via Bun's `$`; errors
+  // are swallowed so a missing makoctl / dbus failure can't crash the plugin.
+  const tracker = makeDismissTracker(async (id) => {
+    await $`makoctl dismiss -n ${id}`
+      .nothrow()
+      .quiet()
+      .catch(() => {})
+  })
 
   return {
     event: async ({ event }) => {
       // The v1 Event union doesn't include `permission.asked` / `question.*`
       // (those are v2 names) but the runtime delivers them at runtime per the
-      // docs. Cast once and switch on a free-form string.
-      const e = event as unknown as { type: string; properties?: any }
-      const p = e.properties ?? {}
-      switch (e.type) {
-        case "session.idle":
-          await notify(
-            "normal",
-            titleBase,
-            "Session idle — ready for input",
-            "robot",
-            p.sessionID,
-          )
-          break
-        case "session.error":
-          await notify(
-            "critical",
-            titleBase,
-            "Session error",
-            "warning",
-            p.sessionID,
-          )
-          break
-        case "permission.asked": {
-          // Body resolution: v1 `title` (descriptive), then v2 `permission`
-          // (coarse: "bash", "edit"), then generic.
-          const detail =
-            (typeof p.title === "string" && p.title.trim()) ||
-            (typeof p.permission === "string" && p.permission.trim())
-          const body = detail
-            ? `Permission requested: ${detail}`
-            : "Permission requested"
-          await notify("critical", titleBase, body, "lock", p.sessionID)
-          break
+      // docs. Cast once and dispatch on a free-form string via the lib.
+      const e = event as unknown as {
+        type: string
+        properties?: Record<string, unknown>
+      }
+      const action = dispatchEvent(e.type, e.properties ?? {}, titleBase)
+      switch (action.kind) {
+        case "noop":
+          return
+        case "dismiss":
+          await tracker.dismissAll(action.sessionID)
+          return
+        case "notify": {
+          // Fire both transports in parallel. notify-send -p prints the mako
+          // notification id to stdout; capture it for the dismiss tracker.
+          // ntfy ignores `urgency` (every event uses default priority 3).
+          const [stdoutText] = await Promise.all([
+            $`notify-send -a opencode -u ${action.urgency} -p ${action.title} ${action.body}`
+              .nothrow()
+              .text()
+              .catch(() => ""),
+            pingNtfy(ntfyConfig, action.title, action.body, action.tag),
+          ])
+          if (action.sessionID) {
+            const id = Number.parseInt(stdoutText.trim(), 10)
+            tracker.tryAdd(action.sessionID, id)
+          }
+          return
         }
-        case "question.asked": {
-          // QuestionInfo.header is guaranteed ≤30 chars — fits cleanly in a toast.
-          const header = p.questions?.[0]?.header
-          const body =
-            typeof header === "string" && header.trim()
-              ? `Question: ${header.trim()}`
-              : "Question awaiting answer"
-          await notify("critical", titleBase, body, "question", p.sessionID)
-          break
-        }
-        case "session.status":
-          // Overloaded event: fires for status=idle, status=busy, status=retry.
-          // Skip so we don't race with `session.idle` (both fire near-
-          // simultaneously at end-of-turn) and dismiss the toast we just
-          // raised. The next "real" session event (message.updated,
-          // tool.execute.before, etc.) hits the default arm and dismisses
-          // within milliseconds anyway.
-          break
-        default:
-          // Halting events handled explicitly above; anything else for a
-          // known session means the agent / user is moving again ⇒ clear
-          // the toasts. Events without a sessionID (installation.updated,
-          // server.connected, file.watcher.updated, etc.) are silently
-          // ignored.
-          if (p.sessionID) await dismissAll(p.sessionID)
       }
     },
   }
