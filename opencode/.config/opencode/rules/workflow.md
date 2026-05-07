@@ -38,6 +38,15 @@ Git, commits, branches, PRs, testing cadence.
   changes. Mention any follow-ups or known gaps.
 - Verify the base branch matches the repo's default before pushing.
 
+### Review comments
+
+When asked to review, check, or look at PR review comments (e.g. "check copilot
+PR review comments", "what does the review say?"):
+1. Fetch the review body: `gh pr view <number> --repo <owner/repo> --comments`
+2. Fetch **file-level comments** separately: `gh api repos/<owner>/<repo>/pulls/<number>/comments`
+   - These are NOT included in `gh pr view --comments` output — a separate API call is required.
+3. Report both the review summary AND any individual file/line comments.
+
 ## Testing
 
 - Run tests after non-trivial refactors. Mention if you skipped them and why
