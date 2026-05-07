@@ -38,6 +38,17 @@ Git, commits, branches, PRs, testing cadence.
   changes. Mention any follow-ups or known gaps.
 - Verify the base branch matches the repo's default before pushing.
 
+### Adding reviewers
+
+When asked to add a reviewer to a PR using a shorthand (first name, nickname,
+partial handle):
+1. If you don't already have plausible GitHub usernames in context for this
+   repo, fetch them first — e.g.,
+   `gh api repos/<owner>/<repo>/collaborators` or
+   `gh api repos/<owner>/<repo>/contributors`.
+2. Match the shorthand against the fetched list to find the likely username.
+3. If multiple candidates are plausible, confirm before assigning.
+
 ### Review comments
 
 When asked to review, check, or look at PR review comments (e.g. "check copilot
