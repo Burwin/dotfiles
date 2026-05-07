@@ -40,7 +40,8 @@ How to talk to the user and structure responses.
 
 When asked to "implement the plan" or similar phrasing referencing a plan:
 1. Search the repo for markdown files with "plan" in the name (e.g.,
-   `**/*plan*.md`).
+   `**/*plan*.md`) and any files under a `plans/` directory (e.g.,
+   `**/plans/**/*.md`).
 2. If one candidate is clearly the right one (recently modified, topic match,
    only match), use it and briefly state which file you picked.
 3. If multiple plausible candidates exist or none seem obvious, ask which plan
