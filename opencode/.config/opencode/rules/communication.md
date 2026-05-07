@@ -36,6 +36,16 @@ How to talk to the user and structure responses.
 - Prefer asking one consolidated question with concrete options over a chain of
   one-at-a-time questions.
 
+## Implementing plans
+
+When asked to "implement the plan" or similar phrasing referencing a plan:
+1. Search the repo for markdown files with "plan" in the name (e.g.,
+   `**/*plan*.md`).
+2. If one candidate is clearly the right one (recently modified, topic match,
+   only match), use it and briefly state which file you picked.
+3. If multiple plausible candidates exist or none seem obvious, ask which plan
+   to follow rather than guessing.
+
 ## Honesty
 
 - Prioritize technical accuracy over agreement. Disagree when warranted; correct
