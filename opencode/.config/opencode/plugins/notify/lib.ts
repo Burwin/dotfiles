@@ -1,8 +1,14 @@
-// notify.lib.ts — pure helpers for the opencode notify plugin (./notify.ts).
+// notify/lib.ts — pure helpers for the opencode notify plugin (../notify.ts).
 //
 // The plugin entrypoint composes these into the runtime behavior described
-// in ./notify.ts; everything testable lives here so it can be exercised
+// in ../notify.ts; everything testable lives here so it can be exercised
 // without the opencode plugin runtime, mako, or a real ntfy server.
+//
+// Lives in this `notify/` subdirectory (not next to notify.ts) because
+// opencode's plugin loader uses the non-recursive glob
+// `{plugin,plugins}/*.{ts,js}` — anything at the top level of plugins/ is
+// imported as a Plugin entrypoint, which would fail for these helpers and
+// for the test file. Subdirectories are not scanned.
 //
 // Three pieces are factored out:
 //
@@ -48,7 +54,7 @@ export type NoopAction = { kind: "noop" }
 export type Action = NotifyAction | DismissAction | NoopAction
 
 // dispatchEvent — pure event-type → action mapping. Mirrors the switch in
-// the previous monolithic notify.ts:
+// the previous monolithic ../notify.ts:
 //
 //   session.idle/error/permission.asked/question.asked → notify
 //   session.status                                      → noop (overloaded
