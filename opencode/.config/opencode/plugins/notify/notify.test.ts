@@ -1,9 +1,15 @@
-// notify.test.ts — bun:test suite for ./notify.lib.ts and the parse-check
-// for the plugin entrypoint at ./notify.ts. Replaces the automatable subset
+// notify/notify.test.ts — bun:test suite for ./lib.ts and the parse-check
+// for the plugin entrypoint at ../notify.ts. Replaces the automatable subset
 // of the manual verification steps formerly listed in
 // docs/archive/opencode/PLAN-ntfy.md and PLAN-dismiss.md.
 //
-// Run from the repo root: `bun test ./opencode/.config/opencode/plugins/notify.test.ts`.
+// Lives in this `notify/` subdirectory (not at plugins/ top level) because
+// opencode's plugin loader uses the non-recursive glob
+// `{plugin,plugins}/*.{ts,js}` and would otherwise try to load this test
+// file as a Plugin, which fails with "Cannot use describe outside of the
+// test runner."
+//
+// Run from the repo root: `bun test ./opencode/.config/opencode/plugins/`.
 //
 // What's covered here:
 //   - dispatchEvent: pure mapping correctness for every documented event
@@ -12,7 +18,7 @@
 //     encoding, header construction (Title/Tags/Authorization).
 //   - makeDismissTracker: add → dismissAll calls the injected dismiss once
 //     per id, per-session isolation, error tolerance.
-//   - notify.ts: parse / typecheck via `bun build --no-bundle` so the
+//   - ../notify.ts: parse / typecheck via `bun build --no-bundle` so the
 //     entrypoint can't drift away from the lib's API silently.
 //
 // What's NOT covered here (still manual eyeball checks; see PLAN docs):
@@ -29,7 +35,7 @@ import {
   makeDismissTracker,
   pingNtfy,
   type NtfyConfig,
-} from "./notify.lib.ts"
+} from "./lib.ts"
 
 describe("dispatchEvent", () => {
   const titleBase = "TestTitle"
@@ -387,7 +393,7 @@ describe("notify.ts entrypoint", () => {
   test("parses cleanly via bun build", () => {
     // The plugin entrypoint imports `@opencode-ai/plugin`, so this also
     // verifies the runtime types resolve.
-    const file = fileURLToPath(new URL("./notify.ts", import.meta.url))
+    const file = fileURLToPath(new URL("../notify.ts", import.meta.url))
     const res = spawnSync(
       "bun",
       ["build", "--target=bun", "--no-bundle", file],

@@ -1,5 +1,5 @@
 import type { Plugin } from "@opencode-ai/plugin"
-import { dispatchEvent, makeDismissTracker, pingNtfy } from "./notify.lib.ts"
+import { dispatchEvent, makeDismissTracker, pingNtfy } from "./notify/lib.ts"
 
 /**
  * Native OS notifications + optional ntfy phone alerts for opencode on Linux
@@ -34,7 +34,7 @@ import { dispatchEvent, makeDismissTracker, pingNtfy } from "./notify.lib.ts"
  *
  * Auto-dismiss (mako only): every toast we raise has its mako notification
  * id captured via `notify-send -p` and stored in a per-session list (see
- * `makeDismissTracker` in ./notify.lib.ts). The default dispatch arm runs
+ * `makeDismissTracker` in ./notify/lib.ts). The default dispatch arm runs
  * `makoctl dismiss -n <id>` for each tracked id whenever any non-halting
  * event arrives for that session — i.e. as soon as the agent / user
  * demonstrably resumes work, the residual alert is cleared. `session.status`
@@ -69,18 +69,18 @@ import { dispatchEvent, makeDismissTracker, pingNtfy } from "./notify.lib.ts"
  * native `fetch` is used; no curl subprocess and no extra deps.
  *
  * Priority: every event currently uses ntfy's default priority (3). Change
- * at the single call site in `pingNtfy` (./notify.lib.ts) if you ever want
+ * at the single call site in `pingNtfy` (./notify/lib.ts) if you ever want
  * a louder/quieter alert (e.g. priority 5 to bypass Do Not Disturb on Android).
  *
  * Permission shape note: the `event.properties` for `permission.asked`
  * empirically carries v2 SDK keys (`permission` for the action type,
  * `patterns` array, no `title`) but the v1 type definitions imported via
  * `@opencode-ai/plugin@1.4.7` describe a different shape. The mapping in
- * `dispatchEvent` (./notify.lib.ts) accepts either shape — `title` if
+ * `dispatchEvent` (./notify/lib.ts) accepts either shape — `title` if
  * present, `permission` as the v2 fallback, generic body otherwise.
  *
- * Testability: the bulk of this plugin's logic lives in ./notify.lib.ts
- * and is exercised by ./notify.test.ts. This file owns env-var resolution
+ * Testability: the bulk of this plugin's logic lives in ./notify/lib.ts
+ * and is exercised by ./notify/test.ts. This file owns env-var resolution
  * + the `$`-bound side effects only.
  */
 
