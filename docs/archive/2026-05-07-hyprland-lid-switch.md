@@ -1,7 +1,17 @@
 # Hyprland Lid Switch Investigation
 
 **Date**: 2026-05-07
-**Status**: Root cause identified
+**Status**: implemented; archived 2026-05-18.
+
+> Fix lives in:
+> - `~/.config/hypr/autostart.conf` (symlinked into the dotfiles repo at
+>   `hypr/.config/hypr/autostart.conf`).
+> - `exec-once` shell check that runs `hyprctl keyword monitor "eDP-1, disable"`
+>   if `/proc/acpi/button/lid/LID*/state` reports `closed` at Hyprland startup.
+> - Uses the same atomic `hyprctl keyword monitor` call as `bindings.conf`, so
+>   it avoids the aquamarine reload race from the 2026-05-06 crash plan.
+>
+> Preserved for decision history.
 
 ## Problem
 
