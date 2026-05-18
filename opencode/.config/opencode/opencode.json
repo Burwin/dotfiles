@@ -1,5 +1,15 @@
 {
   "$schema": "https://opencode.ai/config.json",
   "autoupdate": false,
-  "instructions": ["rules/safety.md", "rules/communication.md"]
+  "instructions": ["rules/safety.md", "rules/communication.md"],
+  "mcp": {
+    "asana": {
+      "type": "remote",
+      "url": "https://mcp.asana.com/v2/mcp",
+      "oauth": {
+        "clientId": "{file:~/.config/opencode/secrets/asana-mcp-client-id}",
+        "clientSecret": "{file:~/.config/opencode/secrets/asana-mcp-client-secret}"
+      }
+    }
+  }
 }
