@@ -41,3 +41,38 @@ Instructions:
 When in doubt: project `AGENTS.md` > these global rules > generic defaults.
 If a project rule contradicts a global rule, follow the project rule and
 optionally note the divergence in your response.
+
+## Asana MCP
+
+The official Asana MCP server is configured at the OpenCode level (always-on,
+all sessions). Tools are namespaced `asana_*` (~21 tools across tasks,
+projects, portfolios, goals, teams, users, status updates). The OAuth token
+is workspace-scoped to Bamboo.
+
+When the user asks about Asana work, prefer:
+
+- `asana_get_my_tasks` for "what's on my plate" / "what's due" queries.
+- `asana_search_objects` to resolve names to GIDs before calling
+  object-specific reads (`asana_get_task`, `asana_get_project`, etc.).
+- `asana_get_status_overview` for project/portfolio status — it searches
+  internally, so don't chain other search tools first.
+- `asana_create_tasks` / `asana_update_tasks` for batch ops (up to 50
+  per call).
+
+Gotchas:
+
+- MCP tokens cannot be used against Asana's REST API. If we ever build a
+  local `src/asana/` package in `~/src/bamboo/tools`, it needs a separate
+  API app + PAT.
+- Schema bloat: ~5–10K input tokens per turn always-on. Revisit per-agent
+  gating if context costs become annoying.
+- Workspace-scoped: only Bamboo. Switching workspaces requires
+  `opencode mcp logout asana && opencode mcp auth asana`.
+- `asana_search_tasks` is Premium-tier-and-up only; we have it on Advanced.
+- `asana_delete_task` is permanent.
+- Time tracking, goal mutation, tag CRUD, custom-field-definition CRUD,
+  sections-as-standalone, and webhooks are NOT exposed via MCP — they
+  require the REST API.
+
+OAuth callback URL (in case re-registration is needed):
+`http://127.0.0.1:19876/mcp/oauth/callback`
