@@ -33,44 +33,130 @@ import type { Plugin } from "@opencode-ai/plugin"
  */
 
 export const CostTrackerPlugin: Plugin = async ({ worktree, client }) => {
-  // Phase 1 will:
-  //   - resolve `worktree → canonicalWorktree` via fs.realpath (best-effort)
-  //   - open the DB via ./cost-tracker/db.ts (dynamic bun:sqlite import)
-  //   - prepare INSERT statements for `messages` + `session_rollup`
-  // Phase 2 will additionally:
-  //   - call `client.config.providers()` (or the equivalent) once at startup
-  //   - persist the snapshot to `provider_rates`
-  //   - construct a recompute fn from ./cost-tracker/recompute.ts
+  let db: any = null
+  let worktreePath = ""
+  let rateTable: any = { rate_version: "", rates: {} }
+
+  try {
+    const fs = await import("fs")
+    worktreePath = fs.realpathSync(worktree).catch(() => worktree)
+  } catch {
+    worktreePath = worktree
+  }
+
+  try {
+    const dbModule = await import("./cost-tracker/db.ts")
+    db = await dbModule.openDb()
+  } catch (e) {
+    console.warn("[cost-tracker] failed to initialize DB:", e)
+  }
+
+  // CRITICAL: do NOT `await fetchRates` here. The /config/providers
+  // endpoint is served by the same opencode process whose main thread
+  // is currently loading us — awaiting the response deadlocks startup
+  // for ~15+ seconds, after which the TUI's setRawMode fails with
+  // errno 5 (EIO) and opencode exits before reaching the prompt. See
+  // PLAN.md §6 Phase 2 + the bug note in the Progress block.
   //
-  // `worktree` and `client` referenced here so the typechecker treats them
-  // as used while the stub still has no body.
-  void worktree
-  void client
+  // Fire-and-forget instead: rate table fills in once the server is
+  // listening. Messages arriving before rates land record
+  // cost_recomputed_fxp8 = 0 (recompute returns 0 for missing rate);
+  // cost_opencode_fxp8 is unaffected because it comes from the message
+  // payload. Once rates land, subsequent messages compute correctly.
+  const recomputeModule = await import("./cost-tracker/recompute.ts")
+  const rateModule = await import("./cost-tracker/rate-table.ts")
+  rateModule
+    .fetchRates(client)
+    .then((table) => {
+      rateTable = table
+      if (db) {
+        rateModule
+          .persistSnapshot(db, table)
+          .catch((e) =>
+            console.warn("[cost-tracker] failed to persist rate snapshot:", e),
+          )
+      }
+      console.log(
+        "[cost-tracker] loaded",
+        Object.keys(table.rates).length,
+        "rates",
+      )
+    })
+    .catch((e) =>
+      console.warn("[cost-tracker] failed to load rate table:", e),
+    )
 
   return {
     event: async ({ event }) => {
-      // Phase 1 dispatch (sketch — actual implementation lands in Phase 1):
-      //
-      //   const e = event as unknown as { type: string; properties?: any }
-      //   const p = e.properties ?? {}
-      //   switch (e.type) {
-      //     case "message.updated":
-      //       await upsertMessage(p) // db.ts
-      //       break
-      //     case "session.idle":
-      //       await upsertRollup(p.sessionID) // db.ts aggregate query
-      //       break
-      //     case "session.compacted":
-      //     case "session.created":
-      //       // No-op in Phase 1; revisit in Phase 2 for child-session
-      //       // attribution.
-      //       break
-      //     default:
-      //       // Forward-compat: silently no-op. Re-classify when opencode
-      //       // adds a new event type that affects cost accounting.
-      //       break
-      //   }
-      void event
+      if (!db) return
+
+      const e = event as unknown as { type: string; properties?: any }
+      const p = e.properties ?? {}
+
+      try {
+        switch (e.type) {
+          case "message.updated": {
+            const msg = p.message as any
+            if (!msg?.id) return
+
+            const tokens = msg.tokens as any ?? {}
+            const rawJson = JSON.stringify(msg).slice(0, 10000)
+
+            const rateKey = `${msg.providerID}/${msg.modelID}`
+            const rate = rateTable.rates[rateKey]
+            const costRecomputed = recomputeModule.recompute(rate, {
+              input: tokens.input ?? 0,
+              output: tokens.output ?? 0,
+              reasoning: tokens.reasoning ?? 0,
+              cache_read: tokens.cache?.read ?? 0,
+              cache_write: tokens.cache?.write ?? 0,
+            })
+
+            await db.messages.upsert({
+              message_id: msg.id,
+              session_id: p.sessionID ?? "",
+              worktree_path: worktreePath,
+              provider_id: msg.providerID ?? "",
+              model_id: msg.modelID ?? "",
+              agent: p.agent ?? null,
+              ts_created: msg.createdAt ?? "",
+              ts_completed: msg.completedAt ?? null,
+              tokens_input: tokens.input ?? 0,
+              tokens_output: tokens.output ?? 0,
+              tokens_reasoning: tokens.reasoning ?? 0,
+              tokens_cache_read: tokens.cache?.read ?? 0,
+              tokens_cache_write: tokens.cache?.write ?? 0,
+              cost_opencode_fxp8: Math.round((msg.cost ?? 0) * 1e8),
+              cost_recomputed_fxp8: costRecomputed,
+              rate_version: rateTable.rate_version,
+              finish: msg.finish ?? null,
+              raw_json: rawJson,
+            })
+            break
+          }
+
+          case "session.idle": {
+            const sessionId = p.sessionID as string
+            if (!sessionId) break
+
+            const dbModule = await import("./cost-tracker/db.ts")
+            const rollup = await dbModule.computeSessionRollup(db, sessionId, new Date().toISOString())
+            if (rollup) {
+              await db.sessionRollup.upsert(rollup)
+            }
+            break
+          }
+
+          case "session.compacted":
+          case "session.created":
+            break
+
+          default:
+            break
+        }
+      } catch (e) {
+        console.warn("[cost-tracker] event handler error:", e)
+      }
     },
   }
 }

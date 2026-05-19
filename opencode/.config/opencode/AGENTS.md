@@ -76,3 +76,14 @@ Gotchas:
 
 OAuth callback URL (in case re-registration is needed):
 `http://127.0.0.1:19876/mcp/oauth/callback`
+
+## Plans
+
+Active implementation plans live in `docs/plans/`. When asked to work on a
+plan:
+
+1. Read the plan file to understand the current status and next step
+2. Check the Progress block and implementation order for what's pending
+3. Follow the phase order — each phase is independently shippable
+
+The cost-tracker plan is at `docs/plans/opencode-cost-tracker/PLAN.md`.
