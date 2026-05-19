@@ -1,9 +1,19 @@
 # OpenCode Cost Tracking Accuracy — PLAN.md
 
-Status: locked, not yet implemented
+Status: scaffolded + activated; Phase 1 (capture) is next
 Owner: mbh
 Origin session: `ses_<example-session-id-4>` (2026-05-18) — "Inaccurate
 spend vs billing; Opencode API/MCP session tracking?"
+
+## Progress
+
+- 2026-05-19 — scaffolding committed (`3a7e1c7 chore: scaffold opencode
+  cost-tracker plan and stubs`) on `MASTER-1703`, fast-forwarded into
+  `m`. All stubs land as no-ops.
+- 2026-05-19 — activation steps §12.1 (symlinks) and §12.2 (PATH) done.
+  §12.3 plugin smoke test still pending; needs a fresh opencode
+  session.
+- **Next:** Phase 1 (capture) — see §6.
 
 ---
 
@@ -546,14 +556,15 @@ integer at the per-message total.)
 
 ## 11. Implementation order
 
-1. Land this PLAN.md + the stubs (this commit).
-2. **Activate** (see §12) — symlink the tree and reload PATH. Required
-   before any phase below runs.
-3. Phase 1 (capture) — fills the DB on next opencode run.
-4. Phase 2 (recompute) — math correctness.
-5. Phase 3 (dump CLI) — query ergonomics.
-6. Phase 4 (zen-sync + reconciliation) — daily ground-truth join.
-7. Phase 5 (backfill) — reconcile prior weeks if needed.
+1. [x] Land this PLAN.md + the stubs (commit `3a7e1c7`, 2026-05-19).
+2. [x] **Activate** (see §12) — symlink the tree and reload PATH
+   (2026-05-19). §12.3 smoke test still pending. Required before
+   any phase below runs.
+3. [ ] **Next.** Phase 1 (capture) — fills the DB on next opencode run.
+4. [ ] Phase 2 (recompute) — math correctness.
+5. [ ] Phase 3 (dump CLI) — query ergonomics.
+6. [ ] Phase 4 (zen-sync + reconciliation) — daily ground-truth join.
+7. [ ] Phase 5 (backfill) — reconcile prior weeks if needed.
 
 Each phase is independently shippable; Phase 1+2 give immediate value
 even if Phase 4 never lands.
@@ -561,6 +572,10 @@ even if Phase 4 never lands.
 ---
 
 ## 12. Activation (run once after the stubs land)
+
+> Ran 2026-05-19. §12.1 + §12.2 completed; §12.3 smoke test still
+> pending (requires a fresh opencode session). This section is
+> retained as a fresh-machine install runbook.
 
 These are one-time setup steps that bridge "stubs committed" → "Phase 1
 implementation can start." They are not part of any phase because they
@@ -608,7 +623,7 @@ which opencode-cost          # → ~/.config/opencode/bin/opencode-cost
 opencode-cost --help         # prints the usage stub
 ```
 
-### 12.3 Plugin smoke test
+### 12.3 Plugin smoke test (PENDING — needs a fresh opencode session)
 
 The stub plugin loads but no-ops. Confirm opencode picks it up cleanly
 by running a single-prompt session and checking opencode's log doesn't
