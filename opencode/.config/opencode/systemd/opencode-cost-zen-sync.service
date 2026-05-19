@@ -1,0 +1,16 @@
+[Unit]
+Description=opencode-cost: pull daily per-model billed totals from Zen
+Documentation=file:%h/src/dotfiles/docs/plans/opencode-cost-tracker/PLAN.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# Absolute path so we don't depend on the user-session PATH (which
+# systemd-environment-generators populate, but not before this unit can
+# fire). The CLI itself is a Bun shebang and reads its config from
+# ~/.config/opencode-cost/config.json + cookie from
+# ~/.config/opencode/secrets/zen-session-cookie. See PLAN.md §12.4.
+ExecStart=%h/.config/opencode/bin/opencode-cost zen-sync
+StandardOutput=journal
+StandardError=journal
