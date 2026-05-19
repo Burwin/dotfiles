@@ -91,12 +91,9 @@ async function sha256(str: string): Promise<string> {
 }
 
 export async function persistSnapshot(db: any, table: RateTable): Promise<void> {
-  if (!db) return
+  if (!db?.providerRates?.upsert) return
   try {
-    db.query(`
-      INSERT OR IGNORE INTO provider_rates (rate_version, fetched_at, payload_json)
-      VALUES (?, ?, ?)
-    `).run(table.rate_version, new Date().toISOString(), JSON.stringify(table.rates))
+    await db.providerRates.upsert(table.rate_version, JSON.stringify(table.rates))
   } catch (e) {
     console.warn("[cost-tracker] failed to persist rate snapshot:", e)
   }
