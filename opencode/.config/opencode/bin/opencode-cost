@@ -1,0 +1,52 @@
+#!/usr/bin/env bun
+// opencode-cost — CLI for the opencode cost-tracker. Reports per-message
+// and per-session costs from ~/.local/state/opencode-cost.db, and (Phase 4)
+// reconciles the recompute against Zen's daily per-model billed totals.
+//
+// Design and rationale: ../../../../docs/plans/opencode-cost-tracker/PLAN.md
+//
+// Phase ownership of this file:
+//   Phase 3 (CLI dump, tier: cheap) — implement `dump messages` /
+//     `dump sessions` subcommands. Wires args → ../opencode-cost/dump.ts.
+//   Phase 4 (zen reconciliation, tier: sota) — add `zen-sync` and
+//     `dump reconciliation`. Wires args → ../opencode-cost/zen-sync.ts
+//     and ../opencode-cost/reconcile.ts respectively.
+//
+// Surface (after Phase 4):
+//
+//   opencode-cost dump messages [--since YYYY-MM-DD] [--json|--csv]
+//   opencode-cost dump sessions [--since YYYY-MM-DD] [--json|--csv]
+//   opencode-cost zen-sync [--month YYYY-MM]
+//   opencode-cost dump reconciliation [--month YYYY-MM]
+//
+// The DB at ~/.local/state/opencode-cost.db is the real interface. This
+// CLI is convenience over `sqlite3` — use whichever tool you prefer.
+//
+// THIS FILE IS A STUB. Phase 3 fills in the dispatcher + dump subcmds;
+// Phase 4 adds the rest. See PLAN.md §6 Phases 3+4.
+
+const usage = `opencode-cost — query the opencode cost-tracker DB
+
+usage:
+  opencode-cost dump messages       [--since YYYY-MM-DD] [--json|--csv]
+  opencode-cost dump sessions       [--since YYYY-MM-DD] [--json|--csv]
+  opencode-cost zen-sync            [--month YYYY-MM]
+  opencode-cost dump reconciliation [--month YYYY-MM]
+
+This CLI is a thin convenience layer over ~/.local/state/opencode-cost.db.
+Query with sqlite3 / datasette / jq for anything beyond the canned reports.
+
+See dotfiles: docs/plans/opencode-cost-tracker/PLAN.md
+`
+
+// TODO Phase 3: replace this stub with the real dispatcher. Sketch:
+//
+//   const [cmd, sub, ...rest] = process.argv.slice(2)
+//   if (cmd === "dump" && sub === "messages") return runDumpMessages(rest)
+//   if (cmd === "dump" && sub === "sessions") return runDumpSessions(rest)
+//   if (cmd === "zen-sync") return runZenSync(rest)            // Phase 4
+//   if (cmd === "dump" && sub === "reconciliation")            // Phase 4
+//     return runReconciliation(rest)
+//   console.error(usage); process.exit(cmd ? 1 : 0)
+console.error(usage)
+process.exit(process.argv.length > 2 ? 1 : 0)
