@@ -12,10 +12,25 @@ SRC_DIR="${SCRIPT_DIR}/.config/opencode"
 DST_DIR="${HOME}/.config/opencode"
 
 # Files to symlink (relative to SRC_DIR == relative to DST_DIR).
+#
+# Top-level configs are managed here; the `notify` plugin tree was
+# symlinked manually before this script existed and is left alone. The
+# `cost-tracker` plugin (cost-tracker.ts entrypoint + cost-tracker/
+# helpers subdirectory) is managed here so a fresh-machine install picks
+# it up automatically. `bin/` and `opencode-cost/` are whole-dir links
+# (their contents change without needing install.sh edits each time);
+# the PATH entry for ~/.config/opencode/bin lives in
+# ../../environment.d/.config/environment.d/path.conf so the CLI is
+# visible to non-interactive shells too. See
+# ../../docs/plans/opencode-cost-tracker/PLAN.md.
 FILES=(
     opencode.json
     tui.json
     AGENTS.md
+    plugins/cost-tracker.ts
+    plugins/cost-tracker
+    bin
+    opencode-cost
 )
 
 mkdir -p "${DST_DIR}"
