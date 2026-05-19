@@ -9,8 +9,11 @@
 //     and `session_rollup`. Open `bun:sqlite` defensively (dynamic
 //     import inside try/catch; best-effort mkdir of the parent dir;
 //     return null on any failure so the plugin no-ops).
-//   Phase 4 (zen reconciliation, tier: sota) — adds `zen_daily_billed`
-//     INSERTs from the CLI side (not this file).
+//   Phase 4 (zen reconciliation, tier: sota) — `zen_daily_billed` table
+//     is declared in BOOTSTRAP_SQL here (single source of schema truth);
+//     UPSERTs come from the CLI side (../../opencode-cost/zen-sync.ts).
+//     The plugin runs on every opencode session start so the table
+//     materializes on first run, before the CLI ever touches the DB.
 //
 // Lives in this `cost-tracker/` subdirectory (not next to cost-tracker.ts)
 // for the same reason notify/ exists: opencode's plugin loader uses the
@@ -99,6 +102,16 @@ CREATE TABLE IF NOT EXISTS provider_rates (
   rate_version  TEXT PRIMARY KEY,
   fetched_at    TEXT NOT NULL,
   payload_json  TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS zen_daily_billed (
+  date             TEXT NOT NULL,
+  model            TEXT NOT NULL,
+  key_id           TEXT NOT NULL,
+  plan             TEXT,
+  total_cost_fxp8  INTEGER NOT NULL,
+  fetched_at       TEXT NOT NULL,
+  PRIMARY KEY (date, model, key_id)
 );
 `
 
