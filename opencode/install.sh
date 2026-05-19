@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Symlink the dotfiles' opencode config into ~/.config/opencode/.
+# Symlink the dotfiles' opencode config into ~/.config/opencode/, and
+# wire the cost-tracker's systemd user units into ~/.config/systemd/user/.
 #
 # Idempotent: safe to re-run. Existing correct symlinks are left alone;
 # existing real files are backed up to <name>.bak.<timestamp> before being
@@ -10,6 +11,8 @@ set -euo pipefail
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 SRC_DIR="${SCRIPT_DIR}/.config/opencode"
 DST_DIR="${HOME}/.config/opencode"
+SYSTEMD_SRC_DIR="${SRC_DIR}/systemd"
+SYSTEMD_DST_DIR="${HOME}/.config/systemd/user"
 
 # Files to symlink (relative to SRC_DIR == relative to DST_DIR).
 #
@@ -75,3 +78,70 @@ for f in "${FILES[@]}"; do
         printf '  %-15s -> %s\n' "${f}" "$(readlink "${DST_DIR}/${f}")"
     fi
 done
+
+# ---------------------------------------------------------------------------
+# Systemd user units (cost-tracker zen-sync timer).
+#
+# Symlink every *.service / *.timer from .config/opencode/systemd/ into
+# ~/.config/systemd/user/, daemon-reload, and enable each timer. Matches
+# the install pattern in bamboo/tools/src/toggl/install.sh.
+#
+# Heads up: opencode-cost-zen-sync needs a Zen session cookie at
+# ~/.config/opencode/secrets/zen-session-cookie (chmod 600) and a config
+# at ~/.config/opencode-cost/config.json. See
+# docs/plans/opencode-cost-tracker/PLAN.md §12.4. If those are missing
+# the timer will still install and enable, but each run will exit
+# non-zero (visible via `journalctl --user -u opencode-cost-zen-sync`).
+# ---------------------------------------------------------------------------
+
+if [[ -d "${SYSTEMD_SRC_DIR}" ]] && compgen -G "${SYSTEMD_SRC_DIR}/*.service" >/dev/null 2>&1; then
+    echo
+    echo "Linking systemd units into ${SYSTEMD_DST_DIR}"
+    mkdir -p "${SYSTEMD_DST_DIR}"
+
+    link_systemd_unit() {
+        local src="$1"
+        local name
+        name=$(basename "${src}")
+        local dst="${SYSTEMD_DST_DIR}/${name}"
+
+        if [[ -L "${dst}" ]]; then
+            local current
+            current=$(readlink "${dst}")
+            if [[ "${current}" == "${src}" ]]; then
+                echo "  ok    systemd/${name} (already linked)"
+                return 0
+            fi
+            echo "  fix   systemd/${name}: replacing wrong symlink (-> ${current})"
+            rm "${dst}"
+        elif [[ -e "${dst}" ]]; then
+            local backup="${dst}.bak.$(date +%s)"
+            echo "  back  systemd/${name}: existing file -> ${backup}"
+            mv "${dst}" "${backup}"
+        fi
+
+        ln -s "${src}" "${dst}"
+        echo "  link  systemd/${name}"
+    }
+
+    shopt -s nullglob
+    for unit in "${SYSTEMD_SRC_DIR}"/*.service "${SYSTEMD_SRC_DIR}"/*.timer; do
+        link_systemd_unit "${unit}"
+    done
+    shopt -u nullglob
+
+    echo "  reload  systemctl --user daemon-reload"
+    systemctl --user daemon-reload
+
+    shopt -s nullglob
+    for timer in "${SYSTEMD_SRC_DIR}"/*.timer; do
+        unit_name=$(basename "${timer}")
+        echo "  enable  ${unit_name}"
+        systemctl --user enable --now "${unit_name}"
+    done
+    shopt -u nullglob
+
+    echo
+    echo "Active opencode-cost timers:"
+    systemctl --user list-timers --all | awk 'NR==1 || /opencode-cost/'
+fi

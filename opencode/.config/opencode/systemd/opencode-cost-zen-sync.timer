@@ -1,0 +1,18 @@
+[Unit]
+Description=opencode-cost: Zen daily-billed sync (hourly)
+Documentation=file:%h/src/dotfiles/docs/plans/opencode-cost-tracker/PLAN.md
+
+[Timer]
+# Hourly is plenty: Zen rolls usage up daily, and an hourly tick keeps
+# the "today's spend" view fresh enough for monitoring. The CLI defaults
+# to the current month (~30 daily × 4 model rows per fetch), UPSERTed
+# into zen_daily_billed.
+OnCalendar=hourly
+# Skip missed windows. If the laptop was asleep, the next hourly tick
+# picks up everything that changed anyway (the request always returns
+# the full current month).
+Persistent=false
+Unit=opencode-cost-zen-sync.service
+
+[Install]
+WantedBy=timers.target
