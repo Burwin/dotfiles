@@ -37,11 +37,67 @@ export type RateTable = {
 
 // Phase 2 fills in:
 //
-//   export async function fetchRates(client: PluginClient): Promise<RateTable>
-//     - Call `client.config.providers()` (or HTTP fallback via `client.fetch`)
-//     - Normalize: sort providers and models, project to the Rate shape.
-//     - sha256 the normalized JSON for `rate_version`.
-//
-//   export async function persistSnapshot(db, table): Promise<void>
-//     - INSERT OR IGNORE INTO provider_rates(rate_version, fetched_at, payload_json)
-//     - No-op when rate_version already exists.
+export async function fetchRates(client: any): Promise<RateTable> {
+  let providersJson: any
+
+  try {
+    if (typeof (client as any).config?.providers === "function") {
+      providersJson = await (client as any).config.providers()
+    } else {
+      const port = process.env.OPENCODE_PORT ?? "3310"
+      const res = await (client as any).fetch?.(`http://127.0.0.1:${port}/config/providers`)
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      providersJson = await res.json()
+    }
+  } catch (e) {
+    console.warn("[cost-tracker] failed to fetch rates:", e)
+    return { rate_version: "fetch-failed", rates: {} }
+  }
+
+  const normalized: Record<string, Rate> = {}
+
+  const providers = providersJson.providers ?? providersJson ?? []
+  for (const provider of providers) {
+    const providerId = provider.id ?? provider.name ?? provider.provider
+    const models = provider.models ?? []
+    for (const model of models) {
+      const modelId = model.id ?? model.name ?? model.model
+      if (!providerId || !modelId) continue
+
+      normalized[`${providerId}/${modelId}`] = {
+        input: model.prices?.input ?? model.price?.input ?? 0,
+        output: model.prices?.output ?? model.price?.output ?? 0,
+        cache_read: model.prices?.cache_read ?? model.price?.cache_read ?? 0,
+        cache_write: model.prices?.cache_write ?? model.price?.cache_write,
+        tier_breakpoint: model.tier_breakpoint ?? model.experimentalOver200K ? 200000 : undefined,
+        input_over_tier: model.prices?.input_over_tier,
+        output_over_tier: model.prices?.output_over_tier,
+      }
+    }
+  }
+
+  const normalizedJson = JSON.stringify(normalized, Object.keys(normalized).sort())
+  const rateVersion = await sha256(normalizedJson)
+
+  return { rate_version: rateVersion, rates: normalized }
+}
+
+async function sha256(str: string): Promise<string> {
+  const buf = new TextEncoder().encode(str)
+  const hash = await crypto.subtle.digest("SHA-256", buf)
+  return Array.from(new Uint8Array(hash))
+    .map(b => b.toString(16).padStart(2, "0"))
+    .join("")
+}
+
+export async function persistSnapshot(db: any, table: RateTable): Promise<void> {
+  if (!db) return
+  try {
+    db.query(`
+      INSERT OR IGNORE INTO provider_rates (rate_version, fetched_at, payload_json)
+      VALUES (?, ?, ?)
+    `).run(table.rate_version, new Date().toISOString(), JSON.stringify(table.rates))
+  } catch (e) {
+    console.warn("[cost-tracker] failed to persist rate snapshot:", e)
+  }
+}

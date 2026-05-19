@@ -6,11 +6,12 @@
 // Design and rationale: ../../../../docs/plans/opencode-cost-tracker/PLAN.md
 //
 // Phase ownership of this file:
-//   Phase 3 (CLI dump, tier: cheap) — implement `dump messages` /
-//     `dump sessions` subcommands. Wires args → ../opencode-cost/dump.ts.
-//   Phase 4 (zen reconciliation, tier: sota) — add `zen-sync` and
-//     `dump reconciliation`. Wires args → ../opencode-cost/zen-sync.ts
-//     and ../opencode-cost/reconcile.ts respectively.
+//   Phase 3 (CLI dump, tier: cheap) — `dump messages` / `dump sessions`
+//     subcommands. Args forwarded to ../opencode-cost/dump.ts.
+//   Phase 4 (zen reconciliation, tier: sota) — adds `zen-sync` and
+//     `dump reconciliation`. Currently print a "not yet implemented"
+//     diagnostic so the help surface stays honest while documenting
+//     the planned shape.
 //
 // Surface (after Phase 4):
 //
@@ -21,32 +22,57 @@
 //
 // The DB at ~/.local/state/opencode-cost.db is the real interface. This
 // CLI is convenience over `sqlite3` — use whichever tool you prefer.
-//
-// THIS FILE IS A STUB. Phase 3 fills in the dispatcher + dump subcmds;
-// Phase 4 adds the rest. See PLAN.md §6 Phases 3+4.
+
+import { runDumpMessages, runDumpSessions } from "../opencode-cost/dump.ts"
 
 const usage = `opencode-cost — query the opencode cost-tracker DB
 
 usage:
   opencode-cost dump messages       [--since YYYY-MM-DD] [--json|--csv]
   opencode-cost dump sessions       [--since YYYY-MM-DD] [--json|--csv]
-  opencode-cost zen-sync            [--month YYYY-MM]
-  opencode-cost dump reconciliation [--month YYYY-MM]
+  opencode-cost zen-sync            [--month YYYY-MM]        (Phase 4 — not yet implemented)
+  opencode-cost dump reconciliation [--month YYYY-MM]        (Phase 4 — not yet implemented)
+
+Defaults: --json. Numeric fxp8 columns are NOT divided by 1e8 — let the
+caller decide precision (jq: '.[] | .cost_recomputed_fxp8 / 1e8').
 
 This CLI is a thin convenience layer over ~/.local/state/opencode-cost.db.
-Query with sqlite3 / datasette / jq for anything beyond the canned reports.
+Query with sqlite3 / datasette / jq for anything beyond the canned dumps.
 
 See dotfiles: docs/plans/opencode-cost-tracker/PLAN.md
 `
 
-// TODO Phase 3: replace this stub with the real dispatcher. Sketch:
-//
-//   const [cmd, sub, ...rest] = process.argv.slice(2)
-//   if (cmd === "dump" && sub === "messages") return runDumpMessages(rest)
-//   if (cmd === "dump" && sub === "sessions") return runDumpSessions(rest)
-//   if (cmd === "zen-sync") return runZenSync(rest)            // Phase 4
-//   if (cmd === "dump" && sub === "reconciliation")            // Phase 4
-//     return runReconciliation(rest)
-//   console.error(usage); process.exit(cmd ? 1 : 0)
-console.error(usage)
-process.exit(process.argv.length > 2 ? 1 : 0)
+const [cmd, sub, ...rest] = process.argv.slice(2)
+
+const notYetImplemented = (which: string): number => {
+  console.error(`opencode-cost: '${which}' is Phase 4 — not yet implemented`)
+  return 2
+}
+
+const dispatch = (): number => {
+  if (cmd === undefined || cmd === "-h" || cmd === "--help" || cmd === "help") {
+    process.stdout.write(usage)
+    return 0
+  }
+
+  if (cmd === "dump") {
+    if (sub === "messages") return runDumpMessages(rest)
+    if (sub === "sessions") return runDumpSessions(rest)
+    if (sub === "reconciliation") return notYetImplemented("dump reconciliation")
+    console.error(
+      sub === undefined
+        ? "opencode-cost: 'dump' requires a subcommand (messages|sessions)"
+        : `opencode-cost: unknown 'dump' subcommand: ${sub}`,
+    )
+    process.stderr.write(usage)
+    return 2
+  }
+
+  if (cmd === "zen-sync") return notYetImplemented("zen-sync")
+
+  console.error(`opencode-cost: unknown command: ${cmd}`)
+  process.stderr.write(usage)
+  return 2
+}
+
+process.exit(dispatch())

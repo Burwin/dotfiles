@@ -1,6 +1,7 @@
 # OpenCode Cost Tracking Accuracy — PLAN.md
 
-Status: scaffolded + activated; Phase 1 (capture) is next
+Status: scaffolded + activated; Phases 1-3 complete; Phase 4 (zen-sync +
+reconciliation) is next
 Owner: mbh
 Origin session: `ses_<example-session-id-4>` (2026-05-18) — "Inaccurate
 spend vs billing; Opencode API/MCP session tracking?"
@@ -13,7 +14,56 @@ spend vs billing; Opencode API/MCP session tracking?"
 - 2026-05-19 — activation steps §12.1 (symlinks) and §12.2 (PATH) done.
   §12.3 plugin smoke test still pending; needs a fresh opencode
   session.
-- **Next:** Phase 1 (capture) — see §6.
+- 2026-05-19 — Phase 1 (capture) implemented. db.ts schema + prepared stmts;
+  cost-tracker.ts wires message.updated + session.idle to DB. In this phase,
+  cost_recomputed_fxp8 copies cost_opencode_fxp8 (no recompute math yet).
+  DB will create on first opencode run.
+- 2026-05-19 — Phase 2 (recompute) implemented. rate-table.ts fetches
+  /config/providers, caches snapshot to provider_rates. recompute.ts implements
+  tier-aware math (tier breakpoints, cache multipliers). Plugin now computes
+  cost_recomputed_fxp8 via recompute() instead of copying opencode's cost.
+- 2026-05-19 — Phase 3 (dump CLI) implemented. `opencode-cost dump messages`
+  and `dump sessions` are wired through `bin/opencode-cost` →
+  `opencode-cost/dump.ts`. Read-only over `~/.local/state/opencode-cost.db`
+  (override via `OPENCODE_COST_DB`); `--since YYYY-MM-DD` filter; defaults
+  to `--json`, accepts `--csv`; CSV escaping is RFC-4180. Unknown flags
+  and `--json --csv` together exit 2. Phase 4 surfaces (`zen-sync`, `dump
+  reconciliation`) are documented in the help and stub a "not yet
+  implemented" message. Smoke-tested via `OPENCODE_COST_DB=… bun
+  ~/.config/opencode/bin/opencode-cost dump …` against a synthetic DB.
+- **Next:** Phase 4 (zen-sync + reconciliation) — pull Zen daily totals,
+  write `zen_daily_billed`, join in `dump reconciliation`. Pre-reqs in
+  §12.4 (capture cookie + x-server-id) must happen first.
+
+### Known bugs surfaced while landing Phase 3 (not blocking)
+
+- `plugins/cost-tracker/db.ts::computeSessionRollup` calls `db.query(...)`
+  on the returned `DbHandle`, which only exposes `messages` and
+  `sessionRollup` — `query` is undefined. The error is swallowed by the
+  outer try/catch in `cost-tracker.ts`, so `session_rollup` is currently
+  never populated. Same bug pattern in `rate-table.ts::persistSnapshot`
+  (so `provider_rates` is also never written). Fix: either expose the
+  underlying `bun:sqlite` Database on the handle, or move both
+  helpers' SQL into methods on the handle (e.g.
+  `sessionRollup.computeAndUpsert(sessionId, ts)` and
+  `providerRates.upsert(rateVersion, payload)`). `dump messages` works
+  regardless; `dump sessions` will return rows once this is fixed.
+
+### Fixed during Phase 3 work (2026-05-19)
+
+- `plugins/cost-tracker.ts` previously `await`-ed `fetchRates(client)`
+  during plugin init. The `/config/providers` request is served by the
+  same opencode process whose main thread was loading us, so awaiting
+  it deadlocked startup for 15+ seconds. The TUI's `setRawMode` then
+  failed with `errno 5 (EIO)` and opencode exited before reaching the
+  prompt — observed as `tdl c` silently failing to load opencode in
+  the right pane. Fix: convert to fire-and-forget (`.then().catch()`),
+  matching the toggl-time.ts "init does no network I/O" pattern.
+  Messages arriving before rates land record
+  `cost_recomputed_fxp8 = 0` (recompute already handles missing rate);
+  `cost_opencode_fxp8` is unaffected because it comes from the message
+  payload. Smoke-verified: init returns in ~11 ms even with a client
+  whose fetch hangs forever.
 
 ---
 
@@ -560,10 +610,10 @@ integer at the per-message total.)
 2. [x] **Activate** (see §12) — symlink the tree and reload PATH
    (2026-05-19). §12.3 smoke test still pending. Required before
    any phase below runs.
-3. [ ] **Next.** Phase 1 (capture) — fills the DB on next opencode run.
-4. [ ] Phase 2 (recompute) — math correctness.
-5. [ ] Phase 3 (dump CLI) — query ergonomics.
-6. [ ] Phase 4 (zen-sync + reconciliation) — daily ground-truth join.
+3. [x] Phase 1 (capture) — fills the DB on next opencode run (done 2026-05-19).
+4. [x] Phase 2 (recompute) — math correctness (done 2026-05-19).
+5. [x] Phase 3 (dump CLI) — query ergonomics (done 2026-05-19).
+6. [ ] **Next.** Phase 4 (zen-sync + reconciliation) — daily ground-truth join.
 7. [ ] Phase 5 (backfill) — reconcile prior weeks if needed.
 
 Each phase is independently shippable; Phase 1+2 give immediate value

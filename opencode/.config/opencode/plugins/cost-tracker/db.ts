@@ -60,17 +60,162 @@ export type SessionRollupRow = {
   message_count: number
 }
 
-// BOOTSTRAP_SQL lands here in Phase 1, matching PLAN.md §5 exactly.
-// Idempotent (`CREATE TABLE IF NOT EXISTS`, `CREATE INDEX IF NOT EXISTS`),
-// includes `PRAGMA journal_mode=WAL`.
-export const BOOTSTRAP_SQL = "" // TODO Phase 1: fill in per PLAN.md §5.
+// BOOTSTRAP_SQL per PLAN.md §5 — idempotent, includes WAL mode.
+export const BOOTSTRAP_SQL = `
+PRAGMA journal_mode=WAL;
 
-// Phase 1 fills in: openDb(), upsertMessage(row), upsertRollup(sessionID,
-// nowIso). All best-effort: any thrown error from SQL must be caught at
-// the call site and swallowed so the plugin never crashes opencode.
-export const openDb = async (): Promise<null> => {
-  // TODO Phase 1: dynamic-import bun:sqlite; mkdir parent dir; open DB
-  // with { create: true }; run BOOTSTRAP_SQL; return prepared-statement
-  // bundle. Cache the open Promise so re-entry returns the same handle.
-  return null
+CREATE TABLE IF NOT EXISTS messages (
+  message_id            TEXT PRIMARY KEY,
+  session_id            TEXT NOT NULL,
+  worktree_path         TEXT NOT NULL,
+  provider_id           TEXT NOT NULL,
+  model_id              TEXT NOT NULL,
+  agent                 TEXT,
+  ts_created            TEXT NOT NULL,
+  ts_completed          TEXT,
+  tokens_input          INTEGER NOT NULL,
+  tokens_output         INTEGER NOT NULL,
+  tokens_reasoning      INTEGER NOT NULL,
+  tokens_cache_read     INTEGER NOT NULL,
+  tokens_cache_write    INTEGER NOT NULL,
+  cost_opencode_fxp8    INTEGER NOT NULL,
+  cost_recomputed_fxp8  INTEGER NOT NULL,
+  rate_version          TEXT NOT NULL,
+  finish                TEXT,
+  raw_json              TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, ts_created);
+CREATE INDEX IF NOT EXISTS idx_messages_day ON messages(substr(ts_created, 1, 10), model_id);
+
+CREATE TABLE IF NOT EXISTS session_rollup (
+  session_id                  TEXT PRIMARY KEY,
+  ts_last_idle                TEXT NOT NULL,
+  total_cost_opencode_fxp8    INTEGER NOT NULL,
+  total_cost_recomputed_fxp8  INTEGER NOT NULL,
+  message_count               INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS provider_rates (
+  rate_version  TEXT PRIMARY KEY,
+  fetched_at    TEXT NOT NULL,
+  payload_json  TEXT NOT NULL
+);
+`
+
+type DbHandle = {
+  messages: {
+    upsert: (row: MessageRow) => Promise<void>
+  }
+  sessionRollup: {
+    upsert: (row: SessionRollupRow) => Promise<void>
+  }
+}
+
+let openDbPromise: Promise<DbHandle | null> | null = null
+
+export const openDb = async (): Promise<DbHandle | null> => {
+  if (openDbPromise) return openDbPromise
+
+  openDbPromise = (async () => {
+    let sqlite: any
+    try {
+      sqlite = await import("bun:sqlite")
+    } catch {
+      console.warn("[cost-tracker] bun:sqlite not available, disabling")
+      return null
+    }
+
+    const dbDir = ".local/state"
+    const dbPath = process.env.OPENCODE_COST_DB ?? `${process.env.HOME ?? "/root"}/${dbDir}/opencode-cost.db`
+
+    try {
+      await import("fs").then(fs => {
+        if (!fs.existsSync(dbPath)) {
+          fs.mkdirSync(dbPath.replace(/\/[^/]+$/, ""), { recursive: true })
+        }
+      })
+    } catch {
+      // Best-effort mkdir — may fail on read-only or weird configs
+    }
+
+    let db: any
+    try {
+      db = new sqlite.Database(dbPath, { create: true })
+    } catch {
+      console.warn("[cost-tracker] failed to open DB, disabling")
+      return null
+    }
+
+    try {
+      db.exec(BOOTSTRAP_SQL)
+    } catch (e) {
+      console.warn("[cost-tracker] schema bootstrap failed:", e)
+      return null
+    }
+
+    return {
+      messages: {
+        upsert: async (row: MessageRow) => {
+          db.query(`
+            INSERT OR REPLACE INTO messages (
+              message_id, session_id, worktree_path, provider_id, model_id,
+              agent, ts_created, ts_completed, tokens_input, tokens_output,
+              tokens_reasoning, tokens_cache_read, tokens_cache_write,
+              cost_opencode_fxp8, cost_recomputed_fxp8, rate_version, finish, raw_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `).run(
+            row.message_id, row.session_id, row.worktree_path, row.provider_id,
+            row.model_id, row.agent, row.ts_created, row.ts_completed,
+            row.tokens_input, row.tokens_output, row.tokens_reasoning,
+            row.tokens_cache_read, row.tokens_cache_write, row.cost_opencode_fxp8,
+            row.cost_recomputed_fxp8, row.rate_version, row.finish, row.raw_json
+          )
+        },
+      },
+      sessionRollup: {
+        upsert: async (row: SessionRollupRow) => {
+          db.query(`
+            INSERT OR REPLACE INTO session_rollup (
+              session_id, ts_last_idle, total_cost_opencode_fxp8,
+              total_cost_recomputed_fxp8, message_count
+            ) VALUES (?, ?, ?, ?, ?)
+          `).run(
+            row.session_id, row.ts_last_idle, row.total_cost_opencode_fxp8,
+            row.total_cost_recomputed_fxp8, row.message_count
+          )
+        },
+      },
+    }
+  })()
+
+  return openDbPromise
+}
+
+export const computeSessionRollup = async (
+  db: DbHandle,
+  sessionId: string,
+  tsLastIdle: string
+): Promise<SessionRollupRow | null> => {
+  const row = db.query(`
+    SELECT
+      SUM(tokens_input) as ti,
+      SUM(tokens_output) as to,
+      SUM(tokens_reasoning) as tr,
+      SUM(tokens_cache_read) as tcr,
+      SUM(tokens_cache_write) as tcw,
+      SUM(cost_opencode_fxp8) as cost_opencode,
+      SUM(cost_recomputed_fxp8) as cost_recomputed,
+      COUNT(*) as cnt
+    FROM messages WHERE session_id = ?
+  `).get(sessionId) as any
+
+  if (!row) return null
+
+  return {
+    session_id: sessionId,
+    ts_last_idle: tsLastIdle,
+    total_cost_opencode_fxp8: row.cost_opencode ?? 0,
+    total_cost_recomputed_fxp8: row.cost_recomputed ?? 0,
+    message_count: row.cnt ?? 0,
+  }
 }

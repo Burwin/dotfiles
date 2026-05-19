@@ -48,12 +48,33 @@ export type Tokens = {
   cache_write: number
 }
 
-// Phase 2 fills in. Signature locked here so Phase 1's stub call sites
-// can compile against the final API.
+let warnedMissingRate = false
+
 export function recompute(rate: Rate | undefined, tokens: Tokens): number {
-  // TODO Phase 2: see algorithm above. Stub returns 0 so Phase 1's
-  // `cost_recomputed_fxp8 = cost_opencode_fxp8` copy is safe regardless.
-  void rate
-  void tokens
-  return 0
+  if (!rate) {
+    if (!warnedMissingRate) {
+      console.warn("[cost-tracker] no rate found for model, using 0 cost")
+      warnedMissingRate = true
+    }
+    return 0
+  }
+
+  const billableInput = tokens.input + tokens.cache_read
+  const breakpoint = rate.tier_breakpoint ?? 0
+  const over = Math.max(0, billableInput - breakpoint)
+  const under = billableInput - over
+
+  const inputOverRate = rate.input_over_tier ?? rate.input
+  const outputOverRate = rate.output_over_tier ?? rate.output
+
+  let cost = 0
+
+  cost += under * rate.input
+  cost += over * inputOverRate
+  cost += tokens.output * rate.output
+  cost += tokens.reasoning * rate.output
+  cost += tokens.cache_read * rate.cache_read
+  cost += tokens.cache_write * (rate.cache_write ?? 0)
+
+  return Math.round(cost * 1e8)
 }
