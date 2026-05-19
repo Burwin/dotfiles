@@ -8,33 +8,40 @@
 // Phase ownership of this file:
 //   Phase 3 (CLI dump, tier: cheap) — `dump messages` / `dump sessions`
 //     subcommands. Args forwarded to ../opencode-cost/dump.ts.
-//   Phase 4 (zen reconciliation, tier: sota) — adds `zen-sync` and
-//     `dump reconciliation`. Currently print a "not yet implemented"
-//     diagnostic so the help surface stays honest while documenting
-//     the planned shape.
+//   Phase 4 (zen reconciliation, tier: sota) — `zen-sync` and
+//     `dump reconciliation` subcommands. Args forwarded to
+//     ../opencode-cost/zen-sync.ts and ../opencode-cost/reconcile.ts.
 //
-// Surface (after Phase 4):
+// Surface:
 //
-//   opencode-cost dump messages [--since YYYY-MM-DD] [--json|--csv]
-//   opencode-cost dump sessions [--since YYYY-MM-DD] [--json|--csv]
-//   opencode-cost zen-sync [--month YYYY-MM]
-//   opencode-cost dump reconciliation [--month YYYY-MM]
+//   opencode-cost dump messages       [--since YYYY-MM-DD] [--json|--csv]
+//   opencode-cost dump sessions       [--since YYYY-MM-DD] [--json|--csv]
+//   opencode-cost zen-sync            [--month YYYY-MM] [--dry-run]
+//   opencode-cost dump reconciliation [--month YYYY-MM] [--json|--csv|--table]
 //
 // The DB at ~/.local/state/opencode-cost.db is the real interface. This
 // CLI is convenience over `sqlite3` — use whichever tool you prefer.
 
 import { runDumpMessages, runDumpSessions } from "../opencode-cost/dump.ts"
+import { runZenSync } from "../opencode-cost/zen-sync.ts"
+import { runReconciliation } from "../opencode-cost/reconcile.ts"
 
 const usage = `opencode-cost — query the opencode cost-tracker DB
 
 usage:
   opencode-cost dump messages       [--since YYYY-MM-DD] [--json|--csv]
   opencode-cost dump sessions       [--since YYYY-MM-DD] [--json|--csv]
-  opencode-cost zen-sync            [--month YYYY-MM]        (Phase 4 — not yet implemented)
-  opencode-cost dump reconciliation [--month YYYY-MM]        (Phase 4 — not yet implemented)
+  opencode-cost zen-sync            [--month YYYY-MM] [--dry-run]
+  opencode-cost dump reconciliation [--month YYYY-MM] [--json|--csv|--table]
 
-Defaults: --json. Numeric fxp8 columns are NOT divided by 1e8 — let the
+dump defaults: --json. Numeric fxp8 columns are NOT divided by 1e8 — let the
 caller decide precision (jq: '.[] | .cost_recomputed_fxp8 / 1e8').
+
+reconciliation defaults: --table (aligned columns, dollars at display).
+
+zen-sync prerequisites (per PLAN.md §12.4):
+  ~/.config/opencode/secrets/zen-session-cookie  (chmod 600; contents: 'auth=Fe26.2*…')
+  ~/.config/opencode-cost/config.json            (workspace_id, key_id, tz_offset, server_id)
 
 This CLI is a thin convenience layer over ~/.local/state/opencode-cost.db.
 Query with sqlite3 / datasette / jq for anything beyond the canned dumps.
@@ -44,12 +51,7 @@ See dotfiles: docs/plans/opencode-cost-tracker/PLAN.md
 
 const [cmd, sub, ...rest] = process.argv.slice(2)
 
-const notYetImplemented = (which: string): number => {
-  console.error(`opencode-cost: '${which}' is Phase 4 — not yet implemented`)
-  return 2
-}
-
-const dispatch = (): number => {
+const dispatch = async (): Promise<number> => {
   if (cmd === undefined || cmd === "-h" || cmd === "--help" || cmd === "help") {
     process.stdout.write(usage)
     return 0
@@ -58,21 +60,25 @@ const dispatch = (): number => {
   if (cmd === "dump") {
     if (sub === "messages") return runDumpMessages(rest)
     if (sub === "sessions") return runDumpSessions(rest)
-    if (sub === "reconciliation") return notYetImplemented("dump reconciliation")
+    if (sub === "reconciliation") return runReconciliation(rest)
     console.error(
       sub === undefined
-        ? "opencode-cost: 'dump' requires a subcommand (messages|sessions)"
+        ? "opencode-cost: 'dump' requires a subcommand (messages|sessions|reconciliation)"
         : `opencode-cost: unknown 'dump' subcommand: ${sub}`,
     )
     process.stderr.write(usage)
     return 2
   }
 
-  if (cmd === "zen-sync") return notYetImplemented("zen-sync")
+  if (cmd === "zen-sync") {
+    // `sub` is the first positional after `zen-sync`; pass through.
+    const argv = sub === undefined ? [] : [sub, ...rest]
+    return runZenSync(argv)
+  }
 
   console.error(`opencode-cost: unknown command: ${cmd}`)
   process.stderr.write(usage)
   return 2
 }
 
-process.exit(dispatch())
+process.exit(await dispatch())

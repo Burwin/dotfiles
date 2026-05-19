@@ -1,7 +1,8 @@
 # OpenCode Cost Tracking Accuracy — PLAN.md
 
-Status: scaffolded + activated; Phases 1-3 complete; Phase 4 (zen-sync +
-reconciliation) is next
+Status: scaffolded + activated; Phases 1-4 complete (code-side; live
+zen-sync smoke test still pending — needs §12.4 prereqs); Phase 5
+(historical backfill) is optional next
 Owner: mbh
 Origin session: `ses_1c328f8deffeBi9wO55yIqchYh` (2026-05-18) — "Inaccurate
 spend vs billing; Opencode API/MCP session tracking?"
@@ -31,9 +32,38 @@ spend vs billing; Opencode API/MCP session tracking?"
   reconciliation`) are documented in the help and stub a "not yet
   implemented" message. Smoke-tested via `OPENCODE_COST_DB=… bun
   ~/.config/opencode/bin/opencode-cost dump …` against a synthetic DB.
-- **Next:** Phase 4 (zen-sync + reconciliation) — pull Zen daily totals,
-  write `zen_daily_billed`, join in `dump reconciliation`. Pre-reqs in
-  §12.4 (capture cookie + x-server-id) must happen first.
+- 2026-05-19 — Phase 4 (zen-sync + reconciliation) implemented code-side.
+  `zen_daily_billed` added to `BOOTSTRAP_SQL` and migrated into the
+  existing dev DB. `opencode-cost/zen-sync.ts` implements the request
+  builder (TanStack-Start `t:9/i:0/l:4` envelope), `;0xHEX;` chunk-prefix
+  stripper, a hand-rolled static parser for the `$R[n]` slot graph
+  (recursive-descent over a JS-literal subset; absorbs IIFE/arrow/`=`/`||`
+  wrapper boilerplate; no `eval`/`vm`/`new Function()`), shape
+  normalization, and an UPSERT path. Friendly diagnostics on
+  missing/invalid config, missing cookie, and HTTP 401/403/404/500
+  routes back to §8 runbooks. Parse failures dump the raw body to
+  `~/.local/state/opencode-cost/last-error-<ts>.txt` (0600) for
+  post-mortem. `opencode-cost/reconcile.ts` implements the daily-join
+  via a UNION of two LEFT JOINs (SQLite has no FULL OUTER JOIN);
+  three output formats (default `--table` aligned dollars, `--json`,
+  `--csv`); `--month YYYY-MM` filter; sub-cent precision for rows
+  under $0.01. `bin/opencode-cost` dispatches both new subcommands.
+- 2026-05-19 — Phase 4 verification (live smoke test still pending §12.4
+  prereqs). The seroval parser passes 30 synthetic-payload tests:
+  chunk stripping (single/multi/no-prefix); simple objects; nested
+  $R[N] back-refs (shared instances resolved correctly); full IIFE
+  wrapper from PLAN.md §6 Phase 4 example; chunked response
+  reassembly; empty usage/keys; numeric edges (zero, negative, float,
+  exponent); string escapes (`\n`, `\t`, `\"`); missing root and
+  shape-drift errors throw loudly. End-to-end reconciliation test
+  on a synthetic DB with deliberate drift produced correct delta
+  columns across `--table` / `--json` / `--csv` / `--month` /
+  Zen-only days; Phase 3 dump regression checks still pass.
+- **Next:** §12.4 prereqs (capture cookie + x-server-id + write
+  `~/.config/opencode-cost/config.json`) then run
+  `opencode-cost zen-sync --dry-run --month 2026-05` for a live
+  end-to-end test. After that, optionally Phase 5 (historical
+  backfill from opencode's own `opencode.db`).
 
 ### Fixed after Phase 3 landed (2026-05-19)
 
@@ -641,7 +671,8 @@ integer at the per-message total.)
 3. [x] Phase 1 (capture) — fills the DB on next opencode run (done 2026-05-19).
 4. [x] Phase 2 (recompute) — math correctness (done 2026-05-19).
 5. [x] Phase 3 (dump CLI) — query ergonomics (done 2026-05-19).
-6. [ ] **Next.** Phase 4 (zen-sync + reconciliation) — daily ground-truth join.
+6. [x] Phase 4 (zen-sync + reconciliation) — code-side complete
+   (done 2026-05-19). **Live smoke test still pending §12.4 prereqs.**
 7. [ ] Phase 5 (backfill) — reconcile prior weeks if needed.
 
 Each phase is independently shippable; Phase 1+2 give immediate value
