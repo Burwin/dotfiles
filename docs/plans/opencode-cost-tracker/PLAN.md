@@ -35,30 +35,32 @@ spend vs billing; Opencode API/MCP session tracking?"
   write `zen_daily_billed`, join in `dump reconciliation`. Pre-reqs in
   §12.4 (capture cookie + x-server-id) must happen first.
 
-### Known bugs surfaced while landing Phase 3 (not blocking)
+### Fixed after Phase 3 landed (2026-05-19)
 
-- `plugins/cost-tracker/db.ts::computeSessionRollup` calls `db.query(...)`
-  on the returned `DbHandle`, which only exposes `messages` and
-  `sessionRollup` — `query` is undefined. The error is swallowed by the
-  outer try/catch in `cost-tracker.ts`, so `session_rollup` is currently
-  never populated. Same bug pattern in `rate-table.ts::persistSnapshot`
-  (so `provider_rates` is also never written). Fix: either expose the
-  underlying `bun:sqlite` Database on the handle, or move both
-  helpers' SQL into methods on the handle (e.g.
+- `plugins/cost-tracker/db.ts::computeSessionRollup` and
+  `rate-table.ts::persistSnapshot` both called `db.query(...)` on the
+  returned `DbHandle`, which only exposed `messages` and `sessionRollup`
+  — `query` was undefined. The errors were swallowed by the outer
+  try/catch in `cost-tracker.ts`, so `session_rollup` and
+  `provider_rates` were never populated. Fix landed: moved both
+  helpers' SQL into methods on the handle —
   `sessionRollup.computeAndUpsert(sessionId, ts)` and
-  `providerRates.upsert(rateVersion, payload)`). `dump messages` works
-  regardless; `dump sessions` will return rows once this is fixed.
+  `providerRates.upsert(rateVersion, payloadJson)`. The handle now
+  exports its `DbHandle` type; `persistSnapshot` is now a thin
+  delegator over `providerRates.upsert` (kept for API stability with
+  cost-tracker.ts). Smoke-verified end-to-end: `dump sessions` now
+  returns the expected rollup row, and `provider_rates` gets one row
+  per unique rate version. Standalone `computeSessionRollup` export
+  removed — only cost-tracker.ts imported it.
 - `plugins/cost-tracker.ts:42` —
   `worktreePath = fs.realpathSync(worktree).catch(() => worktree)`
-  mismatches API shapes: `realpathSync` is synchronous and returns a
-  string, so there is no `.catch` on its return value. Currently
-  harmless because the surrounding try/catch swallows the resulting
-  `TypeError` and the catch arm falls through to `worktreePath =
-  worktree`, but the intent (use realpath when possible, fall back on
-  failure) is silently never realized. Same family as the `db.query`
-  bugs above — fix by either calling `fs.realpathSync` plainly inside
-  the existing try/catch, or switching to the async `fs.promises.realpath`
-  with an awaited try/catch.
+  mismatched API shapes: `realpathSync` is synchronous and returns a
+  string, so there was no `.catch` on its return value. The surrounding
+  try/catch was swallowing the `TypeError` and the catch arm was
+  silently falling through, so the realpath resolution never actually
+  worked. Fix: call `fs.realpathSync(worktree)` plainly inside the
+  existing try/catch; the catch arm handles ENOENT/EACCES as intended.
+  Smoke-verified: real paths resolve, bogus paths fall back cleanly.
 
 ### Fixed during Phase 3 work (2026-05-19)
 

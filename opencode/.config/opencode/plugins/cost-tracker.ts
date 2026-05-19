@@ -39,8 +39,10 @@ export const CostTrackerPlugin: Plugin = async ({ worktree, client }) => {
 
   try {
     const fs = await import("fs")
-    worktreePath = fs.realpathSync(worktree).catch(() => worktree)
+    worktreePath = fs.realpathSync(worktree)
   } catch {
+    // realpathSync is synchronous and throws on failure (no path,
+    // permissions, etc.) — fall back to the raw worktree path.
     worktreePath = worktree
   }
 
@@ -139,11 +141,7 @@ export const CostTrackerPlugin: Plugin = async ({ worktree, client }) => {
             const sessionId = p.sessionID as string
             if (!sessionId) break
 
-            const dbModule = await import("./cost-tracker/db.ts")
-            const rollup = await dbModule.computeSessionRollup(db, sessionId, new Date().toISOString())
-            if (rollup) {
-              await db.sessionRollup.upsert(rollup)
-            }
+            await db.sessionRollup.computeAndUpsert(sessionId, new Date().toISOString())
             break
           }
 

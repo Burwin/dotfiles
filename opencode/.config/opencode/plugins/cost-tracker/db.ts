@@ -102,12 +102,16 @@ CREATE TABLE IF NOT EXISTS provider_rates (
 );
 `
 
-type DbHandle = {
+export type DbHandle = {
   messages: {
     upsert: (row: MessageRow) => Promise<void>
   }
   sessionRollup: {
     upsert: (row: SessionRollupRow) => Promise<void>
+    computeAndUpsert: (sessionId: string, tsLastIdle: string) => Promise<SessionRollupRow | null>
+  }
+  providerRates: {
+    upsert: (rateVersion: string, payloadJson: string) => Promise<void>
   }
 }
 
@@ -153,69 +157,77 @@ export const openDb = async (): Promise<DbHandle | null> => {
       return null
     }
 
+    const upsertMessage = (row: MessageRow): void => {
+      db.query(`
+        INSERT OR REPLACE INTO messages (
+          message_id, session_id, worktree_path, provider_id, model_id,
+          agent, ts_created, ts_completed, tokens_input, tokens_output,
+          tokens_reasoning, tokens_cache_read, tokens_cache_write,
+          cost_opencode_fxp8, cost_recomputed_fxp8, rate_version, finish, raw_json
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        row.message_id, row.session_id, row.worktree_path, row.provider_id,
+        row.model_id, row.agent, row.ts_created, row.ts_completed,
+        row.tokens_input, row.tokens_output, row.tokens_reasoning,
+        row.tokens_cache_read, row.tokens_cache_write, row.cost_opencode_fxp8,
+        row.cost_recomputed_fxp8, row.rate_version, row.finish, row.raw_json
+      )
+    }
+
+    const upsertSessionRollup = (row: SessionRollupRow): void => {
+      db.query(`
+        INSERT OR REPLACE INTO session_rollup (
+          session_id, ts_last_idle, total_cost_opencode_fxp8,
+          total_cost_recomputed_fxp8, message_count
+        ) VALUES (?, ?, ?, ?, ?)
+      `).run(
+        row.session_id, row.ts_last_idle, row.total_cost_opencode_fxp8,
+        row.total_cost_recomputed_fxp8, row.message_count
+      )
+    }
+
+    const computeSessionRollupRow = (sessionId: string, tsLastIdle: string): SessionRollupRow | null => {
+      const row = db.query(`
+        SELECT
+          SUM(cost_opencode_fxp8) as cost_opencode,
+          SUM(cost_recomputed_fxp8) as cost_recomputed,
+          COUNT(*) as cnt
+        FROM messages WHERE session_id = ?
+      `).get(sessionId) as any
+
+      if (!row || (row.cnt ?? 0) === 0) return null
+
+      return {
+        session_id: sessionId,
+        ts_last_idle: tsLastIdle,
+        total_cost_opencode_fxp8: row.cost_opencode ?? 0,
+        total_cost_recomputed_fxp8: row.cost_recomputed ?? 0,
+        message_count: row.cnt ?? 0,
+      }
+    }
+
     return {
       messages: {
-        upsert: async (row: MessageRow) => {
-          db.query(`
-            INSERT OR REPLACE INTO messages (
-              message_id, session_id, worktree_path, provider_id, model_id,
-              agent, ts_created, ts_completed, tokens_input, tokens_output,
-              tokens_reasoning, tokens_cache_read, tokens_cache_write,
-              cost_opencode_fxp8, cost_recomputed_fxp8, rate_version, finish, raw_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-          `).run(
-            row.message_id, row.session_id, row.worktree_path, row.provider_id,
-            row.model_id, row.agent, row.ts_created, row.ts_completed,
-            row.tokens_input, row.tokens_output, row.tokens_reasoning,
-            row.tokens_cache_read, row.tokens_cache_write, row.cost_opencode_fxp8,
-            row.cost_recomputed_fxp8, row.rate_version, row.finish, row.raw_json
-          )
-        },
+        upsert: async (row: MessageRow) => upsertMessage(row),
       },
       sessionRollup: {
-        upsert: async (row: SessionRollupRow) => {
+        upsert: async (row: SessionRollupRow) => upsertSessionRollup(row),
+        computeAndUpsert: async (sessionId: string, tsLastIdle: string) => {
+          const rollup = computeSessionRollupRow(sessionId, tsLastIdle)
+          if (rollup) upsertSessionRollup(rollup)
+          return rollup
+        },
+      },
+      providerRates: {
+        upsert: async (rateVersion: string, payloadJson: string) => {
           db.query(`
-            INSERT OR REPLACE INTO session_rollup (
-              session_id, ts_last_idle, total_cost_opencode_fxp8,
-              total_cost_recomputed_fxp8, message_count
-            ) VALUES (?, ?, ?, ?, ?)
-          `).run(
-            row.session_id, row.ts_last_idle, row.total_cost_opencode_fxp8,
-            row.total_cost_recomputed_fxp8, row.message_count
-          )
+            INSERT OR IGNORE INTO provider_rates (rate_version, fetched_at, payload_json)
+            VALUES (?, ?, ?)
+          `).run(rateVersion, new Date().toISOString(), payloadJson)
         },
       },
     }
   })()
 
   return openDbPromise
-}
-
-export const computeSessionRollup = async (
-  db: DbHandle,
-  sessionId: string,
-  tsLastIdle: string
-): Promise<SessionRollupRow | null> => {
-  const row = db.query(`
-    SELECT
-      SUM(tokens_input) as ti,
-      SUM(tokens_output) as to,
-      SUM(tokens_reasoning) as tr,
-      SUM(tokens_cache_read) as tcr,
-      SUM(tokens_cache_write) as tcw,
-      SUM(cost_opencode_fxp8) as cost_opencode,
-      SUM(cost_recomputed_fxp8) as cost_recomputed,
-      COUNT(*) as cnt
-    FROM messages WHERE session_id = ?
-  `).get(sessionId) as any
-
-  if (!row) return null
-
-  return {
-    session_id: sessionId,
-    ts_last_idle: tsLastIdle,
-    total_cost_opencode_fxp8: row.cost_opencode ?? 0,
-    total_cost_recomputed_fxp8: row.cost_recomputed ?? 0,
-    message_count: row.cnt ?? 0,
-  }
 }
