@@ -48,6 +48,17 @@ spend vs billing; Opencode API/MCP session tracking?"
   `sessionRollup.computeAndUpsert(sessionId, ts)` and
   `providerRates.upsert(rateVersion, payload)`). `dump messages` works
   regardless; `dump sessions` will return rows once this is fixed.
+- `plugins/cost-tracker.ts:42` —
+  `worktreePath = fs.realpathSync(worktree).catch(() => worktree)`
+  mismatches API shapes: `realpathSync` is synchronous and returns a
+  string, so there is no `.catch` on its return value. Currently
+  harmless because the surrounding try/catch swallows the resulting
+  `TypeError` and the catch arm falls through to `worktreePath =
+  worktree`, but the intent (use realpath when possible, fall back on
+  failure) is silently never realized. Same family as the `db.query`
+  bugs above — fix by either calling `fs.realpathSync` plainly inside
+  the existing try/catch, or switching to the async `fs.promises.realpath`
+  with an awaited try/catch.
 
 ### Fixed during Phase 3 work (2026-05-19)
 
@@ -601,6 +612,21 @@ integer at the per-message total.)
   becomes a real workflow. Would require either a `litellm` proxy or
   an opencode patch to inject metadata headers on provider requests
   (no "before HTTP request" hook today).
+- Revisit the fire-and-forget rate-table fetch (see "Fixed during
+  Phase 3 work" above). Today, a single failure leaves
+  `rateTable.rates = {}` for the lifetime of the plugin, so every
+  message in that session records `cost_recomputed_fxp8 = 0`. Once
+  Phase 4 reconciliation lands, this will visibly skew the
+  recompute-vs-Zen delta column whenever the initial fetch loses a
+  race against the HTTP server. Options to consider (pick one only
+  if the drift turns out to matter — `cost_opencode_fxp8` is still
+  populated regardless):
+  - One-shot retry with a short backoff (e.g. 500 ms then 2 s) before
+    giving up.
+  - Lazy-fetch on first `message.updated` if rates are still empty,
+    so the deadlock window is gone by the time we try.
+  - Wire `/event` `server.connected` (if/when opencode emits one) as
+    the trigger instead of plugin init.
 
 ---
 
