@@ -28,8 +28,23 @@ import type { Plugin } from "@opencode-ai/plugin"
  * Robustness: every effect is try/caught at the call site. The plugin is
  * best-effort and must never bring opencode down.
  *
- * THIS FILE IS A STUB. Phase 1 fills in the event handlers and DB calls;
- * see PLAN.md §6 Phase 1 for the exact behaviour and verification steps.
+ * Event payload shape (confirmed against @opencode-ai/sdk@1.14.28
+ * dist/gen/types.gen.d.ts):
+ *
+ *   EventMessageUpdated.properties = { info: Message }
+ *     where Message = UserMessage | AssistantMessage. We only care about
+ *     the assistant variant (cost/tokens). User messages have no cost
+ *     fields, so we filter by `role === "assistant"`.
+ *
+ *   AssistantMessage carries: id, sessionID, role: "assistant",
+ *     time.{created, completed?} (epoch ms NUMBERS — must be converted
+ *     to ISO strings before INSERT), modelID, providerID, mode, cost,
+ *     tokens.{input, output, reasoning, cache.{read, write}}, finish?.
+ *     No `createdAt`/`completedAt`/`agent` top-level keys — the older
+ *     SDK shape had those, hence the per-task PLAN's "payload shape
+ *     drift" diagnosis.
+ *
+ *   EventSessionIdle.properties.sessionID → the rollup trigger.
  */
 
 export const CostTrackerPlugin: Plugin = async ({ worktree, client }) => {
@@ -42,8 +57,14 @@ export const CostTrackerPlugin: Plugin = async ({ worktree, client }) => {
     worktreePath = fs.realpathSync(worktree)
   } catch {
     // realpathSync is synchronous and throws on failure (no path,
-    // permissions, etc.) — fall back to the raw worktree path.
-    worktreePath = worktree
+    // permissions, etc.) — fall back to the raw worktree path. Defensive
+    // empty-string default if `worktree` itself is somehow falsy: the
+    // schema declares `worktree_path TEXT NOT NULL`, so a NULL here would
+    // trigger a constraint violation that would be swallowed by the outer
+    // try/catch in the event handler, leaving messages empty with no
+    // diagnostic. Better to write an empty string and let queries report
+    // the row as unmapped than to silently drop it.
+    worktreePath = worktree ?? ""
   }
 
   try {
@@ -88,9 +109,30 @@ export const CostTrackerPlugin: Plugin = async ({ worktree, client }) => {
       console.warn("[cost-tracker] failed to load rate table:", e),
     )
 
+  // Latch so the missing-DB warning fires once per plugin lifetime (every
+  // single event would otherwise spam the log). Mirrors the warn-latch
+  // pattern in ./cost-tracker/recompute.ts for missing rates.
+  let warnedNoDb = false
+
+  // Convert opencode's epoch-ms numeric timestamps (msg.time.created /
+  // msg.time.completed) to the ISO 8601 strings the messages.ts_created /
+  // ts_completed columns expect. Returns null when the input isn't a
+  // finite number; the caller decides whether null is acceptable for
+  // each column.
+  const epochMsToIso = (n: unknown): string | null => {
+    if (typeof n !== "number" || !Number.isFinite(n)) return null
+    return new Date(n).toISOString()
+  }
+
   return {
     event: async ({ event }) => {
-      if (!db) return
+      if (!db) {
+        if (!warnedNoDb) {
+          console.warn("[cost-tracker] DB unavailable; dropping all events for this session")
+          warnedNoDb = true
+        }
+        return
+      }
 
       const e = event as unknown as { type: string; properties?: any }
       const p = e.properties ?? {}
@@ -98,8 +140,25 @@ export const CostTrackerPlugin: Plugin = async ({ worktree, client }) => {
       try {
         switch (e.type) {
           case "message.updated": {
-            const msg = p.message as any
-            if (!msg?.id) return
+            // Payload shape from @opencode-ai/sdk@1.14.28:
+            //   EventMessageUpdated.properties = { info: Message }
+            // The pre-fix code read `p.message`, which was undefined on
+            // every event — that's the silent capture bug fixed in
+            // Commit 1 (docs/plans/opencode-cost-pertask-tmux-status/
+            // PLAN.md §9 Commit 1).
+            const msg = p.info as any
+            if (!msg?.id) {
+              console.warn(
+                "[cost-tracker] message.updated missing properties.info.id; dropping",
+                { hasInfo: !!p.info, propsKeys: Object.keys(p) },
+              )
+              return
+            }
+
+            // Skip user messages: they carry no cost/tokens and would
+            // write zero-cost rows that pollute rollups and reconcile
+            // queries. Only AssistantMessage has the fields we capture.
+            if (msg.role !== "assistant") return
 
             const tokens = msg.tokens as any ?? {}
             const rawJson = JSON.stringify(msg).slice(0, 10000)
@@ -114,15 +173,30 @@ export const CostTrackerPlugin: Plugin = async ({ worktree, client }) => {
               cache_write: tokens.cache?.write ?? 0,
             })
 
+            // ts_created is NOT NULL in the schema; fall back to "now"
+            // if the payload somehow lacks a timestamp so we still
+            // capture the row rather than triggering a constraint
+            // violation that the outer try/catch would swallow.
+            const tsCreated =
+              epochMsToIso(msg.time?.created) ?? new Date().toISOString()
+            const tsCompleted = epochMsToIso(msg.time?.completed)
+
             await db.messages.upsert({
               message_id: msg.id,
-              session_id: p.sessionID ?? "",
+              // sessionID lives ON the AssistantMessage itself in the
+              // current SDK; `properties.sessionID` does not exist on
+              // EventMessageUpdated. Was reading the wrong location.
+              session_id: msg.sessionID ?? "",
               worktree_path: worktreePath,
               provider_id: msg.providerID ?? "",
               model_id: msg.modelID ?? "",
-              agent: p.agent ?? null,
-              ts_created: msg.createdAt ?? "",
-              ts_completed: msg.completedAt ?? null,
+              // AssistantMessage.mode is the canonical agent identifier
+              // in the v1.14 SDK; accept `agent` as a defensive
+              // fallback since runtime payloads have been observed to
+              // carry both keys.
+              agent: msg.mode ?? msg.agent ?? null,
+              ts_created: tsCreated,
+              ts_completed: tsCompleted,
               tokens_input: tokens.input ?? 0,
               tokens_output: tokens.output ?? 0,
               tokens_reasoning: tokens.reasoning ?? 0,
@@ -138,8 +212,16 @@ export const CostTrackerPlugin: Plugin = async ({ worktree, client }) => {
           }
 
           case "session.idle": {
+            // EventSessionIdle.properties.sessionID — this path was
+            // correct pre-fix; only fails to write rows because the
+            // messages table had no rows to roll up (the upstream
+            // capture-bug symptom). After Commit 1, this populates
+            // session_rollup on every idle.
             const sessionId = p.sessionID as string
-            if (!sessionId) break
+            if (!sessionId) {
+              console.warn("[cost-tracker] session.idle missing sessionID; dropping")
+              break
+            }
 
             await db.sessionRollup.computeAndUpsert(sessionId, new Date().toISOString())
             break
@@ -152,8 +234,12 @@ export const CostTrackerPlugin: Plugin = async ({ worktree, client }) => {
           default:
             break
         }
-      } catch (e) {
-        console.warn("[cost-tracker] event handler error:", e)
+      } catch (err) {
+        // Renamed catch binding from `e` to `err` so it doesn't shadow
+        // the outer `e` (the cast event) — the prior shadowing made
+        // diagnostic messages reference the wrong identifier when
+        // reading the source.
+        console.warn("[cost-tracker] event handler error:", err)
       }
     },
   }

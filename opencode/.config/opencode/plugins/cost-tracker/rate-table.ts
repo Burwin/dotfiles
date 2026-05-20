@@ -38,40 +38,87 @@ export type RateTable = {
 // Phase 2 fills in:
 //
 export async function fetchRates(client: any): Promise<RateTable> {
-  let providersJson: any
+  let rawResult: any
 
   try {
     if (typeof (client as any).config?.providers === "function") {
-      providersJson = await (client as any).config.providers()
+      rawResult = await (client as any).config.providers()
     } else {
       const port = process.env.OPENCODE_PORT ?? "3310"
       const res = await (client as any).fetch?.(`http://127.0.0.1:${port}/config/providers`)
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      providersJson = await res.json()
+      rawResult = await res.json()
     }
   } catch (e) {
     console.warn("[cost-tracker] failed to fetch rates:", e)
     return { rate_version: "fetch-failed", rates: {} }
   }
 
+  // The HeyAPI-generated SDK client returns `{ data, request, response, error }`
+  // — unwrap to the body. Plain-fetch path already returns the body directly,
+  // so accept either shape. Then dig into `.providers` per the SDK's
+  // ConfigProvidersResponses[200] = { providers: Provider[], default: {...} }.
+  // Pre-fix the code read `.providers` off the envelope itself, which was
+  // undefined → fell back to the envelope object → `for...of` threw
+  // "TypeError: {} is not iterable" → silently dropped to fetch-failed via
+  // the outer .catch in cost-tracker.ts. Symptom: provider_rates stayed
+  // empty even though plugin load looked fine in the opencode log.
+  const body = rawResult?.data ?? rawResult
+  const providersList = Array.isArray(body?.providers)
+    ? body.providers
+    : Array.isArray(body)
+      ? body
+      : []
+
   const normalized: Record<string, Rate> = {}
 
-  const providers = providersJson.providers ?? providersJson ?? []
-  for (const provider of providers) {
+  for (const provider of providersList) {
     const providerId = provider.id ?? provider.name ?? provider.provider
-    const models = provider.models ?? []
-    for (const model of models) {
+    // Provider.models is `{ [modelId]: Model }` in @opencode-ai/sdk@1.14
+    // (was a flat array in an earlier shape). Object.values reads the
+    // current shape; the Array.isArray branch covers the old shape so
+    // a downgrade doesn't crash. Same envelope-vs-body story as
+    // providersList above — `for...of` on a plain object throws
+    // "TypeError: {} is not iterable".
+    const modelsRaw = provider.models ?? {}
+    const modelsList: Array<any> = Array.isArray(modelsRaw)
+      ? modelsRaw
+      : Object.values(modelsRaw)
+    for (const model of modelsList) {
       const modelId = model.id ?? model.name ?? model.model
       if (!providerId || !modelId) continue
 
+      // Current SDK: Model.cost.{input,output,cache.{read,write}}
+      //   + optional experimentalOver200K subtree for the >200K tier.
+      // Older shape (kept as a fallback): model.prices.* / model.price.*.
+      const c: any = model.cost ?? {}
+      const over: any = c.experimentalOver200K
+      const input =
+        c.input ?? model.prices?.input ?? model.price?.input ?? 0
+      const output =
+        c.output ?? model.prices?.output ?? model.price?.output ?? 0
+      const cacheRead =
+        c.cache?.read ??
+        model.prices?.cache_read ??
+        model.price?.cache_read ??
+        0
+      const cacheWrite =
+        c.cache?.write ?? model.prices?.cache_write ?? model.price?.cache_write
+
       normalized[`${providerId}/${modelId}`] = {
-        input: model.prices?.input ?? model.price?.input ?? 0,
-        output: model.prices?.output ?? model.price?.output ?? 0,
-        cache_read: model.prices?.cache_read ?? model.price?.cache_read ?? 0,
-        cache_write: model.prices?.cache_write ?? model.price?.cache_write,
-        tier_breakpoint: model.tier_breakpoint ?? model.experimentalOver200K ? 200000 : undefined,
-        input_over_tier: model.prices?.input_over_tier,
-        output_over_tier: model.prices?.output_over_tier,
+        input,
+        output,
+        cache_read: cacheRead,
+        cache_write: cacheWrite,
+        // Presence of an over-200K rate block is the only signal the
+        // SDK gives us today that a tier crossing exists at all.
+        // recompute.ts uses tier_breakpoint as the boundary; if it's
+        // undefined the tier-split branch is a no-op.
+        tier_breakpoint: over ? 200000 : model.tier_breakpoint,
+        input_over_tier:
+          over?.input ?? model.prices?.input_over_tier,
+        output_over_tier:
+          over?.output ?? model.prices?.output_over_tier,
       }
     }
   }
