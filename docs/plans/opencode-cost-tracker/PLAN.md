@@ -128,12 +128,77 @@ spend vs billing; Opencode API/MCP session tracking?"
   `opencode/claude-opus-4-7` and `opencode/gpt-5-nano`).
   Committed on `MASTER-1703`; ff-merge to `m` is batched into
   Commit 6 of the master PLAN.
-- **Next:** Commit 2 of
-  `../opencode-cost-pertask-tmux-status/PLAN.md` — Phase 5 backfill
-  (`opencode-cost import-opencode`) reads
-  `~/.local/share/opencode/opencode.db`'s `step-finish` parts into
-  `messages` so the per-task tmux bar has history before Commit 6.
-  Commits 3-6 then ship the per-row Zen integration, `dump
+- 2026-05-19 — Commit 2 of
+  `../opencode-cost-pertask-tmux-status/PLAN.md` shipped. **Phase 5
+  historical backfill** lands as
+  `opencode-cost/import-opencode.ts`, wired in `bin/opencode-cost`
+  as `import-opencode [--since YYYY-MM-DD] [--dry-run] [--reconcile]`.
+  Reads `~/.local/share/opencode/opencode.db` read-only, joins
+  `part` (filtered to `json_extract(data,'$.type')='step-finish'`)
+  against `message` and `session` for context (`modelID`,
+  `providerID`, `time.{created,completed}`, `session.directory`),
+  recomputes `cost_recomputed_fxp8` against the most recent
+  `provider_rates` snapshot (using `plugins/cost-tracker/recompute.ts`
+  so plugin and backfill share one source of math truth), and
+  `INSERT OR IGNORE`s into `messages` keyed by `message_id`. The
+  OR IGNORE preserves the plugin's native captures — backfill only
+  fills the gaps. Post-insert, `session_rollup` is rebuilt
+  (`INSERT OR REPLACE`) for every session that received imported
+  rows by `SUM(cost_*_fxp8) GROUP BY session_id`.
+
+  Verification on real data
+  (`bun bin/opencode-cost import-opencode {--dry-run, , --reconcile}`):
+  - Candidates: 11,775 step-finish parts (across all opencode
+    history; 196 distinct sessions).
+  - Inserted: 11,771; ignored-existing: 4 (the plugin's native
+    captures from earlier today, all `deepseek-v4-flash-free`).
+  - Sessions touched: 196 (rollup rebuilt for each).
+  - Re-running the subcommand produces zero net writes (idempotency
+    via INSERT OR IGNORE confirmed; 11,776 candidates → 0 inserted,
+    11,776 ignored on the immediate re-run).
+  - `--since 2026-05-19` filter narrows to 2,079 candidates across
+    46 sessions, working as designed.
+
+  Drift summary vs `zen_daily_billed` (per-(date, model) using the
+  built-in `--reconcile`):
+
+  | Date       | Messages $ | Zen Billed $ | Drift   |
+  |------------|------------|--------------|---------|
+  | 2026-05-18 | $263.93    | $262.20      | +0.7%   |
+  | 2026-05-15 | $127.95    | $127.95      | 0.0%    |
+  | 2026-05-14 | $87.92     | $87.92       | 0.0%    |
+  | 2026-05-11 | $113.11    | $113.11      | 0.0%    |
+  | 2026-05-08 | $83.28     | $83.39       | -0.1%   |
+  | 2026-05-06 | $302.95    | $302.98      | 0.0%    |
+  | 2026-05-05 | $103.42    | $103.42      | 0.0%    |
+
+  Total over the window: messages = $1,475.86 vs Zen = $1,428.01,
+  drift = +$47.85 / **+3.4%** — comfortably inside the "a few %"
+  drift floor documented in §2 (pricing-table drift, tier
+  crossings, cache TTL collapse). Drift is concentrated on (a)
+  days that haven't been pulled by `zen-sync` yet (2026-04-27,
+  2026-04-29, 2026-05-01, 2026-05-04, 2026-05-07 — `zen-sync`
+  one-shot only fetched the current month) and (b) gpt-5-nano
+  sub-cent values that messages.cost_opencode rounds to zero
+  (e.g. 2026-05-08 nano = $0.000553).
+
+  `cost_recomputed_fxp8` is intentionally backfilled using the
+  same `recompute()` function the plugin uses today — its
+  6-order-of-magnitude inflation (rates stored as $/M tokens but
+  multiplied per-token) is a pre-existing issue tracked in §10
+  open items; the backfill stays consistent with the plugin's
+  current behavior so a future fix to `recompute.ts` corrects
+  both writers in one pass.
+
+  Files touched: `opencode-cost/import-opencode.ts` (new),
+  `bin/opencode-cost` (dispatch + usage),
+  `docs/plans/opencode-cost-tracker/PLAN.md` (this entry).
+  Committed on `MASTER-1703`; ff-merge to `m` is batched into
+  Commit 6 of the master PLAN.
+- **Next:** Commit 3 of
+  `../opencode-cost-pertask-tmux-status/PLAN.md` — RED scaffolds
+  for the per-request zen-sync (Z0' parser tests and Z3' sync-loop
+  tests). Commits 4-6 then ship the per-row Zen integration, `dump
   by-toggl`, the §10 acceptance tests, and the bar rewrite.
 
 ### Fixed after Phase 3 landed (2026-05-19)
@@ -730,6 +795,28 @@ integer at the per-message total.)
     so the deadlock window is gone by the time we try.
   - Wire `/event` `server.connected` (if/when opencode emits one) as
     the trigger instead of plugin init.
+- **`cost_recomputed_fxp8` unit mismatch** (surfaced 2026-05-19 by the
+  Phase 5 backfill's first reconcile pass). `plugins/cost-tracker/
+  rate-table.ts` stores rates as `$ per million tokens` (the unit
+  the opencode SDK exposes), but `plugins/cost-tracker/recompute.ts`
+  multiplies `tokens × rate` and then `* 1e8` to fxp8 — which is
+  per-token math against per-million rates, a 1,000,000× overshoot.
+  Visible in `dump reconciliation`: post-backfill, `recomputed_$`
+  rows read like `+1,993,367,870.30` next to `tui_$ = $263.93`.
+  `cost_opencode_fxp8` is unaffected (the plugin reads
+  `AssistantMessage.cost` directly from the SDK, which is already
+  in dollars), so all reconcile-against-Zen flows in §6/§7 of
+  `../opencode-cost-pertask-tmux-status/PLAN.md` keep working — the
+  drift budget is met using `cost_opencode_fxp8` (3.4% on the full
+  backfill window). Fix is one line in `recompute.ts`
+  (divide each summand by `1e6` before the `* 1e8`), but holding
+  off until the per-request Zen integration (Commit 4 of the
+  per-task PLAN) lands so we can replace the recompute-as-truth
+  position with per-row Zen truth instead of patching dead code.
+  Until then, every `cost_recomputed_fxp8` writer (plugin live
+  captures AND `import-opencode` backfill) stays consistent with
+  the same buggy formula, so a one-line fix retroactively corrects
+  both stores in lockstep.
 
 ---
 
