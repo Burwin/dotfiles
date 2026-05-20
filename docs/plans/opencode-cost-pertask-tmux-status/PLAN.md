@@ -33,6 +33,43 @@ Final state after Commit 6:
 - 2026-05-19 — PLAN drafted; no code yet. Six-commit execution checklist
   in §9; tests-before-code ordering for the per-request work (Z0' / Z3'
   RED scaffolds land in Commit 3 before Z0/Z3 GREEN in Commit 4).
+- 2026-05-19 — **Commit 3 landed:** Z0' + Z3' RED scaffolds checked in.
+  - **24 parser tests** in
+    `opencode/.config/opencode/opencode-cost/tests/zen-sync.parser.test.ts`
+    covering §10.7.a–i (new Date literal recognition; shared $R[N]
+    back-refs incl. object reference equality; chunked stream prefix
+    variants; empty / missing root; shape drift surfaced under
+    `enrichment` per the forward-compat decision pinned in §10.7.f;
+    numeric edges incl. zero/negative/float/exponent/null; string
+    escapes; no eval/Function escape hatch via globalThis spy) plus
+    one schema-shape pin against `ZenUsageRowFull`. Fixtures live at
+    `opencode-cost/tests/fixtures/parser/` (11 files, one per case
+    plus the 3 chunked-prefix variants).
+  - **13 loop tests** in
+    `opencode/.config/opencode/opencode-cost/tests/zen-sync.loop.test.ts`
+    covering §10.6.a–l (empty / short / full / full+short pages;
+    incremental newestKnown stop; full backfill ignoring newestKnown;
+    dedup by id; 1000-page safety cap; page-size drift down to 30 and
+    up to 100; flock contention exit 75 — split into in-process
+    `acquireSyncLock` contend + `runZenSync` external-hold checks;
+    mid-sync arrivals not picked up this run). In-process mock
+    `_server` (fetch interception) holds a rows array and slices on
+    `(workspaceId, page)`; in-memory `zen_usage` table per §4.1
+    schema.
+  - **Verified RED:** `bun test
+    ./opencode/.config/opencode/opencode-cost/tests/` reports
+    `0 pass / 37 fail / Ran 37 tests across 2 files`. Each test
+    raises a "Z0/Z3 is unstarted" placeholder pointing at
+    `PLAN.md §9 Commit 4 / P4.0` (parser) or `/ P4.3` (loop). Uniform
+    RED was achieved by namespace-importing
+    `* as zenSync from "../zen-sync.ts"` and routing every test
+    through small wrappers that throw the placeholder when the
+    target export is missing — module load succeeds, individual
+    tests fail at first call site.
+  - **Not yet shipped (Commit 4):** `parseUsageList`, `syncAll`,
+    `acquireSyncLock`, and the `ZenUsageRowFull` type are still
+    absent from `zen-sync.ts`. Commit 4's GREEN delivery flips the
+    full 37/37 suite to passing.
 
 ---
 

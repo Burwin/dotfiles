@@ -1,0 +1,1 @@
+$R[0]=[{id:"usg_test_a",workspaceId:"wrk_test",sessionId:"ses_test_a",keyId:"key_test",model:"claude-opus-4-7",provider:"anthropic",timeCreated:new Date("2026-05-19T23:22:58.000Z"),timeUpdated:new Date("2026-05-19T23:23:00.500Z"),timeDeleted:null,inputTokens:1234,outputTokens:567,reasoningTokens:null,cacheReadTokens:89,cacheWrite5mTokens:10,cacheWrite1hTokens:5,cost:500000000}]
