@@ -11,6 +11,10 @@
 //   Phase 4 (zen reconciliation, tier: sota) — `zen-sync` and
 //     `dump reconciliation` subcommands. Args forwarded to
 //     ../opencode-cost/zen-sync.ts and ../opencode-cost/reconcile.ts.
+//   Phase 5 / per-task PLAN Commit 2 — `import-opencode` subcommand
+//     backfills `messages` from ~/.local/share/opencode/opencode.db's
+//     step-finish part rows. Args forwarded to
+//     ../opencode-cost/import-opencode.ts.
 //
 // Surface:
 //
@@ -18,6 +22,7 @@
 //   opencode-cost dump sessions       [--since YYYY-MM-DD] [--json|--csv]
 //   opencode-cost zen-sync            [--month YYYY-MM] [--dry-run]
 //   opencode-cost dump reconciliation [--month YYYY-MM] [--json|--csv|--table]
+//   opencode-cost import-opencode     [--since YYYY-MM-DD] [--dry-run] [--reconcile]
 //
 // The DB at ~/.local/state/opencode-cost.db is the real interface. This
 // CLI is convenience over `sqlite3` — use whichever tool you prefer.
@@ -25,6 +30,7 @@
 import { runDumpMessages, runDumpSessions } from "../opencode-cost/dump.ts"
 import { runZenSync } from "../opencode-cost/zen-sync.ts"
 import { runReconciliation } from "../opencode-cost/reconcile.ts"
+import { runImportOpencode } from "../opencode-cost/import-opencode.ts"
 
 const usage = `opencode-cost — query the opencode cost-tracker DB
 
@@ -33,6 +39,7 @@ usage:
   opencode-cost dump sessions       [--since YYYY-MM-DD] [--json|--csv]
   opencode-cost zen-sync            [--month YYYY-MM] [--dry-run]
   opencode-cost dump reconciliation [--month YYYY-MM] [--json|--csv|--table]
+  opencode-cost import-opencode     [--since YYYY-MM-DD] [--dry-run] [--reconcile]
 
 dump defaults: --json. Numeric fxp8 columns are NOT divided by 1e8 — let the
 caller decide precision (jq: '.[] | .cost_recomputed_fxp8 / 1e8').
@@ -42,6 +49,11 @@ reconciliation defaults: --table (aligned columns, dollars at display).
 zen-sync prerequisites (per PLAN.md §12.4):
   ~/.config/opencode/secrets/zen-session-cookie  (chmod 600; contents: 'auth=Fe26.2*…')
   ~/.config/opencode-cost/config.json            (workspace_id, key_id, tz_offset, server_id)
+
+import-opencode reads ~/.local/share/opencode/opencode.db read-only and
+backfills the messages table (INSERT OR IGNORE — plugin captures take
+precedence) plus session_rollup. Use --dry-run for a no-op preview, or
+--reconcile for a per-(date,model) drift summary against zen_daily_billed.
 
 This CLI is a thin convenience layer over ~/.local/state/opencode-cost.db.
 Query with sqlite3 / datasette / jq for anything beyond the canned dumps.
@@ -74,6 +86,13 @@ const dispatch = async (): Promise<number> => {
     // `sub` is the first positional after `zen-sync`; pass through.
     const argv = sub === undefined ? [] : [sub, ...rest]
     return runZenSync(argv)
+  }
+
+  if (cmd === "import-opencode") {
+    // Same shape as zen-sync: `sub` is the first positional after
+    // the verb (e.g. `--dry-run`). Reassemble before forwarding.
+    const argv = sub === undefined ? [] : [sub, ...rest]
+    return runImportOpencode(argv)
   }
 
   console.error(`opencode-cost: unknown command: ${cmd}`)
