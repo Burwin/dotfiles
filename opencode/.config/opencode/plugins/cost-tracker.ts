@@ -163,6 +163,31 @@ export const CostTrackerPlugin: Plugin = async ({ worktree, client }) => {
             const tokens = msg.tokens as any ?? {}
             const rawJson = JSON.stringify(msg).slice(0, 10000)
 
+            // Cache write TTL split. opencode's AssistantMessage carries
+            // `tokens.cache.write` as either:
+            //   (a) a flat number (legacy total — sum semantics), or
+            //   (b) an object { "5m": N, "1h": M } when the model
+            //       distinguishes the two cache tiers.
+            // We persist both the per-tier breakdown (5m/1h columns,
+            // nullable) AND the sum (existing tokens_cache_write column)
+            // so the existing rollups don't need a schema-aware rewrite.
+            // §4.3 of docs/plans/opencode-cost-pertask-tmux-status/PLAN.md
+            // pins this contract.
+            const cacheWriteRaw = tokens.cache?.write
+            let cacheWrite5m: number | null = null
+            let cacheWrite1h: number | null = null
+            let cacheWriteSum = 0
+            if (typeof cacheWriteRaw === "number") {
+              cacheWriteSum = cacheWriteRaw
+            } else if (cacheWriteRaw && typeof cacheWriteRaw === "object") {
+              const w = cacheWriteRaw as Record<string, unknown>
+              const fiveM = w["5m"] ?? w.fiveMinute ?? w.cache_write_5m ?? null
+              const oneH = w["1h"] ?? w.oneHour ?? w.cache_write_1h ?? null
+              cacheWrite5m = typeof fiveM === "number" ? fiveM : null
+              cacheWrite1h = typeof oneH === "number" ? oneH : null
+              cacheWriteSum = (cacheWrite5m ?? 0) + (cacheWrite1h ?? 0)
+            }
+
             const rateKey = `${msg.providerID}/${msg.modelID}`
             const rate = rateTable.rates[rateKey]
             const costRecomputed = recomputeModule.recompute(rate, {
@@ -170,7 +195,7 @@ export const CostTrackerPlugin: Plugin = async ({ worktree, client }) => {
               output: tokens.output ?? 0,
               reasoning: tokens.reasoning ?? 0,
               cache_read: tokens.cache?.read ?? 0,
-              cache_write: tokens.cache?.write ?? 0,
+              cache_write: cacheWriteSum,
             })
 
             // ts_created is NOT NULL in the schema; fall back to "now"
@@ -201,7 +226,9 @@ export const CostTrackerPlugin: Plugin = async ({ worktree, client }) => {
               tokens_output: tokens.output ?? 0,
               tokens_reasoning: tokens.reasoning ?? 0,
               tokens_cache_read: tokens.cache?.read ?? 0,
-              tokens_cache_write: tokens.cache?.write ?? 0,
+              tokens_cache_write: cacheWriteSum,
+              tokens_cache_write_5m: cacheWrite5m,
+              tokens_cache_write_1h: cacheWrite1h,
               cost_opencode_fxp8: Math.round((msg.cost ?? 0) * 1e8),
               cost_recomputed_fxp8: costRecomputed,
               rate_version: rateTable.rate_version,

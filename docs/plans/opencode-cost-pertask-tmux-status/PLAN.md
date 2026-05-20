@@ -33,6 +33,96 @@ Final state after Commit 6:
 - 2026-05-19 — PLAN drafted; no code yet. Six-commit execution checklist
   in §9; tests-before-code ordering for the per-request work (Z0' / Z3'
   RED scaffolds land in Commit 3 before Z0/Z3 GREEN in Commit 4).
+- 2026-05-19 — **Commit 4 landed:** Z0 + Z1 + Z2 + Z3 GREEN.
+  - **All 37 tests pass** (24 parser + 13 loop):
+    `bun test ./opencode/.config/opencode/opencode-cost/tests/` reports
+    `37 pass / 0 fail / 125 expect() calls / Ran 37 tests across 2 files`.
+  - **Z0 (parser):** `parseUsageList(body): ZenUsageRowFull[]` exported
+    from `opencode-cost/zen-sync.ts`. Extensions to the static $R[n]
+    walker:
+    1. `new Date("ISO")` literal recognition (§10.7.a) — surfaces the
+       ISO string as the field value. Also handles 0-arg and numeric
+       Date constructors defensively.
+    2. Arrow-function block bodies via `parseBlockBody` —
+       `($R => { $R[1] = ...; $R[0] = [...]; return $R })(...)` IIFE
+       wrappers parse without delegating to `eval` (§10.7.i).
+    3. Top-level `;` statement separator handling so multi-statement
+       bodies (the legacy daily-aggregate format and IIFE wrappers
+       both rely on this) walk cleanly.
+    4. Per-row normalizer collects unknown row fields under
+       `enrichment: Record<string, unknown> | null` per §10.7.f. The
+       normalizer also accepts both casings of the Zen ID fields
+       (`workspaceId`/`workspaceID`, `sessionId`/`sessionID`,
+       `keyId`/`keyID`) — the test fixtures pin camelCase-Id but the
+       live API returns SCREAMING-ID; both flow into the canonical
+       camelCase-Id schema column.
+  - **Z1 (zen_usage schema):** `plugins/cost-tracker/db.ts` BOOTSTRAP_SQL
+    grew the §4.1 table + the three indexes (session, day, time).
+    `CREATE TABLE IF NOT EXISTS` makes the migration idempotent on
+    existing DBs. A new `applySchema(db)` helper is exported so the
+    CLI can converge the schema without depending on plugin reload
+    order. After each sync, `zen_daily_billed` is rebuilt from
+    `zen_usage` via `UPSERT GROUP BY (date, model, key_id)` per §4.2.
+  - **Z2 (cache TTL split):** `messages` gained
+    `tokens_cache_write_5m` and `tokens_cache_write_1h` (nullable
+    INTEGER), added to both BOOTSTRAP_SQL (fresh DBs) and a separate
+    idempotent `MIGRATIONS` block in `db.ts` (existing DBs; the
+    `duplicate column name` error is swallowed so re-runs are safe).
+    `plugins/cost-tracker.ts` reads `tokens.cache.write` in either
+    its flat-number or `{5m, 1h}` form and writes all three columns:
+    the per-tier `_5m`/`_1h` plus the existing `tokens_cache_write`
+    sum (backward-compat).
+  - **Z3 (sync loop + lock):** `zen-sync.ts` rewritten end-to-end:
+    1. `buildPerRowRequestBody(workspaceId, page)` — the §5.1 2-arg
+       body (the `f` field is gone; the per-row endpoint is dispatched
+       by an SHA-256 `X-Server-Id` header instead, scraped out of
+       Zen's `_build/assets/index-*.js` bundle. Override via
+       `OPENCODE_COST_USAGE_LIST_SHA`).
+    2. `syncAll({cookie, config, db, mode, maxPages}): {written,
+       fetched, pagesFetched}` implements §5.2 with all four stop
+       conditions (empty, short, incremental-overlap, 1000-page cap).
+    3. `acquireSyncLock(lockDir?)` returns a `SyncLockHandle` or null
+       on contention. Uses `fs.openSync(..., O_CREAT | O_EXCL)` plus
+       a PID-based stale-lock check (kernel-level flock(2) isn't
+       exposed by Bun without FFI; the in-process registry + cross-
+       process PID-check is equivalent for the systemd-timer-vs-manual
+       contention scenario actually deployed). `OPENCODE_COST_LOCK_DIR`
+       env override is honoured for test isolation per §10.6.k.
+    4. `runZenSync` exit code 75 on lock contention, before touching
+       any other state (config/cookie/DB).
+  - **Live smoke (P4.4):**
+    - `opencode-cost zen-sync --dry-run --max-pages 2` → 2 pages,
+      100 rows fetched, 100 unique ids, no writes.
+    - `opencode-cost zen-sync` (first run) effectively backfilled
+      since `newestKnown=null`. ~4450 rows landed before the manual
+      120s timeout; a follow-up `--max-pages 10` added the trailing
+      1 net-new row, total **4451 rows of `zen_usage` across 77
+      sessions in workspace `wrk_01KQ84M0…`** (May 14 18:47 UTC
+      through 2026-05-20 03:39 UTC).
+    - `cache_write_5m_tokens > 0` on 3855 of 4451 rows; `_1h` rows
+      always 0 (consistent with current anthropic behavior); no
+      `enrichment_json` rows yet (no shape drift surfaced).
+    - **Reconcile delta vs `zen_daily_billed`** for every
+      `(date, model)` bucket where `zen_usage` has rows: **+0
+      everywhere** (by construction — `zen_daily_billed` is now
+      derived from `zen_usage`). The pre-May-14 history rows in
+      `zen_daily_billed` remain untouched (no per-row data for those
+      dates yet); a `--full` run or several more incremental runs
+      will close that gap at leisure. No drift requiring
+      investigation.
+  - **Discoveries during live smoke** (folded into the code, not
+    blocking):
+    1. The per-row endpoint is dispatched by an SHA-256 `X-Server-Id`
+       reference (`createServerReference` in Zen's frontend bundle),
+       not by the `f:31` function index the plan originally assumed.
+       The `f` field is omitted entirely from the per-row body.
+       Rotation handling: an HTTP 4xx/5xx error message points
+       operators at the JS bundle re-scrape (the SHA changes only on
+       Zen deploys; the cookie + workspace_id are unaffected).
+    2. Real Zen rows use `workspaceID` / `keyID` / `sessionID` (capital
+       ID); the test fixtures pinned `workspaceId` / `keyId` /
+       `sessionId`. The normalizer accepts both spellings without
+       changing the test contract or the SQL column names.
 - 2026-05-19 — **Commit 3 landed:** Z0' + Z3' RED scaffolds checked in.
   - **24 parser tests** in
     `opencode/.config/opencode/opencode-cost/tests/zen-sync.parser.test.ts`

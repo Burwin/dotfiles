@@ -47,7 +47,12 @@ export type MessageRow = {
   tokens_output: number
   tokens_reasoning: number
   tokens_cache_read: number
+  /** Sum of 5m + 1h cache writes — kept for backward compat. */
   tokens_cache_write: number
+  /** Per-tier cache write breakdown (added in §4.3 / Commit 4 / P4.2).
+   *  Nullable on legacy rows captured before the split landed. */
+  tokens_cache_write_5m: number | null
+  tokens_cache_write_1h: number | null
   cost_opencode_fxp8: number
   cost_recomputed_fxp8: number
   rate_version: string
@@ -63,7 +68,15 @@ export type SessionRollupRow = {
   message_count: number
 }
 
-// BOOTSTRAP_SQL per PLAN.md §5 — idempotent, includes WAL mode.
+// BOOTSTRAP_SQL — idempotent, includes WAL mode. Single source of schema
+// truth; see PLAN.md (cost-tracker) §5 + PLAN.md (pertask-tmux-status)
+// §4.1 (zen_usage) and §4.3 (cache TTL split).
+//
+// Fresh-DB path: `CREATE TABLE IF NOT EXISTS messages (... including
+// tokens_cache_write_5m / tokens_cache_write_1h)` covers any first run.
+// Existing-DB path: the ALTER TABLE statements in `openDb()` (below)
+// add the new columns on top of older schemas, guarded by a duplicate-
+// column catch so re-running them is harmless.
 export const BOOTSTRAP_SQL = `
 PRAGMA journal_mode=WAL;
 
@@ -81,6 +94,8 @@ CREATE TABLE IF NOT EXISTS messages (
   tokens_reasoning      INTEGER NOT NULL,
   tokens_cache_read     INTEGER NOT NULL,
   tokens_cache_write    INTEGER NOT NULL,
+  tokens_cache_write_5m INTEGER,
+  tokens_cache_write_1h INTEGER,
   cost_opencode_fxp8    INTEGER NOT NULL,
   cost_recomputed_fxp8  INTEGER NOT NULL,
   rate_version          TEXT NOT NULL,
@@ -113,7 +128,78 @@ CREATE TABLE IF NOT EXISTS zen_daily_billed (
   fetched_at       TEXT NOT NULL,
   PRIMARY KEY (date, model, key_id)
 );
+
+-- §4.1 zen_usage — per-row Zen ground truth. Populated by
+-- opencode-cost zen-sync (../../opencode-cost/zen-sync.ts).
+-- zen_daily_billed is derived from this table after each sync via
+-- UPSERT GROUP BY (date, model, key_id).
+CREATE TABLE IF NOT EXISTS zen_usage (
+  id                       TEXT PRIMARY KEY,
+  workspace_id             TEXT NOT NULL,
+  session_id               TEXT,
+  key_id                   TEXT NOT NULL,
+  model                    TEXT NOT NULL,
+  provider                 TEXT NOT NULL,
+  time_created             TEXT NOT NULL,
+  time_updated             TEXT NOT NULL,
+  time_deleted             TEXT,
+  input_tokens             INTEGER NOT NULL,
+  output_tokens            INTEGER NOT NULL,
+  reasoning_tokens         INTEGER,
+  cache_read_tokens        INTEGER NOT NULL,
+  cache_write_5m_tokens    INTEGER,
+  cache_write_1h_tokens    INTEGER,
+  cost_fxp8                INTEGER NOT NULL,
+  enrichment_json          TEXT,
+  fetched_at               TEXT NOT NULL,
+  raw_json                 TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_zen_usage_session ON zen_usage(session_id);
+CREATE INDEX IF NOT EXISTS idx_zen_usage_day     ON zen_usage(substr(time_created, 1, 10), model);
+CREATE INDEX IF NOT EXISTS idx_zen_usage_time    ON zen_usage(time_created);
 `
+
+// In-place migrations for existing DBs created before the new columns
+// landed. SQLite raises `duplicate column name` if the column already
+// exists; we swallow that specific error so the migration is idempotent.
+// Listed separately from BOOTSTRAP_SQL because `db.exec()` aborts the
+// whole batch on the first error — splitting them lets us catch each
+// column-add individually without losing later migrations.
+//
+// Exported so the CLI (../../opencode-cost/zen-sync.ts) can apply the
+// same migrations defensively before it writes to zen_usage on a DB
+// where the plugin hasn't yet been reloaded under the new schema.
+export const MIGRATIONS: ReadonlyArray<{ sql: string; column: string }> = [
+  {
+    column: "tokens_cache_write_5m",
+    sql: "ALTER TABLE messages ADD COLUMN tokens_cache_write_5m INTEGER",
+  },
+  {
+    column: "tokens_cache_write_1h",
+    sql: "ALTER TABLE messages ADD COLUMN tokens_cache_write_1h INTEGER",
+  },
+]
+
+/**
+ * Apply BOOTSTRAP_SQL + MIGRATIONS to an already-open Database handle.
+ * Idempotent (`CREATE TABLE IF NOT EXISTS` + the duplicate-column catch
+ * on each ALTER). Shared by `openDb()` (plugin path) and the CLI
+ * (`opencode-cost zen-sync`) so both surfaces converge on the same
+ * schema regardless of which one runs first against a given DB file.
+ */
+export const applySchema = (db: any): void => {
+  db.exec(BOOTSTRAP_SQL)
+  for (const m of MIGRATIONS) {
+    try {
+      db.exec(m.sql)
+    } catch (e: any) {
+      const msg = String(e?.message ?? e)
+      if (!/duplicate column name/i.test(msg)) {
+        console.warn(`[cost-tracker] migration "${m.column}" failed:`, e)
+      }
+    }
+  }
+}
 
 export type DbHandle = {
   messages: {
@@ -164,7 +250,7 @@ export const openDb = async (): Promise<DbHandle | null> => {
     }
 
     try {
-      db.exec(BOOTSTRAP_SQL)
+      applySchema(db)
     } catch (e) {
       console.warn("[cost-tracker] schema bootstrap failed:", e)
       return null
@@ -176,14 +262,17 @@ export const openDb = async (): Promise<DbHandle | null> => {
           message_id, session_id, worktree_path, provider_id, model_id,
           agent, ts_created, ts_completed, tokens_input, tokens_output,
           tokens_reasoning, tokens_cache_read, tokens_cache_write,
+          tokens_cache_write_5m, tokens_cache_write_1h,
           cost_opencode_fxp8, cost_recomputed_fxp8, rate_version, finish, raw_json
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         row.message_id, row.session_id, row.worktree_path, row.provider_id,
         row.model_id, row.agent, row.ts_created, row.ts_completed,
         row.tokens_input, row.tokens_output, row.tokens_reasoning,
-        row.tokens_cache_read, row.tokens_cache_write, row.cost_opencode_fxp8,
-        row.cost_recomputed_fxp8, row.rate_version, row.finish, row.raw_json
+        row.tokens_cache_read, row.tokens_cache_write,
+        row.tokens_cache_write_5m, row.tokens_cache_write_1h,
+        row.cost_opencode_fxp8, row.cost_recomputed_fxp8, row.rate_version,
+        row.finish, row.raw_json
       )
     }
 
