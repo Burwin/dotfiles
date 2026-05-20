@@ -59,18 +59,17 @@ spend vs billing; Opencode API/MCP session tracking?"
   on a synthetic DB with deliberate drift produced correct delta
   columns across `--table` / `--json` / `--csv` / `--month` /
   Zen-only days; Phase 3 dump regression checks still pass.
-- 2026-05-19 — tmux status bar surface added
-  (`bin/opencode-cost-tmux-status`, bash + sqlite3) showing
-  `daily-cost: $N | total-cost: $M`, both rounded up to the nearest
-  dollar. Daily reads today's row in `zen_daily_billed` via
-  `date('now','localtime')` (matches Zen's per-tz date column);
-  total sums the whole table. Hidden silently when DB is missing or
-  empty. Wired into `tmux/.config/tmux/tmux.conf` status-right
-  ahead of the existing `toggl-tmux-status` segment. The zen-sync
-  systemd timer cadence bumped from `OnCalendar=hourly` to
-  `OnCalendar=*:0/10` so the number on screen lags by ≤10 minutes
-  instead of ≤60. Details in
-  `../opencode-cost-tmux-status/PLAN.md`.
+- 2026-05-19 — per-task tmux status bar + ecosystem rewrite.
+  Plugin capture bug fixed; Phase 5 backfill shipped
+  (`opencode-cost import-opencode`); per-row Zen integration
+  shipped (`zen_usage` table, per-row `zen-sync` rewrite);
+  `opencode-cost dump by-toggl` shipped with full §10 acceptance
+  tests; bar v2 ships per-task daily/total via the toggl JOIN.
+  zen-sync timer cadence now `OnCalendar=*:0/10`. v1 of this PLAN
+  archived to
+  `../../archive/opencode/PLAN-cost-tmux-status-v1.md`. Details
+  (six-commit breakdown, locked decisions, acceptance test corpus)
+  in `../opencode-cost-pertask-tmux-status/PLAN.md`.
 - 2026-05-19 — Commit 1 of
   `../opencode-cost-pertask-tmux-status/PLAN.md` shipped. **Plugin
   capture bug fixed**; `messages`, `session_rollup`, and
@@ -195,11 +194,9 @@ spend vs billing; Opencode API/MCP session tracking?"
   `docs/plans/opencode-cost-tracker/PLAN.md` (this entry).
   Committed on `MASTER-1703`; ff-merge to `m` is batched into
   Commit 6 of the master PLAN.
-- **Next:** Commit 3 of
-  `../opencode-cost-pertask-tmux-status/PLAN.md` — RED scaffolds
-  for the per-request zen-sync (Z0' parser tests and Z3' sync-loop
-  tests). Commits 4-6 then ship the per-row Zen integration, `dump
-  by-toggl`, the §10 acceptance tests, and the bar rewrite.
+- **Next:** monitor drift between local `cost_opencode_fxp8` and
+  Zen-billed `zen_usage.cost_fxp8` via
+  `dump reconciliation --by-message` over a week of normal usage.
 
 ### Fixed after Phase 3 landed (2026-05-19)
 

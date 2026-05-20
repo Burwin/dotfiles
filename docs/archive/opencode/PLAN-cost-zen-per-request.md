@@ -1,5 +1,20 @@
 # OpenCode Cost — Zen Per-Request Reconciliation — PLAN.md
 
+> **Superseded** by
+> [docs/plans/opencode-cost-pertask-tmux-status/PLAN.md](../../plans/opencode-cost-pertask-tmux-status/PLAN.md)
+> on 2026-05-19.
+>
+> Z0-Z5 + §10 acceptance tests are absorbed verbatim into the master
+> PLAN's Commits 3-5 and §10. Z6 (one-time `zen_daily_billed` sanity
+> capture) and Z7 ("update other plans") are dropped: Z6 was an
+> optional sanity check, and Z7 is the very work that produced the
+> master PLAN. The per-row `zen_usage` schema, the `_server`
+> pagination loop with `flock` lock, the static `$R[N]` parser, the
+> per-message reconcile, and `dump by-toggl` all shipped in the
+> consolidated master PLAN.
+>
+> Decision history below is preserved as-is for reference.
+
 Status: proposal (2026-05-19); revised 2026-05-19 with §10.6/§10.7
 acceptance tests and §9 re-ordering; implementation not yet started
 Owner: mbh
