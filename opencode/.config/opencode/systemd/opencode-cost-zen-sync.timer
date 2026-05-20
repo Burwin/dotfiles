@@ -1,14 +1,17 @@
 [Unit]
-Description=opencode-cost: Zen daily-billed sync (hourly)
+Description=opencode-cost: Zen daily-billed sync (every 10 minutes)
 Documentation=file:%h/src/dotfiles/docs/plans/opencode-cost-tracker/PLAN.md
 
 [Timer]
-# Hourly is plenty: Zen rolls usage up daily, and an hourly tick keeps
-# the "today's spend" view fresh enough for monitoring. The CLI defaults
-# to the current month (~30 daily × 4 model rows per fetch), UPSERTed
-# into zen_daily_billed.
-OnCalendar=hourly
-# Skip missed windows. If the laptop was asleep, the next hourly tick
+# Every 10 minutes on fixed wall-clock boundaries (xx:00, xx:10, ...).
+# Bumped from hourly so the tmux status-bar `daily-cost` figure lags
+# by ≤10 min instead of ≤60. The CLI defaults to the current month
+# (~30 daily × 4 model rows per fetch), UPSERTed into
+# zen_daily_billed — one fetch is idempotent and finishes in seconds,
+# so 6× more frequent runs are not a load concern. See
+# docs/plans/opencode-cost-tmux-status/PLAN.md §6.
+OnCalendar=*:0/10
+# Skip missed windows. If the laptop was asleep, the next 10-min tick
 # picks up everything that changed anyway (the request always returns
 # the full current month).
 Persistent=false

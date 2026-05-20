@@ -1,0 +1,71 @@
+#!/bin/bash
+# opencode-cost-tmux-status — emit a tmux status segment showing
+# today's spend and all-time spend from ~/.local/state/opencode-cost.db.
+#
+# Output is intended for tmux's status-right via #(); tmux style
+# markup (#[...]) below is interpreted by tmux's format parser when
+# the result is interpolated. Run standalone, markup shows literally.
+#
+# Hidden silently (empty stdout) when:
+#   - The DB file is missing.
+#   - sqlite3 fails or returns nothing.
+#   - The total of zen_daily_billed is zero (no rows yet).
+#
+# Both figures are rounded UP to the nearest dollar.
+#
+# Source data: zen_daily_billed in ~/.local/state/opencode-cost.db,
+# refreshed every 10 minutes by opencode-cost-zen-sync.timer (see
+# docs/plans/opencode-cost-tracker/PLAN.md). Date column in that table
+# is in the user's local tz (Zen returns dates per the tz_offset
+# argument in the request body), so date('now', 'localtime') matches.
+#
+# See: docs/plans/opencode-cost-tmux-status/PLAN.md
+
+# Style fragments (tmux markup), matching toggl-tmux-status's palette
+# so the cost and toggl segments visually align.
+POP='#[fg=blue,bold]'
+MUTED='#[fg=brightblack,nobold]'
+
+# DB path. OPENCODE_COST_DB override mirrors opencode-cost/dump.ts so
+# the same env var works for tests / fixture DBs.
+DB_PATH="${OPENCODE_COST_DB:-$HOME/.local/state/opencode-cost.db}"
+
+# No DB yet (fresh machine, never ran an opencode session with the
+# cost-tracker plugin, never ran a zen-sync) → blank slot.
+[[ -f "$DB_PATH" ]] || exit 0
+
+# Single query returns today_fxp8 + total_fxp8 in one round-trip.
+# -readonly is defensive (WAL mode means readers don't block writers
+# anyway) and documents intent. 2>/dev/null swallows any sqlite errors
+# so a transiently-busy DB falls through to "hide segment" rather than
+# spamming the status bar with error text.
+row=$(sqlite3 -readonly -separator $'\t' "$DB_PATH" "
+    SELECT
+        COALESCE(SUM(CASE WHEN date = date('now', 'localtime') THEN total_cost_fxp8 ELSE 0 END), 0),
+        COALESCE(SUM(total_cost_fxp8), 0)
+    FROM zen_daily_billed;
+" 2>/dev/null) || exit 0
+
+[[ -z "$row" ]] && exit 0
+
+IFS=$'\t' read -r today_fxp8 total_fxp8 <<<"$row"
+
+# Empty zen_daily_billed → hide the segment. Honest signal vs.
+# "cost: $0" which would read as "no spend" rather than "no data".
+[[ "$total_fxp8" -le 0 ]] && exit 0
+
+# Round UP to nearest dollar via the integer ceiling-by-floor trick:
+# ceil(x / denom) == (x + denom - 1) / denom for non-negative integers.
+# Sanity:
+#   x = 100_000_000 ($1.00 exactly) → 1
+#   x = 100_000_001 ($1.00000001)   → 2
+#   x =  99_999_999 ($0.99999999)   → 1
+daily_usd=$(( (today_fxp8 + 99999999) / 100000000 ))
+total_usd=$(( (total_fxp8 + 99999999) / 100000000 ))
+
+# Trailing " | " separates from the toggl segment that follows in
+# tmux.conf. The cost script owns its own separator so callers don't
+# have to special-case the empty-output path.
+printf 'daily-cost: %s$%d%s | total-cost: %s$%d%s | ' \
+    "$POP" "$daily_usd" "$MUTED" \
+    "$POP" "$total_usd" "$MUTED"
