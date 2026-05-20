@@ -165,6 +165,20 @@ Final state after Commit 6:
       the original master PLAN doc commit `6b5561a`) and
       `tmux source-file ~/.config/tmux/tmux.conf` activation
       follow the commit per P6.7 / P6.8.
+    - **§11.4 tmux.conf wiring fix (immediate follow-up):** the
+      PLAN's §11.4 incorrectly claimed v1's wiring needed no
+      change. v1's `#(opencode-cost-tmux-status)` invoked the bar
+      WITHOUT a `cd '#{pane_current_path}'` wrapper because v1
+      was global and didn't depend on the active pane's path. v2
+      resolves `worktree_root` from `$PWD`, so the bar was reading
+      tmux's launch directory (`/home/mbh`) and unconditionally
+      rendering `cost: (unmapped)` regardless of the active pane.
+      Fix: wrap the bar invocation in the same `cd
+      '#{pane_current_path}' 2>/dev/null && …` pattern that
+      `toggl-tmux-status` already uses. §11.4 of this PLAN updated
+      with the corrected wiring and a callout explaining why v1's
+      "no change" note was wrong. tmux.conf change landed on
+      `MASTER-1703` in the follow-up commit and ff-merged.
 - 2026-05-19 — **Commit 4 landed:** Z0 + Z1 + Z2 + Z3 GREEN.
   - **All 37 tests pass** (24 parser + 13 loop):
     `bun test ./opencode/.config/opencode/opencode-cost/tests/` reports
@@ -1428,11 +1442,22 @@ printf 'daily-cost: %s$%d%s | total-cost: %s$%d%s | ' \
 
 ### 11.4 tmux.conf wiring
 
-Already in place from v1; no change required in Commit 6. Reference:
+v1's wiring invoked the bar without a `pane_current_path` `cd` wrapper
+(it was global, didn't need per-pane scope). The v2 per-task bar
+resolves `worktree_root` from `$PWD`, so it MUST be invoked from the
+active pane's directory — same wrapper that toggl-tmux-status already
+uses:
 
 ```
-set -g status-right "#[fg=brightblack]#(opencode-cost-tmux-status)#(cd '#{pane_current_path}' 2>/dev/null && PATH=$HOME/.local/bin:$PATH toggl-tmux-status) | #h "
+set -g status-right "#[fg=brightblack]#(cd '#{pane_current_path}' 2>/dev/null && opencode-cost-tmux-status)#(cd '#{pane_current_path}' 2>/dev/null && PATH=$HOME/.local/bin:$PATH toggl-tmux-status) | #h "
 ```
+
+Without the `cd '#{pane_current_path}'` prefix, the bar inherits
+tmux's launch directory (often `$HOME`), reports `cost: (unmapped)`
+regardless of the active pane, and silently breaks pane-locality
+(§11.5). v1's "no change required in Commit 6" note was an oversight
+caught immediately post-merge and fixed in the same commit chain
+(see Commit 6 Progress entry).
 
 ### 11.5 Pane locality
 
