@@ -59,6 +59,18 @@ spend vs billing; Opencode API/MCP session tracking?"
   on a synthetic DB with deliberate drift produced correct delta
   columns across `--table` / `--json` / `--csv` / `--month` /
   Zen-only days; Phase 3 dump regression checks still pass.
+- 2026-05-19 — tmux status bar surface added
+  (`bin/opencode-cost-tmux-status`, bash + sqlite3) showing
+  `daily-cost: $N | total-cost: $M`, both rounded up to the nearest
+  dollar. Daily reads today's row in `zen_daily_billed` via
+  `date('now','localtime')` (matches Zen's per-tz date column);
+  total sums the whole table. Hidden silently when DB is missing or
+  empty. Wired into `tmux/.config/tmux/tmux.conf` status-right
+  ahead of the existing `toggl-tmux-status` segment. The zen-sync
+  systemd timer cadence bumped from `OnCalendar=hourly` to
+  `OnCalendar=*:0/10` so the number on screen lags by ≤10 minutes
+  instead of ≤60. Details in
+  `../opencode-cost-tmux-status/PLAN.md`.
 - **Next:** §12.4 prereqs (capture cookie + x-server-id + write
   `~/.config/opencode-cost/config.json`) then run
   `opencode-cost zen-sync --dry-run --month 2026-05` for a live
