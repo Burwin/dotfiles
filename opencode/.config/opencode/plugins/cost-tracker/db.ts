@@ -249,6 +249,25 @@ export const openDb = async (): Promise<DbHandle | null> => {
       return null
     }
 
+    // Multiple opencode processes share this DB (one per concurrent TUI
+    // / tmux pane). bun:sqlite defaults busy_timeout to 0, meaning any
+    // colliding write throws `SqliteError: database is locked`
+    // immediately instead of waiting. With WAL mode (set in
+    // BOOTSTRAP_SQL) writers still serialize via filesystem locks, so a
+    // non-zero busy_timeout is what makes the multi-process write path
+    // actually safe. 5s is comfortably above the worst real
+    // session-message rate (one write per assistant turn).
+    //
+    // Symptom this fixes: short SqliteError stack traces flashing
+    // behind the opencode TUI (console.warn from the plugin's event
+    // handler catch goes to stderr, not opencode's file logger, and
+    // bleeds into the alternate screen buffer during redraws).
+    try {
+      db.exec("PRAGMA busy_timeout = 5000;")
+    } catch (e) {
+      console.warn("[cost-tracker] failed to set busy_timeout:", e)
+    }
+
     try {
       applySchema(db)
     } catch (e) {
