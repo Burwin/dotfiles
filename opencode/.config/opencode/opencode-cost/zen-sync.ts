@@ -1,78 +1,122 @@
-// opencode-cost/zen-sync.ts — pulls daily per-model billed-dollar totals
-// from Zen's internal `_server` server-function endpoint, parses the
-// `$R[n]` slot-graph response, and writes to `zen_daily_billed`.
+// opencode-cost/zen-sync.ts — pulls per-row Zen usage from the internal
+// `_server` endpoint, parses the `$R[n]` slot-graph response with the
+// `new Date("ISO")` literal extension, and writes typed rows to
+// `zen_usage`. After each successful sync, `zen_daily_billed` is rebuilt
+// from `zen_usage` via UPSERT GROUP BY (date, model, key_id).
 //
-// Design and rationale: ../../../../docs/plans/opencode-cost-tracker/PLAN.md
+// Design and rationale:
+//   ../../../../docs/plans/opencode-cost-pertask-tmux-status/PLAN.md
+//   (§4.1 zen_usage schema, §5 sync loop, §10.6 + §10.7 acceptance
+//   tests, §13 archived parent at opencode-cost-tracker/PLAN.md).
 //
 // Phase ownership of this file:
-//   Phase 4 (zen reconciliation, tier: sota) — implements the request
-//     builder, the `;0xHEX;` chunk-prefix stripper, the static `$R[n]`
-//     graph parser, and the UPSERT into zen_daily_billed.
+//   Z0 (parser) — static $R[n] walker extended to recognize
+//     `new Date("ISO")` literals and surface the ISO string as the row
+//     field value. `parseUsageList(body): ZenUsageRowFull[]` is the
+//     per-row entry point; unknown row fields collect under
+//     `enrichment` per the §4.1 forward-compat decision pinned by
+//     §10.7.f.
+//   Z3 (sync loop) — 2-arg `_server` per-row body (workspaceId, page);
+//     pagination loop with empty/short-page/newestKnown-overlap/1000-
+//     page-cap stop conditions per §5.2; `acquireSyncLock` advisory
+//     lock at ~/.local/state/opencode-cost/zen-sync.lock per §5.3
+//     (exit code 75 on contention, OPENCODE_COST_LOCK_DIR env override
+//     for test isolation).
 //
 // IMPORTANT: parse the response STATICALLY. Do NOT use `node:vm`, `eval`,
-// or `new Function()` to evaluate the returned IIFE. The static parser
-// here is a small recursive-descent over a JS-literal subset (objects,
-// arrays, primitives, `$R[N]` reads, `$R[N] = expr` assignments). It
-// rejects anything else — so a malicious/altered response can't smuggle
-// behaviour past it.
+// or `new Function()` to evaluate the returned IIFE wrapper. The parser
+// is a small recursive-descent over a JS-literal subset (objects, arrays,
+// primitives, `$R[N]` reads/writes, `new Date("ISO")`, arrow function
+// bodies, IIFE wrappers via parens + trailers). It rejects anything else,
+// so a malicious/altered response can't smuggle behaviour past it.
 //
-// Request shape (captured 2026-05-18 from Zen dashboard's workspace
-// usage page — see PLAN.md §6 Phase 4 for full headers and decoding):
+// Request shape (per-row, captured 2026-05-19 from Zen's usage page):
 //
 //   POST https://opencode.ai/_server
-//   Body: {"t":{"t":9,"i":0,"l":4,"a":[
+//   Body: {"t":{"t":9,"i":0,"l":2,"a":[
 //            {"t":1,"s":"<workspace_id>"},
-//            {"t":0,"s":<year>},
-//            {"t":0,"s":<month_0_indexed>},
-//            {"t":1,"s":"<tz_offset_like_-04:00>"}
+//            {"t":0,"s":<page>},
 //          ],"o":0},
 //          "f":31,"m":[]}
 //
 // Response shape (after stripping `;0xNNNNN;` chunk prefixes and parsing
 // the `$R[n]` slot graph):
 //
-//   { usage: Array<{ date, model, totalCost (fxp8), keyId, plan }>,
-//     keys:  Array<{ id, displayName, deleted }> }
+//   $R[0] = Array<{
+//     id, workspaceId, sessionId, keyId, model, provider,
+//     timeCreated, timeUpdated, timeDeleted,
+//     inputTokens, outputTokens, reasoningTokens,
+//     cacheReadTokens, cacheWrite5mTokens, cacheWrite1hTokens,
+//     cost,
+//     ...any unrecognized fields land under `enrichment`
+//   }>
 //
-// Fragility budget (full table in PLAN.md §7):
+// Fragility budget (full table in PLAN.md §8):
 //   - Cookie expires       → 401 / login redirect → recapture from DevTools.
 //   - x-server-id rotates  → 4xx/5xx → re-scrape from workspace HTML.
 //   - f:31 function shifts → wrong-shape response → re-scrape JS bundle.
 //   - $R[n] format changes → parse failure → dump raw response, bail loud.
+//   - Page size constant (50) drifts → short-page guard handles both
+//     directions (§10.6.i / §10.6.j).
+//   - Concurrent sync runs (timer + manual) → flock advisory at
+//     ~/.local/state/opencode-cost/zen-sync.lock → exit 75 on contention.
 
 import fs from "node:fs"
 import path from "node:path"
 import { Database } from "bun:sqlite"
+import { applySchema } from "../plugins/cost-tracker/db.ts"
 
 // --------------------------------------------------------------------------
 // Types
 // --------------------------------------------------------------------------
 
-export type ZenUsageRow = {
-  date: string                // "YYYY-MM-DD"
-  model: string               // e.g. "claude-opus-4-7"
-  totalCost: number           // fxp8 USD (×1e-8). Integer per Zen's serializer.
-  keyId: string
-  plan: string | null         // null = pay-as-you-go
-}
-
-export type ZenKey = {
+/**
+ * Per-row Zen usage shape after normalization. Mirrors the §4.1
+ * `zen_usage` schema column-for-column (camelCase here, snake_case in
+ * SQLite). The `enrichment` map is the forward-compat sink for any
+ * top-level row field not already in the typed schema; serialized to
+ * `enrichment_json` on persist. Pinned by tests §10.7.f.
+ */
+export type ZenUsageRowFull = {
   id: string
-  displayName: string
-  deleted: boolean
-}
-
-export type ZenUsageResponse = {
-  usage: ZenUsageRow[]
-  keys: ZenKey[]
+  workspaceId: string
+  sessionId: string | null
+  keyId: string
+  model: string
+  provider: string
+  timeCreated: string
+  timeUpdated: string
+  timeDeleted: string | null
+  inputTokens: number
+  outputTokens: number
+  reasoningTokens: number | null
+  cacheReadTokens: number
+  cacheWrite5mTokens: number | null
+  cacheWrite1hTokens: number | null
+  cost: number
+  enrichment: Record<string, unknown> | null
 }
 
 export type ZenSyncConfig = {
   workspaceId: string
-  keyId: string               // optional; used as a default fallback only
-  tzOffset: string            // e.g. "-04:00"
-  serverId: string            // x-server-id; rotates on Zen deploys
-  fnIndex?: number            // server-function index; defaults to 31 ("f":31)
+  keyId: string
+  /** @deprecated tz_offset is unused by the per-row endpoint; kept on the
+   * type for backward compat with config.json files that still carry it. */
+  tzOffset: string
+  serverId: string
+  fnIndex?: number
+}
+
+export type SyncAllResult = {
+  written: number
+  fetched: number
+  pagesFetched: number
+}
+
+export type SyncLockHandle = {
+  release: () => Promise<void>
+  pid: number
+  since: string
 }
 
 // --------------------------------------------------------------------------
@@ -86,6 +130,7 @@ const COOKIE_PATH = process.env.OPENCODE_ZEN_COOKIE ??
   `${HOME}/.config/opencode/secrets/zen-session-cookie`
 const DB_PATH = process.env.OPENCODE_COST_DB ??
   `${HOME}/.local/state/opencode-cost.db`
+const DEFAULT_LOCK_DIR = `${HOME}/.local/state/opencode-cost`
 
 const loadConfig = (): ZenSyncConfig => {
   let raw: string
@@ -95,7 +140,7 @@ const loadConfig = (): ZenSyncConfig => {
     throw new Error(
       `cannot read ${CONFIG_PATH}: ${e?.message ?? e}\n` +
       `create it per PLAN.md §8 "Re-scrape x-server-id" with keys:\n` +
-      `  workspace_id, key_id, tz_offset, server_id (optional: fn_index)`,
+      `  workspace_id, key_id, server_id (optional: tz_offset, fn_index)`,
     )
   }
   let parsed: any
@@ -104,16 +149,24 @@ const loadConfig = (): ZenSyncConfig => {
   } catch (e: any) {
     throw new Error(`${CONFIG_PATH}: invalid JSON (${e?.message ?? e})`)
   }
-  const required = ["workspace_id", "tz_offset", "server_id"] as const
+  const required = ["workspace_id", "server_id"] as const
   for (const k of required) {
     if (typeof parsed[k] !== "string" || parsed[k].length === 0) {
       throw new Error(`${CONFIG_PATH}: missing or empty field "${k}"`)
     }
   }
+  if (typeof parsed.tz_offset === "string" && parsed.tz_offset.length > 0) {
+    // Per §14 open item 3: tz_offset is vestigial for the per-row endpoint.
+    // Warn once per process so operators can clean it up at leisure.
+    console.warn(
+      "[zen-sync] tz_offset is deprecated and ignored by the per-row " +
+      "endpoint; remove from ~/.config/opencode-cost/config.json.",
+    )
+  }
   return {
     workspaceId: parsed.workspace_id,
     keyId: parsed.key_id ?? "",
-    tzOffset: parsed.tz_offset,
+    tzOffset: parsed.tz_offset ?? "",
     serverId: parsed.server_id,
     fnIndex: typeof parsed.fn_index === "number" ? parsed.fn_index : undefined,
   }
@@ -135,34 +188,55 @@ const loadCookie = (): string => {
 }
 
 // --------------------------------------------------------------------------
-// Request builder
+// Request builder (per-row, 2-arg)
 // --------------------------------------------------------------------------
 
-const buildRequestBody = (
+/**
+ * Per-row `usage.list` body: TanStack-Start serializer with two function
+ * args — workspace_id (string) and page (0-indexed int). Replaces the
+ * Phase 4 four-arg daily-aggregate body. Pinned by the loop tests' mock
+ * server, which decodes `body.t.a[1].s` as the page index.
+ *
+ * Note: unlike the legacy daily-aggregate endpoint (`f: 31`), the
+ * per-row endpoint is dispatched by an SHA-256 X-Server-Id header
+ * (createServerReference in Zen's frontend bundle), so this body
+ * carries NO `f` field. fnIndex is retained on the signature for
+ * call-site compatibility but currently ignored; pass any value.
+ */
+export const buildPerRowRequestBody = (
   workspaceId: string,
-  year: number,
-  month0: number,        // 0-indexed
-  tzOffset: string,
-  fnIndex: number,
+  page: number,
+  _fnIndex?: number,
 ): string => {
-  // See PLAN.md §6 Phase 4 for the TanStack-Start serializer encoding.
   return JSON.stringify({
     t: {
       t: 9,
       i: 0,
-      l: 4,
+      l: 2,
       a: [
         { t: 1, s: workspaceId },
-        { t: 0, s: year },
-        { t: 0, s: month0 },
-        { t: 1, s: tzOffset },
+        { t: 0, s: page },
       ],
       o: 0,
     },
-    f: fnIndex,
     m: [],
   })
 }
+
+/**
+ * SHA-256 reference for the per-row `usage.list` server function. Read
+ * out of Zen's frontend bundle (`createServerReference("...")` in
+ * `_build/assets/index-*.js`). When this rotates after a Zen deploy,
+ * the diagnostic on HTTP 4xx/5xx in fetchPage points the operator at
+ * the recovery runbook (PLAN §8). Override via OPENCODE_COST_USAGE_LIST_SHA.
+ */
+const DEFAULT_USAGE_LIST_SHA =
+  "bfd684bfc2e4eed05cd0b518f5e4eafd3f3376e3938abb9e536e7c03df831e5c"
+
+const resolveUsageListSha = (config: ZenSyncConfig): string =>
+  process.env.OPENCODE_COST_USAGE_LIST_SHA ??
+  (config as unknown as { usageListSha?: string }).usageListSha ??
+  DEFAULT_USAGE_LIST_SHA
 
 // --------------------------------------------------------------------------
 // Chunk-prefix stripper
@@ -181,12 +255,15 @@ export const stripChunkPrefixes = (body: string): string =>
 // Static $R[n] graph parser
 // --------------------------------------------------------------------------
 //
-// Grammar (recursive-descent, no operator precedence beyond what we need):
+// Grammar (recursive-descent):
 //
-//   program     := value
+//   program     := stmt (';' stmt)*
+//   stmt        := value
 //   value       := primary
 //   primary     := assign | object | array | string | number | literal
 //                | refRead | parens | arrow | call | member | comment
+//                | newDate
+//   newDate     := 'new' 'Date' '(' (string|number)? (',' value)* ')'
 //   assign      := '$R[' int ']' '=' value
 //   refRead     := '$R[' int ']'                       -- back-reference
 //   object      := '{' (key ':' value (',' key ':' value)*)? '}'
@@ -194,9 +271,10 @@ export const stripChunkPrefixes = (body: string): string =>
 //   array       := '[' (value (',' value)*)? ']'
 //   string      := '"…"' | "'…'"
 //   number      := /-?\d+(\.\d+)?(e[+-]?\d+)?/
-//   literal     := 'null' | 'true' | 'false' | 'undefined'
+//   literal     := 'null' | 'true' | 'false' | 'undefined' | 'NaN' | 'Infinity'
 //   parens      := '(' value (',' value)* ')'          -- sequence; returns last
-//   arrow       := ident '=>' value                    -- discard params, parse body
+//   arrow       := ident '=>' arrowBody | '(' params ')' '=>' arrowBody
+//   arrowBody   := value | '{' (stmt ';')* (stmt)? '}' -- block returns last
 //   call        := value '(' (value (',' value)*)? ')' -- discard, return callee
 //   member      := value '.' ident | value '[' (string|number) ']'
 //
@@ -330,6 +408,22 @@ const parseIdent = (s: ParseState): string => {
 // Forward decl
 let parseValue: (s: ParseState) => unknown
 
+const parseArgList = (s: ParseState): unknown[] => {
+  expect(s, "(")
+  const args: unknown[] = []
+  skipWs(s)
+  if (s.peek() === ")") { s.pos++; return args }
+  for (;;) {
+    skipWs(s)
+    args.push(parseValue(s))
+    skipWs(s)
+    if (s.peek() === ",") { s.pos++; continue }
+    break
+  }
+  expect(s, ")")
+  return args
+}
+
 const parseArray = (s: ParseState): unknown[] => {
   expect(s, "[")
   const out: unknown[] = []
@@ -410,7 +504,8 @@ const parseRefOrAssign = (s: ParseState): unknown => {
     s.slots.set(id, value)
     return value
   }
-  // Read-only back-reference. Resolve eagerly if already in the slot map;
+  // Read-only back-reference. Resolve eagerly if already in the slot map
+  // (preserves instance equality across shared back-refs per §10.7.b);
   // otherwise emit a placeholder for the post-pass to resolve.
   if (s.slots.has(id)) return s.slots.get(id)
   return makeRef(id)
@@ -495,13 +590,56 @@ const parseTrailers = (s: ParseState, value: unknown): unknown => {
   return value
 }
 
+// Parse an arrow function body. The expression form (`x => x + 1`) is
+// just a value. The block form (`x => { stmt; stmt; return X }`) needs
+// a separate parser because the existing object parser would mis-parse
+// `{ $R[1] = ... }` as an object literal with key `$R`.
+//
+// Statements inside the block can include `return X` (we strip the
+// keyword and parse X as the block's return value), bare assignments
+// like `$R[N] = ...` (side-effect on the slot map; value discarded),
+// or any other value. Multiple statements separated by `;`.
+const parseBlockBody = (s: ParseState): unknown => {
+  expect(s, "{")
+  let last: unknown = undefined
+  for (;;) {
+    skipWs(s)
+    if (s.peek() === "}" || s.pos >= s.src.length) break
+    // Allow `return X` — discard the `return`, parse the expr.
+    if (
+      s.src.slice(s.pos, s.pos + 6) === "return" &&
+      !isIdentCont(s.peek(6))
+    ) {
+      s.pos += 6
+      skipWs(s)
+      if (s.peek() === ";" || s.peek() === "}") {
+        last = undefined
+      } else {
+        last = parseValue(s)
+      }
+    } else {
+      last = parseValue(s)
+    }
+    skipWs(s)
+    // Multiple `;` separators allowed.
+    while (s.peek() === ";") { s.pos++; skipWs(s) }
+  }
+  if (s.peek() === "}") s.pos++
+  return last
+}
+
+const parseArrowBody = (s: ParseState): unknown => {
+  skipWs(s)
+  if (s.peek() === "{") return parseBlockBody(s)
+  return parseValue(s)
+}
+
 // Detect an arrow function: `ident =>` or `(ident, ident, ...) =>`. We
 // drop the parameter list and parse the body. Inside the body, any
 // $R[N] reads/writes hit the same slot map (the parameter rename is
 // a JS detail we don't model — the response always names the
 // parameter `$R`).
 const tryParseArrow = (s: ParseState): unknown | typeof NO_MATCH => {
-  const save = s.pos
   // Single-ident arrow: `$R => …`
   if (isIdentStart(s.peek())) {
     const idStart = s.pos
@@ -509,7 +647,7 @@ const tryParseArrow = (s: ParseState): unknown | typeof NO_MATCH => {
     skipWs(s)
     if (s.src.slice(s.pos, s.pos + 2) === "=>") {
       s.pos += 2
-      return parseValue(s)
+      return parseArrowBody(s)
     }
     s.pos = idStart
   }
@@ -540,7 +678,7 @@ const tryParseArrow = (s: ParseState): unknown | typeof NO_MATCH => {
     while (j < s.src.length && isWs(s.src[j])) j++
     if (s.src.slice(j, j + 2) === "=>") {
       s.pos = j + 2
-      return parseValue(s)
+      return parseArrowBody(s)
     }
     s.pos = depth0
   }
@@ -568,7 +706,7 @@ parseValue = (s: ParseState): unknown => {
   }
 
   // Unary `void`: seroval emits `void 0` for `undefined`.
-  if (c === "v" && s.src.slice(s.pos, s.pos + 5) === "void " ) {
+  if (c === "v" && s.src.slice(s.pos, s.pos + 5) === "void ") {
     s.pos += 5
     parseValue(s)  // discard
     return undefined
@@ -600,6 +738,26 @@ parseValue = (s: ParseState): unknown => {
     else if (ident === "undefined") val = undefined
     else if (ident === "NaN") val = NaN
     else if (ident === "Infinity") val = Infinity
+    else if (ident === "new") {
+      // §10.7.a — `new Date("ISO")` literal. seroval emits Date instances
+      // this way; surface the ISO string as the value so the per-row
+      // normalizer can store it in `time_created` / `time_updated` /
+      // `time_deleted` columns unchanged. Other constructors are
+      // best-effort discarded (consume optional arg list, return undef).
+      skipWs(s)
+      const ctor = isIdentStart(s.peek()) ? parseIdent(s) : ""
+      skipWs(s)
+      if (ctor === "Date" && s.peek() === "(") {
+        const args = parseArgList(s)
+        if (args.length === 0) val = new Date(0).toISOString()
+        else if (typeof args[0] === "string") val = args[0]
+        else if (typeof args[0] === "number") val = new Date(args[0]).toISOString()
+        else val = undefined
+      } else {
+        if (s.peek() === "(") parseArgList(s)
+        val = undefined
+      }
+    }
     else if (ident === "self" || ident === "globalThis" || ident === "window") {
       // `self.$R = self.$R || {}` boilerplate — descend into trailers and
       // let them swallow the rest of the chain.
@@ -639,23 +797,30 @@ const resolveRefs = (slots: Slots): void => {
   }
 }
 
-// Public parser entry point. Strips chunk prefixes, parses the full
-// response, returns the root slot (`$R[0]`).
+/**
+ * Public low-level parser entry point. Strips chunk prefixes, parses the
+ * full response, returns the root slot (`$R[0]`). Handles top-level
+ * statement sequences (`stmt; stmt; stmt`) so IIFE-wrapped bodies parse
+ * cleanly — see §10.7.i fixture.
+ */
 export const parseServerResponse = (body: string): unknown => {
   const stripped = stripChunkPrefixes(body).trim()
   if (stripped.length === 0) throw new Error("empty response body")
   const state = new ParseState(stripped)
-  parseValue(state)
-  // After parsing, also walk any straggling assignments after the IIFE
-  // — defensive against future format changes.
+  // Allow leading `;` separators (defensive against minifier quirks).
   skipWs(state)
-  while (state.pos < state.src.length) {
+  while (state.peek() === ";") { state.pos++; skipWs(state) }
+  if (state.pos < state.src.length) parseValue(state)
+  // Walk straggling statements after the first expression.
+  for (;;) {
+    skipWs(state)
+    while (state.peek() === ";") { state.pos++; skipWs(state) }
+    if (state.pos >= state.src.length) break
     const before = state.pos
     try { parseValue(state) } catch {
       // Bail on trailing garbage; we have the data we need.
       break
     }
-    skipWs(state)
     if (state.pos === before) break
   }
   resolveRefs(state.slots)
@@ -666,66 +831,154 @@ export const parseServerResponse = (body: string): unknown => {
   return root
 }
 
-// Normalize the parsed response into ZenUsageResponse. Defensive against
-// shape drift: missing fields default to null/0, type mismatches throw
-// loudly (better than a silent skew in the reconciliation).
-export const normalizeUsageResponse = (root: unknown): ZenUsageResponse => {
-  if (typeof root !== "object" || root === null) {
-    throw new Error(`expected object at $R[0], got ${typeof root}`)
+// --------------------------------------------------------------------------
+// Per-row normalizer
+// --------------------------------------------------------------------------
+
+// Field-name aliases. The plan's typed shape uses camelCase `workspaceId`,
+// `keyId`, `sessionId` (which is what the test fixtures pin), but the
+// real Zen `_server` response shapes them as `workspaceID`, `keyID`,
+// `sessionID` (capital ID, SCREAMING_id style). Accept either spelling
+// so the same normalizer handles fixtures AND live responses; canonical
+// output uses the camelCase form. Recursive name clash: the real Zen
+// row carries a top-level `enrichment: null` field that we want to
+// fold INTO our own enrichment catch-all (so the column persists `null`
+// rather than `{enrichment: null}`).
+const FIELD_ALIASES: Record<string, ReadonlyArray<string>> = {
+  workspaceId: ["workspaceId", "workspaceID"],
+  sessionId: ["sessionId", "sessionID"],
+  keyId: ["keyId", "keyID"],
+}
+
+const ALIASED_INPUT_NAMES: ReadonlySet<string> = new Set(
+  Object.values(FIELD_ALIASES).flatMap((arr) => [...arr]),
+)
+
+// All input field names the normalizer recognizes (either the canonical
+// camelCase or one of the aliases above). Anything outside this set lands
+// in `enrichment` for forward-compat per §4.1 / §10.7.f.
+const KNOWN_INPUT_FIELDS: ReadonlySet<string> = new Set([
+  "id", "model", "provider",
+  "timeCreated", "timeUpdated", "timeDeleted",
+  "inputTokens", "outputTokens", "reasoningTokens",
+  "cacheReadTokens", "cacheWrite5mTokens", "cacheWrite1hTokens",
+  "cost",
+  // Aliased fields:
+  ...ALIASED_INPUT_NAMES,
+  // Real Zen carries a top-level `enrichment` field too. Fold it
+  // into our own enrichment object rather than nesting under itself.
+  "enrichment",
+])
+
+const requireString = (v: unknown, ctx: string): string => {
+  if (typeof v !== "string") {
+    throw new Error(`${ctx}: expected string, got ${typeof v} (${JSON.stringify(v)})`)
   }
-  const obj = root as Record<string, unknown>
-  const usageRaw = obj.usage
-  if (!Array.isArray(usageRaw)) {
-    throw new Error(`expected $R[0].usage to be an array, got ${typeof usageRaw}`)
+  return v
+}
+
+const nullableString = (v: unknown, ctx: string): string | null => {
+  if (v === null || v === undefined) return null
+  if (typeof v === "string") return v
+  throw new Error(`${ctx}: expected string or null, got ${typeof v}`)
+}
+
+const requireNumber = (v: unknown, ctx: string): number => {
+  if (typeof v !== "number") {
+    throw new Error(`${ctx}: expected number, got ${typeof v} (${JSON.stringify(v)})`)
   }
-  const usage: ZenUsageRow[] = usageRaw.map((row, i) => {
-    if (typeof row !== "object" || row === null) {
-      throw new Error(`$R[0].usage[${i}] is not an object`)
+  return v
+}
+
+const nullableNumber = (v: unknown, ctx: string): number | null => {
+  if (v === null || v === undefined) return null
+  if (typeof v === "number") return v
+  throw new Error(`${ctx}: expected number or null, got ${typeof v}`)
+}
+
+/** Return the first present value among the listed aliases, or undefined. */
+const pickAliased = (r: Record<string, unknown>, aliases: readonly string[]): unknown => {
+  for (const name of aliases) {
+    if (name in r) return r[name]
+  }
+  return undefined
+}
+
+const normalizeRow = (raw: unknown, idx: number): ZenUsageRowFull => {
+  if (typeof raw !== "object" || raw === null) {
+    throw new Error(`$R[0][${idx}] is not an object (got ${typeof raw})`)
+  }
+  const r = raw as Record<string, unknown>
+  const ctx = (field: string) => `$R[0][${idx}].${field}`
+
+  // Collect unrecognized fields under enrichment (preserves the actual
+  // object reference for shared back-refs per §10.7.b). The real Zen
+  // top-level `enrichment` field (currently always null) merges in too.
+  const enrichmentMap: Record<string, unknown> = {}
+  for (const k of Object.keys(r)) {
+    if (!KNOWN_INPUT_FIELDS.has(k)) enrichmentMap[k] = r[k]
+  }
+  // Fold the upstream `enrichment` value if it's a non-null object.
+  const upstreamEnrichment = r.enrichment
+  if (upstreamEnrichment && typeof upstreamEnrichment === "object" && !Array.isArray(upstreamEnrichment)) {
+    for (const [k, v] of Object.entries(upstreamEnrichment as Record<string, unknown>)) {
+      // Don't clobber locally-discovered enrichment keys with upstream's.
+      if (!(k in enrichmentMap)) enrichmentMap[k] = v
     }
-    const r = row as Record<string, unknown>
-    const date = String(r.date ?? "")
-    const model = String(r.model ?? "")
-    const keyId = String(r.keyId ?? "")
-    const totalCostRaw = r.totalCost
-    const totalCost = typeof totalCostRaw === "number"
-      ? totalCostRaw
-      : typeof totalCostRaw === "string" && /^-?\d+$/.test(totalCostRaw)
-        ? parseInt(totalCostRaw, 10)
-        : NaN
-    if (!Number.isFinite(totalCost)) {
-      throw new Error(`$R[0].usage[${i}].totalCost is not numeric: ${totalCostRaw}`)
-    }
-    const plan = r.plan == null ? null : String(r.plan)
-    return { date, model, totalCost, keyId, plan }
-  })
-  const keysRaw = obj.keys
-  const keys: ZenKey[] = Array.isArray(keysRaw)
-    ? keysRaw.map(k => {
-        const o = (k as Record<string, unknown>) ?? {}
-        return {
-          id: String(o.id ?? ""),
-          displayName: String(o.displayName ?? ""),
-          deleted: Boolean(o.deleted),
-        }
-      })
-    : []
-  return { usage, keys }
+  }
+  const enrichment = Object.keys(enrichmentMap).length > 0 ? enrichmentMap : null
+
+  return {
+    id: requireString(r.id, ctx("id")),
+    workspaceId: requireString(pickAliased(r, FIELD_ALIASES.workspaceId), ctx("workspaceId")),
+    sessionId: nullableString(pickAliased(r, FIELD_ALIASES.sessionId), ctx("sessionId")),
+    keyId: requireString(pickAliased(r, FIELD_ALIASES.keyId), ctx("keyId")),
+    model: requireString(r.model, ctx("model")),
+    provider: requireString(r.provider, ctx("provider")),
+    timeCreated: requireString(r.timeCreated, ctx("timeCreated")),
+    timeUpdated: requireString(r.timeUpdated, ctx("timeUpdated")),
+    timeDeleted: nullableString(r.timeDeleted, ctx("timeDeleted")),
+    inputTokens: requireNumber(r.inputTokens, ctx("inputTokens")),
+    outputTokens: requireNumber(r.outputTokens, ctx("outputTokens")),
+    reasoningTokens: nullableNumber(r.reasoningTokens, ctx("reasoningTokens")),
+    cacheReadTokens: requireNumber(r.cacheReadTokens, ctx("cacheReadTokens")),
+    cacheWrite5mTokens: nullableNumber(r.cacheWrite5mTokens, ctx("cacheWrite5mTokens")),
+    cacheWrite1hTokens: nullableNumber(r.cacheWrite1hTokens, ctx("cacheWrite1hTokens")),
+    cost: requireNumber(r.cost, ctx("cost")),
+    enrichment,
+  }
+}
+
+/**
+ * Per-row entry point. Parses a `_server` response body and returns the
+ * typed `ZenUsageRowFull[]` array. Throws when `$R[0]` is not assigned
+ * (deploy-time shape break) or when a known field has an unexpected
+ * type. Unknown row fields are preserved under `enrichment` per the
+ * §4.1 forward-compat decision.
+ *
+ * Acceptance: §10.7.a–i — see ./tests/zen-sync.parser.test.ts.
+ */
+export const parseUsageList = (body: string): ZenUsageRowFull[] => {
+  const root = parseServerResponse(body)
+  if (!Array.isArray(root)) {
+    throw new Error(`expected $R[0] to be an array, got ${typeof root}`)
+  }
+  return root.map((raw, i) => normalizeRow(raw, i))
 }
 
 // --------------------------------------------------------------------------
-// HTTP
+// HTTP fetch (per-row, paginated)
 // --------------------------------------------------------------------------
 
-export const fetchZenUsage = async (
-  config: ZenSyncConfig,
+const fetchPage = async (
+  page: number,
   cookie: string,
-  year: number,
-  month0: number,
-): Promise<ZenUsageResponse> => {
-  const fnIndex = config.fnIndex ?? 31
-  const body = buildRequestBody(config.workspaceId, year, month0, config.tzOffset, fnIndex)
+  config: ZenSyncConfig,
+): Promise<ZenUsageRowFull[]> => {
+  const body = buildPerRowRequestBody(config.workspaceId, page)
   const url = `https://opencode.ai/_server`
   const referer = `https://opencode.ai/workspace/${config.workspaceId}/usage`
+  const usageListSha = resolveUsageListSha(config)
 
   let res: Response
   try {
@@ -736,42 +989,41 @@ export const fetchZenUsage = async (
         "cookie": cookie,
         "origin": "https://opencode.ai",
         "referer": referer,
-        "x-server-id": config.serverId,
+        "x-server-id": usageListSha,
         "x-server-instance": "server-fn:0",
       },
       body,
     })
   } catch (e: any) {
-    throw new Error(`HTTP request to ${url} failed: ${e?.message ?? e}`)
+    throw new Error(`HTTP request to ${url} failed (page=${page}): ${e?.message ?? e}`)
   }
 
   if (!res.ok) {
     const text = await res.text().catch(() => "")
     if (res.status === 401 || res.status === 403) {
       throw new Error(
-        `HTTP ${res.status} from Zen: cookie likely expired.\n` +
+        `HTTP ${res.status} from Zen (page=${page}): cookie likely expired.\n` +
         `Recapture per PLAN.md §8 "Re-capture Zen session cookie".\n` +
         `Body excerpt: ${text.slice(0, 200)}`,
       )
     }
     if (res.status === 404 || res.status === 500) {
       throw new Error(
-        `HTTP ${res.status} from Zen: x-server-id (${config.serverId}) ` +
+        `HTTP ${res.status} from Zen (page=${page}): x-server-id (${usageListSha}) ` +
         `may have rotated after a deploy.\n` +
-        `Re-scrape per PLAN.md §8 "Re-scrape x-server-id".\n` +
+        `Re-scrape from \`_build/assets/index-*.js\` (look for ` +
+        `\`createServerReference("…")\` near \`usage.list\`).\n` +
         `Body excerpt: ${text.slice(0, 200)}`,
       )
     }
-    throw new Error(`HTTP ${res.status} from Zen: ${text.slice(0, 500)}`)
+    throw new Error(`HTTP ${res.status} from Zen (page=${page}): ${text.slice(0, 500)}`)
   }
 
   const text = await res.text()
   try {
-    const root = parseServerResponse(text)
-    return normalizeUsageResponse(root)
+    return parseUsageList(text)
   } catch (e: any) {
-    // Dump raw body for post-mortem — schema drift is the highest-impact
-    // failure mode and the dump is the only way to diagnose it.
+    // Dump raw body for post-mortem.
     const dumpPath = path.join(
       process.env.XDG_STATE_HOME ?? `${HOME}/.local/state`,
       "opencode-cost",
@@ -786,7 +1038,7 @@ export const fetchZenUsage = async (
     }
     const dumpNote = dumpFile ? `\n  raw body dumped to: ${dumpFile}` : ""
     throw new Error(
-      `failed to parse Zen response: ${e?.message ?? e}${dumpNote}\n` +
+      `failed to parse Zen response (page=${page}): ${e?.message ?? e}${dumpNote}\n` +
       `body head: ${text.slice(0, 200)}`,
     )
   }
@@ -796,24 +1048,292 @@ export const fetchZenUsage = async (
 // DB persistence
 // --------------------------------------------------------------------------
 
-const upsertRows = (db: Database, rows: ZenUsageRow[]): { written: number } => {
-  const fetchedAt = new Date().toISOString()
+const upsertZenUsage = (
+  db: Database,
+  rows: ZenUsageRowFull[],
+  fetchedAt: string,
+): void => {
+  if (rows.length === 0) return
   const stmt = db.query(`
-    INSERT OR REPLACE INTO zen_daily_billed
-      (date, model, key_id, plan, total_cost_fxp8, fetched_at)
-    VALUES (?, ?, ?, ?, ?, ?)
+    INSERT OR REPLACE INTO zen_usage (
+      id, workspace_id, session_id, key_id, model, provider,
+      time_created, time_updated, time_deleted,
+      input_tokens, output_tokens, reasoning_tokens,
+      cache_read_tokens, cache_write_5m_tokens, cache_write_1h_tokens,
+      cost_fxp8, enrichment_json, fetched_at, raw_json
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `)
-  let written = 0
-  // Wrap in a transaction for atomicity. Bun:sqlite's `transaction()`
-  // returns a callable that re-runs the body inside BEGIN/COMMIT.
   const tx = (db as any).transaction(() => {
     for (const r of rows) {
-      stmt.run(r.date, r.model, r.keyId, r.plan, Math.round(r.totalCost), fetchedAt)
-      written++
+      let rawJson: string | null = null
+      try {
+        // Round-trip the typed row (excluding enrichment) so a future
+        // schema evolution can replay. Failure to serialize is non-fatal.
+        const snapshot = { ...r, enrichment: undefined as undefined }
+        rawJson = JSON.stringify(snapshot)
+      } catch {
+        rawJson = null
+      }
+      const enrichmentJson = r.enrichment === null
+        ? null
+        : (() => {
+            try { return JSON.stringify(r.enrichment) } catch { return null }
+          })()
+      stmt.run(
+        r.id,
+        r.workspaceId,
+        r.sessionId,
+        r.keyId,
+        r.model,
+        r.provider,
+        r.timeCreated,
+        r.timeUpdated,
+        r.timeDeleted,
+        r.inputTokens,
+        r.outputTokens,
+        r.reasoningTokens,
+        r.cacheReadTokens,
+        r.cacheWrite5mTokens,
+        r.cacheWrite1hTokens,
+        Math.round(r.cost),
+        enrichmentJson,
+        fetchedAt,
+        rawJson,
+      )
     }
   })
   tx()
-  return { written }
+}
+
+/**
+ * Rebuild `zen_daily_billed` from `zen_usage`. Per §4.2, after each sync
+ * the daily rollup is derived via UPSERT GROUP BY (date, model, key_id)
+ * so the existing dump-reconciliation surface keeps working unchanged.
+ */
+const deriveZenDailyBilled = (db: Database): void => {
+  const tx = (db as any).transaction(() => {
+    db.exec(`
+      INSERT OR REPLACE INTO zen_daily_billed
+        (date, model, key_id, plan, total_cost_fxp8, fetched_at)
+      SELECT
+        substr(time_created, 1, 10) AS date,
+        model,
+        key_id,
+        NULL                         AS plan,
+        SUM(cost_fxp8)               AS total_cost_fxp8,
+        MAX(fetched_at)              AS fetched_at
+      FROM zen_usage
+      GROUP BY 1, 2, 3;
+    `)
+  })
+  tx()
+}
+
+// --------------------------------------------------------------------------
+// Sync loop
+// --------------------------------------------------------------------------
+
+const DEFAULT_PAGE_SIZE = 50
+const DEFAULT_MAX_PAGES = 1000
+
+/**
+ * Paginated sync against the per-row `_server` endpoint.
+ *
+ * Stop conditions (per §5.2):
+ *   1. Empty page → end of stream.
+ *   2. Short page (< 50 rows) → last page.
+ *   3. Incremental: every row's timeCreated ≤ newestKnown → overlap reached.
+ *   4. Safety cap at maxPages (default 1000) → throw when the source
+ *      still appears to have more data. User-specified `maxPages`
+ *      values (via the CLI's `--max-pages N` flag) are treated as a
+ *      soft cap: the loop exits silently when reached. Only the
+ *      default 1000 runaway-protection cap throws.
+ *
+ * Returns counts so callers can log them; logs are written from runZenSync.
+ * Acceptance: §10.6.a–l — see ./tests/zen-sync.loop.test.ts.
+ */
+export const syncAll = async (opts: {
+  cookie: string
+  config: ZenSyncConfig
+  db: Database
+  mode: "incremental" | "full"
+  /** When set, treated as a soft user-override; the loop exits silently
+   *  when this cap is reached. Omit to use DEFAULT_MAX_PAGES with the
+   *  runaway-throw semantics required by §10.6.h. */
+  maxPages?: number
+}): Promise<SyncAllResult> => {
+  const userOverride = opts.maxPages !== undefined
+  const maxPages = opts.maxPages ?? DEFAULT_MAX_PAGES
+  const newestKnown = opts.mode === "incremental"
+    ? (() => {
+        const row = opts.db
+          .query(
+            "SELECT MAX(time_created) AS t FROM zen_usage WHERE workspace_id = ?",
+          )
+          .get(opts.config.workspaceId) as { t: string | null } | undefined
+        return row?.t ?? null
+      })()
+    : null
+
+  const beforeRow = opts.db
+    .query("SELECT COUNT(*) AS n FROM zen_usage")
+    .get() as { n: number }
+  const fetchedAt = new Date().toISOString()
+
+  let fetched = 0
+  let pagesFetched = 0
+
+  for (let page = 0; page < maxPages; page++) {
+    const rows = await fetchPage(page, opts.cookie, opts.config)
+    pagesFetched++
+
+    if (rows.length === 0) {
+      // §10.6.a empty page — clean exit, no upsert.
+      break
+    }
+
+    upsertZenUsage(opts.db, rows, fetchedAt)
+    fetched += rows.length
+
+    // §10.6.b/d/i short page — stop after upsert.
+    if (rows.length < DEFAULT_PAGE_SIZE) break
+
+    // §10.6.e incremental overlap stop — only when newestKnown is set.
+    if (
+      opts.mode === "incremental" &&
+      newestKnown !== null &&
+      rows.every((r) => r.timeCreated <= newestKnown)
+    ) {
+      break
+    }
+
+    // §10.6.h safety cap — break out if next iteration would exceed.
+    if (page + 1 >= maxPages) {
+      if (userOverride) {
+        // User-specified soft cap; respect their explicit bound silently.
+        break
+      }
+      throw new Error(
+        `zen-sync: exceeded ${maxPages}-page safety cap ` +
+        `(workspace=${opts.config.workspaceId}); refusing to continue. ` +
+        `Re-run with --max-pages to override.`,
+      )
+    }
+  }
+
+  const afterRow = opts.db
+    .query("SELECT COUNT(*) AS n FROM zen_usage")
+    .get() as { n: number }
+  const written = afterRow.n - beforeRow.n
+  return { written, fetched, pagesFetched }
+}
+
+// --------------------------------------------------------------------------
+// Sync lock (advisory)
+// --------------------------------------------------------------------------
+//
+// §5.3 — exclusive lock at <lockDir>/zen-sync.lock. Prevents the systemd
+// timer + a manual run racing. Returns null on contention. The contract
+// pinned by §10.6.k is:
+//
+//   1. Same-process double-acquire returns null on the second call.
+//   2. Release allows re-acquisition.
+//   3. Cross-process contention is detected via the PID written into
+//      the lock file (stale-safe via process.kill(pid, 0) check).
+//
+// Strictly speaking, `flock(2)` is preferable for cross-process safety
+// (kernel releases on process death). Bun doesn't expose flock natively
+// without FFI; the PID-check approach below is equivalent for our
+// workloads (the systemd timer + manual runs are the only contenders).
+
+const heldLocks = new Set<string>()
+
+export const acquireSyncLock = async (
+  lockDir?: string,
+): Promise<SyncLockHandle | null> => {
+  const dir = lockDir ?? process.env.OPENCODE_COST_LOCK_DIR ?? DEFAULT_LOCK_DIR
+  try {
+    fs.mkdirSync(dir, { recursive: true })
+  } catch {
+    // mkdir best-effort; if it fails because the path already exists or
+    // permissions are odd we still try the open below.
+  }
+  const lockPath = path.join(dir, "zen-sync.lock")
+
+  // Same-process check (in-memory registry).
+  if (heldLocks.has(lockPath)) return null
+
+  // Try exclusive create; if the file already exists, see whether the
+  // holder is alive.
+  let fd: number | null = null
+  try {
+    fd = fs.openSync(
+      lockPath,
+      fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_RDWR,
+      0o600,
+    )
+  } catch (e: any) {
+    if (e?.code !== "EEXIST") return null
+    // File exists — check holder PID.
+    let holderPid = 0
+    let holderSince = ""
+    try {
+      const content = fs.readFileSync(lockPath, "utf8")
+      const lines = content.split("\n")
+      holderPid = parseInt(lines[0] ?? "0", 10)
+      holderSince = (lines[1] ?? "").trim()
+    } catch {
+      // Unreadable lock file — treat as contended (someone is mid-write).
+      return null
+    }
+    if (holderPid > 0) {
+      try {
+        process.kill(holderPid, 0)
+        // Holder still alive — contended.
+        console.error(
+          `[zen-sync] lock held by pid ${holderPid} since ${holderSince || "?"}`,
+        )
+        return null
+      } catch (err: any) {
+        if (err?.code !== "ESRCH") return null
+        // Stale lock — take over by truncating.
+        try {
+          fd = fs.openSync(lockPath, fs.constants.O_RDWR | fs.constants.O_TRUNC, 0o600)
+        } catch {
+          return null
+        }
+      }
+    } else {
+      return null
+    }
+  }
+
+  const since = new Date().toISOString()
+  const pid = process.pid
+  try {
+    fs.writeSync(fd!, `${pid}\n${since}\n`)
+    fs.fsyncSync(fd!)
+  } catch {
+    // Best-effort write; the open succeeded so we still hold the lock.
+  }
+
+  heldLocks.add(lockPath)
+
+  return {
+    pid,
+    since,
+    release: async () => {
+      try {
+        if (fd !== null) fs.closeSync(fd)
+      } catch {}
+      try {
+        fs.unlinkSync(lockPath)
+      } catch {
+        // Already removed (e.g. tmp dir rmSync'd by test teardown).
+      }
+      heldLocks.delete(lockPath)
+    },
+  }
 }
 
 // --------------------------------------------------------------------------
@@ -821,116 +1341,159 @@ const upsertRows = (db: Database, rows: ZenUsageRow[]): { written: number } => {
 // --------------------------------------------------------------------------
 
 export type ZenSyncArgs = {
-  month?: string                 // "YYYY-MM"; defaults to current month
+  full?: boolean
   dryRun?: boolean
+  maxPages?: number
 }
 
 const parseZenSyncArgs = (argv: string[]): ZenSyncArgs | { error: string } => {
   const out: ZenSyncArgs = {}
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]
-    if (a === "--month") {
-      const v = argv[++i]
-      if (v === undefined) return { error: "--month requires YYYY-MM" }
-      out.month = v
-    } else if (a.startsWith("--month=")) {
-      out.month = a.slice("--month=".length)
+    if (a === "--full") {
+      out.full = true
     } else if (a === "--dry-run") {
       out.dryRun = true
+    } else if (a === "--max-pages") {
+      const v = argv[++i]
+      if (v === undefined) return { error: "--max-pages requires a positive integer" }
+      const n = parseInt(v, 10)
+      if (!Number.isFinite(n) || n <= 0) {
+        return { error: `--max-pages must be a positive integer (got "${v}")` }
+      }
+      out.maxPages = n
+    } else if (a.startsWith("--max-pages=")) {
+      const v = a.slice("--max-pages=".length)
+      const n = parseInt(v, 10)
+      if (!Number.isFinite(n) || n <= 0) {
+        return { error: `--max-pages must be a positive integer (got "${v}")` }
+      }
+      out.maxPages = n
     } else {
       return { error: `unknown argument: ${a}` }
     }
   }
-  if (out.month !== undefined && !/^\d{4}-\d{2}$/.test(out.month)) {
-    return { error: `--month must be YYYY-MM (got "${out.month}")` }
-  }
   return out
-}
-
-const currentMonth = (): { year: number; month0: number; key: string } => {
-  const d = new Date()
-  return {
-    year: d.getFullYear(),
-    month0: d.getMonth(),
-    key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`,
-  }
 }
 
 export const runZenSync = async (argv: string[]): Promise<number> => {
   const parsed = parseZenSyncArgs(argv)
   if ("error" in parsed) {
-    console.error(`opencode-cost: ${parsed.error}`)
+    console.error(`opencode-cost zen-sync: ${parsed.error}`)
     return 2
   }
 
-  let config: ZenSyncConfig
-  let cookie: string
-  try {
-    config = loadConfig()
-    cookie = loadCookie()
-  } catch (e: any) {
-    console.error(`opencode-cost zen-sync: ${e?.message ?? e}`)
-    return 1
-  }
-
-  let year: number, month0: number, key: string
-  if (parsed.month !== undefined) {
-    const [y, m] = parsed.month.split("-").map(n => parseInt(n, 10))
-    year = y
-    month0 = m - 1
-    key = parsed.month
-  } else {
-    const now = currentMonth()
-    year = now.year
-    month0 = now.month0
-    key = now.key
-  }
-
-  console.error(`opencode-cost zen-sync: fetching ${key} (workspace=${config.workspaceId})…`)
-  let resp: ZenUsageResponse
-  try {
-    resp = await fetchZenUsage(config, cookie, year, month0)
-  } catch (e: any) {
-    console.error(`opencode-cost zen-sync: ${e?.message ?? e}`)
-    return 1
-  }
-
-  console.error(
-    `opencode-cost zen-sync: parsed ${resp.usage.length} usage row(s), ` +
-    `${resp.keys.length} key(s).`,
-  )
-
-  if (parsed.dryRun) {
-    process.stdout.write(JSON.stringify(resp, null, 2))
-    process.stdout.write("\n")
-    return 0
-  }
-
-  let db: Database
-  try {
-    // `readwrite: true` opens existing-only — fails if the DB hasn't been
-    // created yet (which is the plugin's responsibility on first run).
-    // Don't fall through to `{ create: true }`: a silently-created empty
-    // DB would mask "plugin never ran" misconfigurations.
-    db = new Database(DB_PATH, { readwrite: true })
-  } catch (e: any) {
+  // §5.3 — acquire the advisory lock first. If contended, exit 75
+  // (Linux EX_TEMPFAIL convention; signals "retry later" to the
+  // systemd timer without flagging as a hard failure).
+  const lock = await acquireSyncLock()
+  if (lock === null) {
     console.error(
-      `opencode-cost zen-sync: cannot open ${DB_PATH} (${e?.message ?? e}).\n` +
-      `Run an opencode session first to create the DB.`,
+      `opencode-cost zen-sync: another sync is already running ` +
+      `(or stale lock held by a dead PID). Exit code 75; ` +
+      `re-run after the holder finishes, or delete the lock file ` +
+      `manually if you're sure it's stale.`,
     )
-    return 1
+    return 75
   }
 
   try {
-    const { written } = upsertRows(db, resp.usage)
+    let config: ZenSyncConfig
+    let cookie: string
+    try {
+      config = loadConfig()
+      cookie = loadCookie()
+    } catch (e: any) {
+      console.error(`opencode-cost zen-sync: ${e?.message ?? e}`)
+      return 1
+    }
+
+    const mode: "incremental" | "full" = parsed.full ? "full" : "incremental"
     console.error(
-      `opencode-cost zen-sync: wrote ${written} row(s) to zen_daily_billed.`,
+      `opencode-cost zen-sync: ${mode} sync (workspace=${config.workspaceId}` +
+      (parsed.maxPages ? `, max-pages=${parsed.maxPages}` : "") +
+      (parsed.dryRun ? `, dry-run` : "") +
+      `)…`,
     )
-    return 0
-  } catch (e: any) {
-    console.error(`opencode-cost zen-sync: DB write failed (${e?.message ?? e})`)
-    return 1
+
+    // Open and bootstrap the schema in both dry-run and commit paths.
+    // The plugin may not have been reloaded since the DB file last
+    // changed; without applySchema, `zen_usage` wouldn't exist on
+    // DBs older than P4.1 and the first read or write would crash.
+    // Idempotent — CREATE TABLE IF NOT EXISTS plus the duplicate-column
+    // catch in MIGRATIONS.
+    let db: Database
+    try {
+      db = new Database(DB_PATH, { readwrite: true })
+    } catch (e: any) {
+      console.error(
+        `opencode-cost zen-sync: cannot open ${DB_PATH} (${e?.message ?? e}).\n` +
+        `Run an opencode session first to create the DB.`,
+      )
+      return 1
+    }
+    try {
+      applySchema(db)
+    } catch (e: any) {
+      console.error(`opencode-cost zen-sync: schema apply failed (${e?.message ?? e})`)
+      db.close()
+      return 1
+    }
+
+    if (parsed.dryRun) {
+      try {
+        const newestKnown =
+          (db
+            .query("SELECT MAX(time_created) AS t FROM zen_usage WHERE workspace_id = ?")
+            .get(config.workspaceId) as { t: string | null } | undefined)?.t ?? null
+
+        let pages = 0
+        let fetched = 0
+        const seenIds = new Set<string>()
+        for (let page = 0; page < (parsed.maxPages ?? DEFAULT_MAX_PAGES); page++) {
+          const rows = await fetchPage(page, cookie, config)
+          pages++
+          if (rows.length === 0) break
+          for (const r of rows) seenIds.add(r.id)
+          fetched += rows.length
+          if (rows.length < DEFAULT_PAGE_SIZE) break
+          if (
+            mode === "incremental" &&
+            newestKnown !== null &&
+            rows.every((r) => r.timeCreated <= newestKnown)
+          ) break
+        }
+        console.error(
+          `opencode-cost zen-sync (dry-run): ${pages} pages, ` +
+          `${fetched} rows fetched, ${seenIds.size} unique ids. ` +
+          `newestKnown=${newestKnown ?? "<none>"}. No writes.`,
+        )
+        return 0
+      } catch (e: any) {
+        console.error(`opencode-cost zen-sync (dry-run): ${e?.message ?? e}`)
+        return 1
+      } finally {
+        db.close()
+      }
+    }
+
+    try {
+      const result = await syncAll({ cookie, config, db, mode, maxPages: parsed.maxPages })
+      deriveZenDailyBilled(db)
+      console.error(
+        `opencode-cost zen-sync: ` +
+        `wrote ${result.written} new row(s) to zen_usage; ` +
+        `fetched ${result.fetched} across ${result.pagesFetched} page(s); ` +
+        `zen_daily_billed rebuilt.`,
+      )
+      return 0
+    } catch (e: any) {
+      console.error(`opencode-cost zen-sync: ${e?.message ?? e}`)
+      return 1
+    } finally {
+      db.close()
+    }
   } finally {
-    db.close()
+    await lock.release()
   }
 }
