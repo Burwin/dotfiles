@@ -71,11 +71,70 @@ spend vs billing; Opencode API/MCP session tracking?"
   `OnCalendar=*:0/10` so the number on screen lags by ≤10 minutes
   instead of ≤60. Details in
   `../opencode-cost-tmux-status/PLAN.md`.
-- **Next:** §12.4 prereqs (capture cookie + x-server-id + write
-  `~/.config/opencode-cost/config.json`) then run
-  `opencode-cost zen-sync --dry-run --month 2026-05` for a live
-  end-to-end test. After that, optionally Phase 5 (historical
-  backfill from opencode's own `opencode.db`).
+- 2026-05-19 — Commit 1 of
+  `../opencode-cost-pertask-tmux-status/PLAN.md` shipped. **Plugin
+  capture bug fixed**; `messages`, `session_rollup`, and
+  `provider_rates` all populate per §12.4 of the per-task PLAN
+  (verified via `opencode run --model opencode/deepseek-v4-flash-free`
+  against the MASTER-1703-symlinked plugin: 4 messages, 4 rollups,
+  1 rate snapshot with 40 rates). Root cause: SDK payload-shape drift
+  vs. the older `@opencode-ai/sdk` shape the plugin was written
+  against (current is `@opencode-ai/sdk@1.14.28`). Diagnosed via
+  static analysis (~10 min, well under the §12.2 45-min budget;
+  no instrumentation needed). Hypothesis A from §12.2 confirmed.
+  Three independent silent-fail paths fixed in this commit:
+  1. `plugins/cost-tracker.ts` `message.updated` handler read
+     `properties.message`, but the SDK declares
+     `EventMessageUpdated.properties.info: Message` — `msg?.id`
+     was always undefined → handler silently returned. 51 events,
+     zero rows, zero warnings.
+  2. Collateral SDK-shape drift in the same handler, surfaced once
+     the primary fix exposed the rest of the code path:
+     `msg.sessionID` lives on the AssistantMessage itself (not on
+     `properties.sessionID`); `msg.time.{created,completed}` are
+     epoch-ms NUMBERS (must convert via `new Date(n).toISOString()`
+     before INSERT — schema declares `ts_created TEXT NOT NULL` so
+     a non-ISO empty string would have failed the next constraint
+     check); `AssistantMessage` has `mode`, not `agent` at top
+     level. Added `role === "assistant"` filter so user messages
+     don't write zero-cost rows.
+  3. Collateral fix in `plugins/cost-tracker/rate-table.ts`,
+     discovered while verifying `provider_rates` per §12.4: the
+     HeyAPI-generated SDK client wraps responses in
+     `{ data, request, response, error }`; `Provider.models` is
+     now `{ [modelId]: Model }` (object), not `Model[]` (array);
+     and `Model.cost.{input,output,cache.{read,write},
+     experimentalOver200K}` replaces the old `Model.prices.*`/
+     `Model.price.*` paths. `for...of` on the envelope object
+     threw `TypeError: {} is not iterable`, which the outer
+     `.catch` in cost-tracker.ts surfaced to stdout (and stdout
+     doesn't reach the opencode log file, hence the silent
+     failure mode). Now: unwrap `.data` first; iterate
+     `Object.values(provider.models)`; read costs from
+     `model.cost.*` with the old paths kept as fallback for
+     forward/back compat.
+
+  Diagnostic hardening also landed: every silent-drop branch in
+  the event handler now has a `console.warn`
+  (`message.updated` without `properties.info.id`, `session.idle`
+  without `sessionID`, DB unavailable with a warn-latch). The
+  `worktreePath` falls back to `""` (not `undefined`) so a future
+  `worktree`-undefined payload would surface as an unmapped row
+  in queries instead of constraint-failing silently. Catch
+  binding in the handler renamed `e` → `err` to stop shadowing
+  the cast event variable. Verification numbers post-fix:
+  `messages=4`, `session_rollup=4`, `provider_rates=1`
+  (rate_version `38ebf6909ac1…`, 40 rates including
+  `opencode/claude-opus-4-7` and `opencode/gpt-5-nano`).
+  Committed on `MASTER-1703`; ff-merge to `m` is batched into
+  Commit 6 of the master PLAN.
+- **Next:** Commit 2 of
+  `../opencode-cost-pertask-tmux-status/PLAN.md` — Phase 5 backfill
+  (`opencode-cost import-opencode`) reads
+  `~/.local/share/opencode/opencode.db`'s `step-finish` parts into
+  `messages` so the per-task tmux bar has history before Commit 6.
+  Commits 3-6 then ship the per-row Zen integration, `dump
+  by-toggl`, the §10 acceptance tests, and the bar rewrite.
 
 ### Fixed after Phase 3 landed (2026-05-19)
 
