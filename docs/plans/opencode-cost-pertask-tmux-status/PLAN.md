@@ -109,12 +109,62 @@ Final state after Commit 6:
     rows with non-null `tui_fxp8`/`zen_fxp8`/`drift_fxp8` columns;
     the existing daily reconcile path (`dump reconciliation
     --month 2026-05`) keeps working unchanged.
-  - **Not yet shipped (Commit 6):** bar v2 rewrite (per-task scoped
-    SQL replacing v1's global rollup); archive `opencode-cost-
-    tmux-status/` v1 and `opencode-cost-zen-per-request/` plans;
-    Progress entries on the breakdown / tracker PLANs; ff-merge
-    all 6 commits MASTER-1703 → m and activate via `tmux source-
-    file ~/.config/tmux/tmux.conf`.
+  - **Commit 6 landed:** bar v2 + docs archived. End-to-end
+    working.
+    - `opencode/.config/opencode/bin/opencode-cost-tmux-status`
+      rewritten per §11 with the `zen_usage → messages →
+      toggl_repo_state` join scoped to the active pane's task. The
+      `current_task` CTE picks the longest-prefix-matching
+      `toggl_repo_state` row (longest-path wins for nested
+      worktrees); a `session_to_worktree` CTE
+      (`SELECT session_id, MIN(worktree_path) … GROUP BY
+      session_id`) collapses each session's messages to one
+      worktree before the JOIN, matching the dedup that
+      `by-toggl.ts` already proved necessary (PLAN §10.1.c
+      construction note 1 / Commit 5's `$16.10` grand-total
+      invariant). **§11.1's reference SQL omits this CTE — it would
+      multiply cost by messages-per-session and over-report
+      ~100x.** The shipped bar fixes this; the §11 spec was
+      schematic-only. Three rendering arms: mapped task with spend
+      (`daily-cost: $N | total-cost: $M | `), mapped task with $0
+      spend (still renders, honest signal), unmapped pane
+      (`cost: (unmapped) | `, MUTED on both sides). DB-missing /
+      toggl.db-missing / sqlite-error all silently degrade to
+      empty stdout per locked decision #8. Live smoke from this
+      worktree: `daily-cost: $49 | total-cost: $102 | ` against
+      `dump by-toggl --group-by task --no-model-split | grep
+      MASTER-1703` showing `$101.44` — ceil match across both
+      figures.
+    - `docs/plans/opencode-cost-tmux-status/PLAN.md` →
+      `docs/archive/opencode/PLAN-cost-tmux-status-v1.md` via
+      `git mv` (rename preserved). Supersession header per §13.2
+      prepended; decision history below preserved as-is.
+    - `docs/plans/opencode-cost-zen-per-request/PLAN.md` →
+      `docs/archive/opencode/PLAN-cost-zen-per-request.md` via
+      `git mv` with the same supersession header. Z0-Z5 + §10 all
+      absorbed into this PLAN; Z6 (one-time sanity capture) and
+      Z7 (cross-plan updates) dropped as resolved.
+    - `docs/plans/opencode-cost-breakdown/PLAN.md` Progress entry
+      added marking Option A superseded by §7 + §10 of this PLAN.
+    - `docs/plans/opencode-cost-tracker/PLAN.md` Progress entry
+      replaced the v1 tmux-status note with a consolidated
+      per-task ecosystem-rewrite entry; **Next:** rewritten to
+      `dump reconciliation --by-message` drift monitoring.
+      Detailed Commit 1 + Commit 2 entries preserved (their root-
+      cause and drift-summary content is valuable context that
+      the consolidated summary doesn't substitute for).
+    - **All 52 tests still pass:** `bun test
+      ./opencode/.config/opencode/opencode-cost/tests/` →
+      `52 pass / 0 fail / 220 expect() calls / Ran 52 tests
+      across 3 files`. No test files touched in this commit; the
+      bar is bash + sqlite3 and intentionally has no unit tests
+      (smoke-tested live).
+    - Commit on MASTER-1703:
+      `feat: per-task tmux cost bar + plan archive`. ff-merge of
+      MASTER-1703 → m (carrying all 6 implementation commits plus
+      the original master PLAN doc commit `6b5561a`) and
+      `tmux source-file ~/.config/tmux/tmux.conf` activation
+      follow the commit per P6.7 / P6.8.
 - 2026-05-19 — **Commit 4 landed:** Z0 + Z1 + Z2 + Z3 GREEN.
   - **All 37 tests pass** (24 parser + 13 loop):
     `bun test ./opencode/.config/opencode/opencode-cost/tests/` reports

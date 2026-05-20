@@ -1,65 +1,137 @@
 #!/bin/bash
-# opencode-cost-tmux-status — emit a tmux status segment showing
-# today's spend and all-time spend from ~/.local/state/opencode-cost.db.
+# opencode-cost-tmux-status — per-task daily/total spend from
+# zen_usage joined to messages and toggl_repo_state.
 #
-# Output is intended for tmux's status-right via #(); tmux style
-# markup (#[...]) below is interpreted by tmux's format parser when
-# the result is interpolated. Run standalone, markup shows literally.
+# Per docs/plans/opencode-cost-pertask-tmux-status/PLAN.md §11.
+#
+# The active pane's $PWD (resolved to its git toplevel, with a realpath
+# fallback that matches toggl-tmux-status) is matched against
+# toggl_repo_state to identify the currently-active task. Spend is
+# then scoped to every messages row whose worktree_path resolves to
+# the same task — captured for both today's cost (local-tz day window
+# on zen_usage.time_created) and the lifetime cost.
 #
 # Hidden silently (empty stdout) when:
-#   - The DB file is missing.
-#   - sqlite3 fails or returns nothing.
-#   - The total of zen_daily_billed is zero (no rows yet).
+#   - opencode-cost.db is missing (fresh machine, never ran zen-sync).
+#   - toggl.db is missing. NOTE: `opencode-cost dump by-toggl` errors
+#     loudly on this; the bar deliberately degrades silently per
+#     locked decision #8 in the PLAN (a status line refreshing every
+#     5s shouldn't spam error text).
+#   - sqlite3 errors for any reason.
 #
-# Both figures are rounded UP to the nearest dollar.
+# Output when the active pane is in a toggl-mapped worktree:
+#   daily-cost: $<ceil(today)> | total-cost: $<ceil(total)> |
 #
-# Source data: zen_daily_billed in ~/.local/state/opencode-cost.db,
-# refreshed every 10 minutes by opencode-cost-zen-sync.timer (see
-# docs/plans/opencode-cost-tracker/PLAN.md). Date column in that table
-# is in the user's local tz (Zen returns dates per the tz_offset
-# argument in the request body), so date('now', 'localtime') matches.
+# Output when the active pane has no toggl mapping (e.g. ~/src/scratch):
+#   cost: (unmapped) |
 #
-# See: docs/plans/opencode-cost-tmux-status/PLAN.md
+# Both figures round UP to the nearest dollar via the integer
+# ceiling-by-floor trick (matches v1).
+#
+# See: docs/plans/opencode-cost-pertask-tmux-status/PLAN.md §11
+#      docs/archive/opencode/PLAN-cost-tmux-status-v1.md   (v1, archived)
 
 # Style fragments (tmux markup), matching toggl-tmux-status's palette
 # so the cost and toggl segments visually align.
 POP='#[fg=blue,bold]'
 MUTED='#[fg=brightblack,nobold]'
 
-# DB path. OPENCODE_COST_DB override mirrors opencode-cost/dump.ts so
-# the same env var works for tests / fixture DBs.
+# DB paths. OPENCODE_COST_DB / TOGGL_STATE_DB overrides mirror
+# opencode-cost/dump.ts and toggl-tmux-status so the same env vars
+# work end-to-end (tests, fixture DBs, alternate state dirs).
 DB_PATH="${OPENCODE_COST_DB:-$HOME/.local/state/opencode-cost.db}"
+TOGGL_DB="${TOGGL_STATE_DB:-$HOME/.local/state/toggl/state.db}"
 
-# No DB yet (fresh machine, never ran an opencode session with the
-# cost-tracker plugin, never ran a zen-sync) → blank slot.
 [[ -f "$DB_PATH" ]] || exit 0
+[[ -f "$TOGGL_DB" ]] || exit 0
 
-# Single query returns today_fxp8 + total_fxp8 in one round-trip.
-# -readonly is defensive (WAL mode means readers don't block writers
-# anyway) and documents intent. 2>/dev/null swallows any sqlite errors
-# so a transiently-busy DB falls through to "hide segment" rather than
-# spamming the status bar with error text.
+# Resolve the active pane's worktree root: prefer git-toplevel,
+# fall back to realpath($PWD), final fallback to $PWD as-is. The
+# resolution order matches toggl-tmux-status so the cost and toggl
+# segments agree on which task is "current" for any given pane.
+worktree_root=$(git rev-parse --show-toplevel 2>/dev/null) \
+    || worktree_root=$(realpath "$PWD" 2>/dev/null) \
+    || worktree_root="$PWD"
+
+# SQL-escape the worktree path for literal substitution below. The
+# replacement-only-singles dance is safer than building the query in
+# bash if we ever introduce paths with single quotes.
+sql_quote() {
+    local s=${1//\'/\'\'}
+    printf "'%s'" "$s"
+}
+wr_lit=$(sql_quote "$worktree_root")
+
+# Single round-trip:
+#   1. current_task CTE picks the longest-prefix-matching
+#      toggl_repo_state row for the active pane's worktree_root
+#      (supports nested worktrees by ordering on length DESC).
+#   2. session_to_worktree CTE collapses messages.session_id → one
+#      worktree_path via MIN(). Without this, a session with N
+#      messages joins zen_usage N times and the cost is multiplied
+#      by N. This is the same dedup pattern by-toggl.ts uses
+#      (PLAN §10.1.c construction note 1; verified by Commit 5's
+#      $16.10 grand-total invariant test). §11.1's spec SQL omits
+#      this CTE and so is mathematically wrong as written; the bar
+#      ships the corrected form so the rendered numbers actually
+#      match `dump by-toggl --group-by task`.
+#   3. Main SELECT sums today's and all-time cost from zen_usage,
+#      filtered to sessions whose (deduplicated) worktree_path maps
+#      to the current task. JOIN to current_task on task makes this
+#      a no-op when no toggl mapping exists.
+#   4. The "(SELECT task FROM current_task)" co-projection returns
+#      NULL for unmapped panes so the rendering arm below can switch
+#      on it. SELECT … FROM current_task LIMIT 1 returns 0 rows in
+#      the unmapped case (LIMIT 1 only constrains a non-empty source).
 row=$(sqlite3 -readonly -separator $'\t' "$DB_PATH" "
+    ATTACH DATABASE '$TOGGL_DB' AS toggl;
+
+    WITH current_task AS (
+        SELECT task, client_name, project_name
+        FROM toggl.toggl_repo_state
+        WHERE worktree_path = $wr_lit
+           OR $wr_lit LIKE worktree_path || '/%'
+        ORDER BY length(worktree_path) DESC
+        LIMIT 1
+    ),
+    session_to_worktree AS (
+        SELECT session_id, MIN(worktree_path) AS worktree_path
+        FROM messages
+        GROUP BY session_id
+    )
     SELECT
-        COALESCE(SUM(CASE WHEN date = date('now', 'localtime') THEN total_cost_fxp8 ELSE 0 END), 0),
-        COALESCE(SUM(total_cost_fxp8), 0)
-    FROM zen_daily_billed;
+        COALESCE(
+          SUM(CASE WHEN substr(zu.time_created, 1, 10) = date('now', 'localtime')
+                   THEN zu.cost_fxp8 ELSE 0 END), 0),
+        COALESCE(SUM(zu.cost_fxp8), 0),
+        (SELECT task FROM current_task)
+    FROM zen_usage zu
+    JOIN session_to_worktree sw ON sw.session_id   = zu.session_id
+    JOIN toggl.toggl_repo_state r
+                                ON r.worktree_path = sw.worktree_path
+    JOIN current_task ct        ON ct.task         = r.task;
 " 2>/dev/null) || exit 0
 
 [[ -z "$row" ]] && exit 0
 
-IFS=$'\t' read -r today_fxp8 total_fxp8 <<<"$row"
+IFS=$'\t' read -r today_fxp8 total_fxp8 task <<<"$row"
 
-# Empty zen_daily_billed → hide the segment. Honest signal vs.
-# "cost: $0" which would read as "no spend" rather than "no data".
-[[ "$total_fxp8" -le 0 ]] && exit 0
+if [[ -z "$task" ]]; then
+    # No matching toggl_repo_state row — render the unmapped pill.
+    # MUTED twice (instead of POP for "(unmapped)") so it visually
+    # recedes from the rest of the status line.
+    printf 'cost: %s(unmapped)%s | ' "$MUTED" "$MUTED"
+    exit 0
+fi
 
-# Round UP to nearest dollar via the integer ceiling-by-floor trick:
-# ceil(x / denom) == (x + denom - 1) / denom for non-negative integers.
-# Sanity:
-#   x = 100_000_000 ($1.00 exactly) → 1
-#   x = 100_000_001 ($1.00000001)   → 2
-#   x =  99_999_999 ($0.99999999)   → 1
+# Ceiling-by-floor on fxp8 (matches v1):
+#   ceil(x / 1e8) == (x + 99_999_999) / 100_000_000 for non-negative
+#   integers. Sanity:
+#     x = 100_000_000 ($1.00 exactly) → 1
+#     x = 100_000_001 ($1.00000001)   → 2
+#     x =  99_999_999 ($0.99999999)   → 1
+#     x = 0                            → 0  (an honest "no spend yet"
+#                                            on a freshly-mapped task)
 daily_usd=$(( (today_fxp8 + 99999999) / 100000000 ))
 total_usd=$(( (total_fxp8 + 99999999) / 100000000 ))
 

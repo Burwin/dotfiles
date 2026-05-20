@@ -1,5 +1,20 @@
 # OpenCode Cost — tmux Status Bar Surface — PLAN.md
 
+> **Superseded** by
+> [docs/plans/opencode-cost-pertask-tmux-status/PLAN.md](../../plans/opencode-cost-pertask-tmux-status/PLAN.md)
+> on 2026-05-19.
+>
+> v1 shipped global daily/total figures sourced from `zen_daily_billed`
+> (a single number across all toggl tasks). The per-task pivot
+> consolidated v1, the per-request Zen PLAN, and the cost-tracker
+> PLAN's Phase 5 backfill into a single master execution doc; the
+> v2 bar scopes the same labels per-task via the `zen_usage → messages
+> → toggl_repo_state` JOIN. The new bar lives at
+> `opencode/.config/opencode/bin/opencode-cost-tmux-status`; tmux.conf
+> wiring is unchanged from v1.
+>
+> Decision history below is preserved as-is for reference.
+
 Status: proposal (2026-05-19); implementation not yet started
 Owner: mbh
 Origin session: 2026-05-19 — "display the most updated cost in the top

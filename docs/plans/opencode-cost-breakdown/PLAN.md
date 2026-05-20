@@ -15,6 +15,13 @@ cost-tracker that captures the raw rows this plan slices).
   `~/.local/state/opencode-cost.db` actually captures, the toggl-time
   plugin's repo→project mapping, and the gap re: tmux. No code
   changes yet — waiting on mbh to pick a direction.
+- 2026-05-19 — Option A (per toggl project breakdown via worktree
+  JOIN) superseded by
+  `../opencode-cost-pertask-tmux-status/PLAN.md` §7 (CLI surface
+  `opencode-cost dump by-toggl`) and §10 (acceptance tests). This
+  PLAN is retained for the Option A vs Option B (per-tmux-session)
+  comparison and the open-questions reasoning that informed the
+  per-task pivot.
 
 ## Problem
 
