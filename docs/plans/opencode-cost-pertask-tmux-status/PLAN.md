@@ -33,6 +33,88 @@ Final state after Commit 6:
 - 2026-05-19 — PLAN drafted; no code yet. Six-commit execution checklist
   in §9; tests-before-code ordering for the per-request work (Z0' / Z3'
   RED scaffolds land in Commit 3 before Z0/Z3 GREEN in Commit 4).
+- 2026-05-20 — **Commit 5 landed:** Z5 (`dump by-toggl`) + §10
+  acceptance tests + per-message reconcile GREEN.
+  - **52 tests pass / 0 fail** (37 from Commit 4 + 15 new):
+    `bun test ./opencode/.config/opencode/opencode-cost/tests/` →
+    `52 pass / 0 fail / 220 expect() calls / Ran 52 tests across 3 files`.
+    The 15 new tests in `opencode-cost/tests/by-toggl.test.ts` cover
+    §10.2 (per-client, 2 cases incl. --no-model-split), §10.3
+    (per-project), §10.4 (per-task), the four §10.1.d invariants
+    (sum-up consistency, deterministic attribution, stable across
+    re-runs, integer-fxp8-only) — anchored by the **$16.10 grand
+    total invariant** asserted at module load and across every
+    rollup test — and all five §10.1.e edge cases (unmapped
+    worktree, unattributed zen row, retargeted via toggl-set
+    mid-history, title-gen/subagent inheriting parent mapping via
+    worktree JOIN, missing toggl.db → exit 2 with diagnostic).
+    A `runByToggl` CLI smoke test also confirms --json output
+    keeps `cost_fxp8` as INTEGER per the §10.1.f contract.
+  - **P5.0 / Z5 (`dump by-toggl`):** `opencode-cost/by-toggl.ts`
+    implements the full §10.1.f surface — `--group-by
+    task|project|client` (required), `--since` / `--until` /
+    `--toggl-db` / `--include-unmapped` / `--include-unattributed`
+    (both default-on with `--no-…` toggles) / `--no-model-split` /
+    `--json|--csv|--table` (default `--table`). SQL uses the
+    §10.1.c join path with a `session_to_worktree` CTE
+    (`SELECT session_id, MIN(worktree_path) … GROUP BY session_id`)
+    to dedupe multi-message sessions cleanly. Three UNION ALL
+    bucket SELECTs (mapped / unmapped via `LEFT JOIN …
+    toggl_repo_state WHERE r.worktree_path IS NULL` / unattributed
+    via `LEFT JOIN session_to_worktree WHERE sw.session_id IS NULL`)
+    guarantee §10.1.d invariant 2 (deterministic attribution; no
+    double-count). `SUM(cost_fxp8)` stays integer end-to-end —
+    `fmtDollars` divides by 1e8 only at the table renderer (§10.1.d
+    invariant 4). Sort: `cost_fxp8 DESC` then group cols ASC for
+    stable §10.2-§10.4 byte-exact ordering.
+  - **P5.1 / P5.5:** `bin/opencode-cost` dispatch tree extended
+    with `dump by-toggl`, `dump zen-usage`, `dump by-session-zen`
+    (the latter two simple reads on `zen_usage`, no toggl JOIN).
+    Usage banner enumerates all subcommands; per-cmd flag help
+    inline in source comments.
+  - **P5.2 / §6.2 per-message reconcile:** `reconcile.ts` extended
+    with `--by-message [--session ses_xxx] [--since YYYY-MM-DD]`.
+    SQL joins `messages` to `zen_usage` on `session_id`, `model_id`,
+    and `ABS(strftime('%s', zu.time_created) - strftime('%s',
+    m.ts_created)) < 5` — the 5-second window absorbs clock skew
+    between local capture and Zen's server-side timestamp. Includes
+    the `cache_5m_delta` / `cache_1h_delta` columns from the Z2
+    cache TTL split. Omits `cost_recomputed_fxp8` per the archived
+    per-request PLAN R5 decision (per-row Zen truth makes recompute
+    diagnostic-only). Cross-mode arg validation rejects
+    `--month` with `--by-message` and `--session` / `--since`
+    without it; both surface with `exit 2`.
+  - **toggl.db-missing diagnostic surface:** locked decision #8
+    delivered. `dump by-toggl` short-circuits before touching the
+    cost DB if `--toggl-db` (default `~/.local/state/toggl/state.db`)
+    doesn't exist, exits 2, and writes
+    `opencode-cost: toggl.db not found at <path>. Run \`toggl-set\`
+    in at least one worktree to create it, or pass --toggl-db
+    <path> to point at an existing file.` to stderr. Edge case e
+    in §10.1.e is verified end-to-end in the test (mocks stderr,
+    asserts `not 0` exit code, asserts `toggl.db not found` and
+    `toggl-set` both appear in the captured output).
+  - **Live smoke (P5.4-equivalent):** ran against
+    `~/.local/state/opencode-cost.db` post-Commit-4. `dump by-toggl
+    --group-by task --since 2026-05-19` returns 29 rows attributed
+    across `Bamboo` / `Schneller` / `(no-local-capture)` /
+    `(unmapped)` per-client sums in expected ranges. `dump
+    by-toggl --group-by client --no-model-split --since
+    2026-05-19` collapses to 4 buckets: Bamboo $152.23, Schneller
+    $39.25, (no-local-capture) $22.55, (unmapped) $6.56 — sum
+    $220.59 matches the per-client-with-model rollup sum, no
+    double-count. `dump by-session-zen --since 2026-05-19` returns
+    77+ rows ordered by cost desc. `dump reconciliation
+    --by-message --since 2026-05-19 --json` emits 4451 per-message
+    rows with non-null `tui_fxp8`/`zen_fxp8`/`drift_fxp8` columns;
+    the existing daily reconcile path (`dump reconciliation
+    --month 2026-05`) keeps working unchanged.
+  - **Not yet shipped (Commit 6):** bar v2 rewrite (per-task scoped
+    SQL replacing v1's global rollup); archive `opencode-cost-
+    tmux-status/` v1 and `opencode-cost-zen-per-request/` plans;
+    Progress entries on the breakdown / tracker PLANs; ff-merge
+    all 6 commits MASTER-1703 → m and activate via `tmux source-
+    file ~/.config/tmux/tmux.conf`.
 - 2026-05-19 — **Commit 4 landed:** Z0 + Z1 + Z2 + Z3 GREEN.
   - **All 37 tests pass** (24 parser + 13 loop):
     `bun test ./opencode/.config/opencode/opencode-cost/tests/` reports

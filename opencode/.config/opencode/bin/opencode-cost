@@ -1,13 +1,16 @@
 #!/usr/bin/env bun
 // opencode-cost — CLI for the opencode cost-tracker. Reports per-message
-// and per-session costs from ~/.local/state/opencode-cost.db, and (Phase 4)
-// reconciles the recompute against Zen's daily per-model billed totals.
+// and per-session costs from ~/.local/state/opencode-cost.db, reconciles
+// the recompute against Zen's per-row billed totals, and rolls up by
+// toggl (client/project/task) via the worktree JOIN.
 //
-// Design and rationale: ../../../../docs/plans/opencode-cost-tracker/PLAN.md
+// Design and rationale:
+//   ../../../../docs/plans/opencode-cost-tracker/PLAN.md (parent)
+//   ../../../../docs/plans/opencode-cost-pertask-tmux-status/PLAN.md (active)
 //
 // Phase ownership of this file:
-//   Phase 3 (CLI dump, tier: cheap) — `dump messages` / `dump sessions`
-//     subcommands. Args forwarded to ../opencode-cost/dump.ts.
+//   Phase 3 (CLI dump, tier: cheap) — `dump messages` / `dump sessions`.
+//     Args forwarded to ../opencode-cost/dump.ts.
 //   Phase 4 (zen reconciliation, tier: sota) — `zen-sync` and
 //     `dump reconciliation` subcommands. Args forwarded to
 //     ../opencode-cost/zen-sync.ts and ../opencode-cost/reconcile.ts.
@@ -15,14 +18,28 @@
 //     backfills `messages` from ~/.local/share/opencode/opencode.db's
 //     step-finish part rows. Args forwarded to
 //     ../opencode-cost/import-opencode.ts.
+//   per-task PLAN Commit 5 — `dump by-toggl`, `dump zen-usage`,
+//     `dump by-session-zen` subcommands, plus `dump reconciliation
+//     --by-message`. All forwarded to ../opencode-cost/by-toggl.ts
+//     and the extended reconcile.ts respectively.
 //
 // Surface:
 //
-//   opencode-cost dump messages       [--since YYYY-MM-DD] [--json|--csv]
-//   opencode-cost dump sessions       [--since YYYY-MM-DD] [--json|--csv]
-//   opencode-cost zen-sync            [--month YYYY-MM] [--dry-run]
-//   opencode-cost dump reconciliation [--month YYYY-MM] [--json|--csv|--table]
-//   opencode-cost import-opencode     [--since YYYY-MM-DD] [--dry-run] [--reconcile]
+//   opencode-cost dump messages         [--since YYYY-MM-DD] [--json|--csv]
+//   opencode-cost dump sessions         [--since YYYY-MM-DD] [--json|--csv]
+//   opencode-cost dump zen-usage        [--session ses_xxx] [--since YYYY-MM-DD] [--json|--csv|--table]
+//   opencode-cost dump by-session-zen   [--since YYYY-MM-DD] [--json|--csv|--table]
+//   opencode-cost dump by-toggl --group-by task|project|client
+//                                       [--since YYYY-MM-DD] [--until YYYY-MM-DD]
+//                                       [--toggl-db <path>]
+//                                       [--no-include-unmapped] [--no-include-unattributed]
+//                                       [--no-model-split]
+//                                       [--json|--csv|--table]
+//   opencode-cost dump reconciliation   [--month YYYY-MM] [--json|--csv|--table]
+//   opencode-cost dump reconciliation --by-message [--session ses_xxx] [--since YYYY-MM-DD]
+//                                       [--json|--csv|--table]
+//   opencode-cost zen-sync              [--full] [--dry-run] [--max-pages N]
+//   opencode-cost import-opencode       [--since YYYY-MM-DD] [--dry-run] [--reconcile]
 //
 // The DB at ~/.local/state/opencode-cost.db is the real interface. This
 // CLI is convenience over `sqlite3` — use whichever tool you prefer.
@@ -31,34 +48,53 @@ import { runDumpMessages, runDumpSessions } from "../opencode-cost/dump.ts"
 import { runZenSync } from "../opencode-cost/zen-sync.ts"
 import { runReconciliation } from "../opencode-cost/reconcile.ts"
 import { runImportOpencode } from "../opencode-cost/import-opencode.ts"
+import {
+  runByToggl,
+  runDumpZenUsage,
+  runDumpBySessionZen,
+} from "../opencode-cost/by-toggl.ts"
 
 const usage = `opencode-cost — query the opencode cost-tracker DB
 
 usage:
-  opencode-cost dump messages       [--since YYYY-MM-DD] [--json|--csv]
-  opencode-cost dump sessions       [--since YYYY-MM-DD] [--json|--csv]
-  opencode-cost zen-sync            [--month YYYY-MM] [--dry-run]
-  opencode-cost dump reconciliation [--month YYYY-MM] [--json|--csv|--table]
-  opencode-cost import-opencode     [--since YYYY-MM-DD] [--dry-run] [--reconcile]
+  opencode-cost dump messages         [--since YYYY-MM-DD] [--json|--csv]
+  opencode-cost dump sessions         [--since YYYY-MM-DD] [--json|--csv]
+  opencode-cost dump zen-usage        [--session ses_xxx] [--since YYYY-MM-DD] [--json|--csv|--table]
+  opencode-cost dump by-session-zen   [--since YYYY-MM-DD] [--json|--csv|--table]
+  opencode-cost dump by-toggl --group-by task|project|client
+                                      [--since YYYY-MM-DD] [--until YYYY-MM-DD]
+                                      [--toggl-db <path>]
+                                      [--no-include-unmapped] [--no-include-unattributed]
+                                      [--no-model-split]
+                                      [--json|--csv|--table]
+  opencode-cost dump reconciliation   [--month YYYY-MM] [--json|--csv|--table]
+  opencode-cost dump reconciliation --by-message [--session ses_xxx] [--since YYYY-MM-DD]
+                                      [--json|--csv|--table]
+  opencode-cost zen-sync              [--full] [--dry-run] [--max-pages N]
+  opencode-cost import-opencode       [--since YYYY-MM-DD] [--dry-run] [--reconcile]
 
-dump defaults: --json. Numeric fxp8 columns are NOT divided by 1e8 — let the
-caller decide precision (jq: '.[] | .cost_recomputed_fxp8 / 1e8').
+dump defaults:
+  messages / sessions  → --json. fxp8 columns left as INTEGER.
+  zen-usage / by-session-zen / by-toggl / reconciliation → --table.
+                          Tables print dollars; --json/--csv keep fxp8 INTEGER.
 
-reconciliation defaults: --table (aligned columns, dollars at display).
-
-zen-sync prerequisites (per PLAN.md §12.4):
-  ~/.config/opencode/secrets/zen-session-cookie  (chmod 600; contents: 'auth=Fe26.2*…')
-  ~/.config/opencode-cost/config.json            (workspace_id, key_id, tz_offset, server_id)
+zen-sync prerequisites:
+  ~/.config/opencode/secrets/zen-session-cookie  (chmod 600; auth=Fe26.2*…)
+  ~/.config/opencode-cost/config.json            (workspace_id, key_id, server_id)
 
 import-opencode reads ~/.local/share/opencode/opencode.db read-only and
 backfills the messages table (INSERT OR IGNORE — plugin captures take
 precedence) plus session_rollup. Use --dry-run for a no-op preview, or
 --reconcile for a per-(date,model) drift summary against zen_daily_billed.
 
+dump by-toggl errors loudly when toggl.db is missing (exit 2, points at
+\`toggl-set\`). The tmux bar deliberately degrades silently in the same
+case — see docs/plans/opencode-cost-pertask-tmux-status/PLAN.md §11.6.
+
 This CLI is a thin convenience layer over ~/.local/state/opencode-cost.db.
 Query with sqlite3 / datasette / jq for anything beyond the canned dumps.
 
-See dotfiles: docs/plans/opencode-cost-tracker/PLAN.md
+See: docs/plans/opencode-cost-pertask-tmux-status/PLAN.md
 `
 
 const [cmd, sub, ...rest] = process.argv.slice(2)
@@ -73,9 +109,13 @@ const dispatch = async (): Promise<number> => {
     if (sub === "messages") return runDumpMessages(rest)
     if (sub === "sessions") return runDumpSessions(rest)
     if (sub === "reconciliation") return runReconciliation(rest)
+    if (sub === "by-toggl") return runByToggl(rest)
+    if (sub === "zen-usage") return runDumpZenUsage(rest)
+    if (sub === "by-session-zen") return runDumpBySessionZen(rest)
     console.error(
       sub === undefined
-        ? "opencode-cost: 'dump' requires a subcommand (messages|sessions|reconciliation)"
+        ? "opencode-cost: 'dump' requires a subcommand " +
+          "(messages|sessions|reconciliation|by-toggl|zen-usage|by-session-zen)"
         : `opencode-cost: unknown 'dump' subcommand: ${sub}`,
     )
     process.stderr.write(usage)
