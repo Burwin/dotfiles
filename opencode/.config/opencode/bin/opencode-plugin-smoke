@@ -1,0 +1,798 @@
+#!/usr/bin/env bash
+# opencode-plugin-smoke — green/red signal across every custom opencode
+# plugin in this user's environment after an opencode upgrade.
+#
+# Design and rationale:
+#   ../../../../docs/plans/opencode-plugin-smoke/PLAN.md
+#
+# Tiers:
+#   1  parse-checks  (`bun build --no-bundle`) — fastest signal, catches
+#                    SDK/type drift in @opencode-ai/plugin and
+#                    @opencode-ai/sdk.
+#   2  bun:test     — helper-lib unit tests + dispatch-logic suites for
+#                    notify, cost-tracker, and (cross-repo) toggl-time.
+#   3  --live       — spawns `opencode serve` and scans the log for
+#                    plugin-load errors. Deferred to Step 5 of the PLAN.
+#
+# In scope:
+#   - plugins/notify.ts            (this repo)
+#   - plugins/cost-tracker.ts      (this repo, with cost-tracker/ helpers)
+#   - plugins/toggl-time.ts        (cross-repo, lives in
+#                                   ~/src/bamboo/tools/src/opencode/plugins/,
+#                                   symlinked from ~/.config/opencode/plugins/)
+#
+# Out of scope (covered manually or in dedicated suites):
+#   - Real ntfy POSTs (notify.test.ts mocks fetch).
+#   - Visual mako toast verification.
+#   - Mutating ~/.local/state/opencode-cost.db or
+#     ~/.local/state/toggl/state.db (Tier 3 will sandbox via env vars).
+
+set -euo pipefail
+
+# --- usage ----------------------------------------------------------------
+
+usage() {
+    cat <<'EOF'
+opencode-plugin-smoke — smoke test custom opencode plugins after an upgrade.
+
+usage:
+  opencode-plugin-smoke [--tier=N[,N...]] [--quiet|--verbose]
+                        [--toggl-time|--no-toggl-time] [--live]
+
+options:
+  --tier=N[,N...]   Comma-separated list of tiers to run.
+                    Default: 1,2  (Tier 3 requires --live.)
+  --live            Promote to tier=1,2,3. Spawns a transient
+                    `opencode serve` and asserts every plugin loads
+                    without error. Plugin state writes are sandboxed
+                    to temp files; your real ~/.local/state/*.db is
+                    untouched.
+  --toggl-time      Force-include the cross-repo toggl-time suite. Fails
+                    if ~/.config/opencode/plugins/toggl-time.ts is missing.
+  --no-toggl-time   Skip the toggl-time suite even when present.
+  --quiet           Print only the final summary line.
+  --verbose         Stream subprocess output verbatim (default suppresses).
+  -h, --help        This help.
+
+environment:
+  SMOKE_LIVE_TIMEOUT_SEC  Max seconds to wait for `opencode serve` to
+                          become ready in tier 3 (default 10).
+
+exit codes:
+  0  all selected tiers passed (tier 3 may have skipped — see output)
+  1  at least one tier failed
+  2  config error (missing bun, missing dotfiles repo, etc.)
+EOF
+}
+
+# --- argument parsing -----------------------------------------------------
+
+TIERS=""
+LIVE=0
+QUIET=0
+VERBOSE=0
+TOGGL_FORCE="auto"
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --tier=*) TIERS="${1#--tier=}" ;;
+        --tier)
+            shift
+            [[ $# -gt 0 ]] || { echo "opencode-plugin-smoke: --tier requires a value" >&2; exit 2; }
+            TIERS="$1"
+            ;;
+        --live) LIVE=1 ;;
+        --quiet|-q) QUIET=1 ;;
+        --verbose|-v) VERBOSE=1 ;;
+        --toggl-time) TOGGL_FORCE="on" ;;
+        --no-toggl-time) TOGGL_FORCE="off" ;;
+        -h|--help) usage; exit 0 ;;
+        *) echo "opencode-plugin-smoke: unknown option: $1" >&2; usage >&2; exit 2 ;;
+    esac
+    shift
+done
+
+if [[ -z "$TIERS" ]]; then
+    if [[ "$LIVE" == 1 ]]; then
+        TIERS="1,2,3"
+    else
+        TIERS="1,2"
+    fi
+fi
+
+tier_enabled() {
+    [[ ",$TIERS," == *",$1,"* ]]
+}
+
+# --- cleanup trap (set early so any exit path tears tier 3 down) ----------
+#
+# Tier 3 spawns `opencode serve` as a background process and creates a
+# handful of sandbox temp files. The trap below is global so that
+# *every* exit path — success, failure, INT/TERM — kills the child and
+# removes the temp files. Variables are kept empty until tier 3 actually
+# uses them, which is the signal to the trap that there's something to
+# clean.
+
+TIER3_PID=""
+TIER3_COST_DB=""
+TIER3_TOGGL_DB=""
+TIER3_STDOUT=""
+TIER3_PRE_LOGS=""
+
+cleanup() {
+    local rc=$?
+    # Kill the spawned opencode serve if it's still alive. TERM first,
+    # KILL after a 2 s grace period. Matches PLAN §Step 5 §Teardown.
+    if [[ -n "$TIER3_PID" ]] && kill -0 "$TIER3_PID" 2>/dev/null; then
+        kill -TERM "$TIER3_PID" 2>/dev/null || true
+        local i
+        for i in 1 2 3 4 5 6 7 8 9 10; do
+            kill -0 "$TIER3_PID" 2>/dev/null || break
+            sleep 0.2
+        done
+        if kill -0 "$TIER3_PID" 2>/dev/null; then
+            kill -KILL "$TIER3_PID" 2>/dev/null || true
+        fi
+        # Reap so we don't leave a zombie; non-zero exit is fine.
+        wait "$TIER3_PID" 2>/dev/null || true
+    fi
+    [[ -n "$TIER3_COST_DB" ]] && rm -f "$TIER3_COST_DB" "${TIER3_COST_DB}-shm" "${TIER3_COST_DB}-wal"
+    [[ -n "$TIER3_TOGGL_DB" ]] && rm -f "$TIER3_TOGGL_DB" "${TIER3_TOGGL_DB}-shm" "${TIER3_TOGGL_DB}-wal"
+    [[ -n "$TIER3_STDOUT" ]] && rm -f "$TIER3_STDOUT"
+    [[ -n "$TIER3_PRE_LOGS" ]] && rm -f "$TIER3_PRE_LOGS"
+    exit "$rc"
+}
+trap cleanup EXIT INT TERM
+
+# --- preconditions --------------------------------------------------------
+
+if ! command -v bun >/dev/null 2>&1; then
+    echo "opencode-plugin-smoke: 'bun' not found on PATH (config error)" >&2
+    exit 2
+fi
+
+# --- locate the dotfiles repo --------------------------------------------
+#
+# Two-strategy resolution per PLAN §Step 4:
+#
+#   1. Walk up from the script's realpath. When installed, the script
+#      lives at $DOTFILES_REPO/opencode/.config/opencode/bin/opencode-plugin-smoke
+#      (the bin/ dir is symlinked into ~/.config/opencode/ as a whole,
+#      so realpath of the script gets us inside the repo).
+#   2. Fall back to resolving the notify.ts symlink — guaranteed to
+#      exist on this machine per install.sh.
+#
+# The realpath walk is what makes the script work in both layouts:
+# invoked from inside the repo for development, and from
+# ~/.config/opencode/bin/ in normal use.
+
+script_realpath=$(realpath -- "${BASH_SOURCE[0]}")
+script_dir=$(dirname -- "$script_realpath")
+
+DOTFILES_ROOT=""
+candidate="$script_dir"
+# Bounded walk so we can't accidentally march up to /. Six levels is
+# plenty: the script sits 4 deep (.../opencode/.config/opencode/bin/).
+for _ in 1 2 3 4 5 6; do
+    if [[ -d "$candidate/opencode/.config/opencode/plugins" ]]; then
+        DOTFILES_ROOT="$candidate"
+        break
+    fi
+    parent=$(dirname -- "$candidate")
+    [[ "$parent" == "$candidate" ]] && break
+    candidate="$parent"
+done
+
+if [[ -z "$DOTFILES_ROOT" ]]; then
+    notify_link="${HOME}/.config/opencode/plugins/notify.ts"
+    if [[ -e "$notify_link" ]]; then
+        notify_real=$(realpath -- "$notify_link" 2>/dev/null || true)
+        # notify_real == .../<repo>/opencode/.config/opencode/plugins/notify.ts
+        # Strip 5 leading segments to get the repo root.
+        candidate=$(dirname -- "$(dirname -- "$(dirname -- "$(dirname -- "$(dirname -- "$notify_real")")")")")
+        if [[ -d "$candidate/opencode/.config/opencode/plugins" ]]; then
+            DOTFILES_ROOT="$candidate"
+        fi
+    fi
+fi
+
+if [[ -z "$DOTFILES_ROOT" ]]; then
+    echo "opencode-plugin-smoke: could not locate dotfiles repo" >&2
+    echo "  walked up from: $script_dir" >&2
+    echo "  fallback (~/.config/opencode/plugins/notify.ts) also failed." >&2
+    exit 2
+fi
+
+# Sanity check that opencode's deps are installed. The parse-checks
+# resolve @opencode-ai/plugin / @opencode-ai/sdk relative to each plugin
+# file, which lives under ~/.config/opencode/plugins/ — so node_modules
+# must exist in ~/.config/opencode/, not in the repo. (When working from
+# a clean checkout, install.sh + `bun install` in ~/.config/opencode is
+# what wires this up.)
+OPENCODE_HOME="${HOME}/.config/opencode"
+if [[ ! -d "$OPENCODE_HOME/node_modules/@opencode-ai/plugin" ]]; then
+    echo "opencode-plugin-smoke: @opencode-ai/plugin not installed" >&2
+    echo "  expected: $OPENCODE_HOME/node_modules/@opencode-ai/plugin" >&2
+    echo "  fix:      (cd $OPENCODE_HOME && bun install)" >&2
+    exit 2
+fi
+
+# --- detect cross-repo toggl-time -----------------------------------------
+
+TOGGL_TIME_DIR=""
+TOGGL_TIME_LINK="${HOME}/.config/opencode/plugins/toggl-time.ts"
+
+if [[ "$TOGGL_FORCE" != "off" ]]; then
+    if [[ -e "$TOGGL_TIME_LINK" ]]; then
+        toggl_real=$(realpath -- "$TOGGL_TIME_LINK" 2>/dev/null || true)
+        if [[ -f "$toggl_real" ]]; then
+            TOGGL_TIME_DIR=$(dirname -- "$toggl_real")
+        fi
+    fi
+    if [[ -z "$TOGGL_TIME_DIR" ]] && [[ "$TOGGL_FORCE" == "on" ]]; then
+        echo "opencode-plugin-smoke: --toggl-time forced but toggl-time.ts not found" >&2
+        echo "  expected symlink: $TOGGL_TIME_LINK" >&2
+        echo "    -> ~/src/bamboo/tools/src/opencode/plugins/toggl-time.ts" >&2
+        exit 2
+    fi
+fi
+
+# --- output helpers -------------------------------------------------------
+
+# Format: leading two-space indent, four-char status column, then label.
+# Matches the spec in PLAN §Step 4 "Output format".
+print_section() {
+    [[ "$QUIET" == 1 ]] || printf '[tier %s] %s\n' "$1" "$2"
+}
+
+print_row() {
+    [[ "$QUIET" == 1 ]] && return 0
+    local status="$1" label="$2" detail="${3-}"
+    if [[ -n "$detail" ]]; then
+        printf '  %-5s %s  %s\n' "$status" "$label" "$detail"
+    else
+        printf '  %-5s %s\n' "$status" "$label"
+    fi
+}
+
+# --- tier 1: parse-checks -------------------------------------------------
+
+# Relative paths (under DOTFILES_ROOT) — short form for the per-file
+# status row, full form for `bun build` invocation. The display label
+# below strips the leading "opencode/.config/opencode/" prefix so output
+# stays narrow.
+parse_targets_rel=(
+    "opencode/.config/opencode/plugins/notify.ts"
+    "opencode/.config/opencode/plugins/notify/lib.ts"
+    "opencode/.config/opencode/plugins/cost-tracker.ts"
+    "opencode/.config/opencode/plugins/cost-tracker/db.ts"
+    "opencode/.config/opencode/plugins/cost-tracker/recompute.ts"
+    "opencode/.config/opencode/plugins/cost-tracker/rate-table.ts"
+    "opencode/.config/opencode/bin/opencode-cost"
+    "opencode/.config/opencode/opencode-cost/by-toggl.ts"
+    "opencode/.config/opencode/opencode-cost/dump.ts"
+    "opencode/.config/opencode/opencode-cost/import-opencode.ts"
+    "opencode/.config/opencode/opencode-cost/reconcile.ts"
+    "opencode/.config/opencode/opencode-cost/zen-sync.ts"
+)
+
+run_tier1() {
+    local total=0 failures=0 file abs label out status
+    print_section 1 "parse-checks"
+
+    for file in "${parse_targets_rel[@]}"; do
+        abs="$DOTFILES_ROOT/$file"
+        label="${file#opencode/.config/opencode/}"
+        ((total++)) || true
+
+        if [[ ! -f "$abs" ]]; then
+            print_row "fail" "$label" "(missing)"
+            ((failures++)) || true
+            continue
+        fi
+
+        if out=$(bun build --target=bun --no-bundle "$abs" 2>&1); then
+            print_row "ok" "$label"
+            if [[ "$VERBOSE" == 1 ]] && [[ -n "$out" ]]; then
+                printf '%s\n' "$out" | sed 's/^/        /'
+            fi
+        else
+            status=$?
+            print_row "fail" "$label" "(bun build exit=$status)"
+            if [[ "$QUIET" != 1 ]]; then
+                printf '%s\n' "$out" | sed 's/^/        /'
+            fi
+            ((failures++)) || true
+        fi
+    done
+
+    # Toggl-time parse-checks live in the bamboo-tools repo.
+    if [[ -n "$TOGGL_TIME_DIR" ]]; then
+        for file in toggl-time.ts toggl-time.lib.ts; do
+            abs="$TOGGL_TIME_DIR/$file"
+            label="(toggl) $file"
+            ((total++)) || true
+
+            if [[ ! -f "$abs" ]]; then
+                print_row "fail" "$label" "(missing)"
+                ((failures++)) || true
+                continue
+            fi
+
+            if out=$(bun build --target=bun --no-bundle "$abs" 2>&1); then
+                print_row "ok" "$label"
+            else
+                status=$?
+                print_row "fail" "$label" "(bun build exit=$status)"
+                if [[ "$QUIET" != 1 ]]; then
+                    printf '%s\n' "$out" | sed 's/^/        /'
+                fi
+                ((failures++)) || true
+            fi
+        done
+    fi
+
+    if [[ "$failures" == 0 ]]; then
+        print_row "ok" "$total files"
+    else
+        print_row "fail" "$total files" "($failures failed)"
+    fi
+
+    TIER1_TOTAL=$total
+    TIER1_FAIL=$failures
+    [[ "$QUIET" == 1 ]] || echo
+    return "$failures"
+}
+
+# --- tier 2: bun:test -----------------------------------------------------
+
+# Parse a bun:test stdout/stderr blob for the pass/fail counts. bun
+# prints lines like:
+#   61 pass
+#   0 fail
+#   Ran 61 tests across 4 files. [45.00ms]
+# We grab the last "N pass" and "N fail" lines so per-file repeated
+# summaries don't confuse us.
+parse_bun_counts() {
+    local blob="$1"
+    local pass fail
+    pass=$(printf '%s\n' "$blob" | grep -E '^\s*[0-9]+\s+pass\s*$' | tail -1 | grep -oE '[0-9]+' || true)
+    fail=$(printf '%s\n' "$blob" | grep -E '^\s*[0-9]+\s+fail\s*$' | tail -1 | grep -oE '[0-9]+' || true)
+    [[ -z "$pass" ]] && pass=0
+    [[ -z "$fail" ]] && fail=0
+    printf '%s %s\n' "$pass" "$fail"
+}
+
+run_tier2() {
+    local total_pass=0 total_fail=0 group_failures=0
+    print_section 2 "bun:test"
+
+    # --- group 1: this repo's plugins/ tree (notify + cost-tracker) ---
+    local blob status pass fail
+    if [[ "$VERBOSE" == 1 ]]; then
+        # Stream to user terminal AND capture.
+        blob=$(bun test "$DOTFILES_ROOT/opencode/.config/opencode/plugins/" 2>&1 | tee /dev/stderr) || status=$?
+        status=${status:-0}
+    else
+        blob=$(bun test "$DOTFILES_ROOT/opencode/.config/opencode/plugins/" 2>&1) && status=0 || status=$?
+    fi
+
+    read -r pass fail < <(parse_bun_counts "$blob")
+    total_pass=$((total_pass + pass))
+    total_fail=$((total_fail + fail))
+
+    if [[ "$status" == 0 ]] && [[ "$fail" == 0 ]]; then
+        print_row "ok" "plugins/   " "$pass pass, $fail fail"
+    else
+        print_row "fail" "plugins/   " "$pass pass, $fail fail (exit=$status)"
+        ((group_failures++)) || true
+        # Surface bun's output even in non-verbose mode when something
+        # broke — the user can't fix it without seeing what failed.
+        if [[ "$QUIET" != 1 ]] && [[ "$VERBOSE" != 1 ]]; then
+            printf '%s\n' "$blob" | sed 's/^/        /'
+        fi
+    fi
+
+    # --- group 2: cross-repo toggl-time suites ---
+    if [[ -n "$TOGGL_TIME_DIR" ]]; then
+        local toggl_tests=(
+            "$TOGGL_TIME_DIR/toggl-time.test.ts"
+            "$TOGGL_TIME_DIR/toggl-time-warn.test.ts"
+        )
+
+        # Confirm both files exist; if not, surface a fail row.
+        local missing=()
+        for t in "${toggl_tests[@]}"; do
+            [[ -f "$t" ]] || missing+=("$(basename -- "$t")")
+        done
+
+        if [[ ${#missing[@]} -gt 0 ]]; then
+            print_row "fail" "toggl-time " "(missing: ${missing[*]})"
+            ((group_failures++)) || true
+        else
+            if [[ "$VERBOSE" == 1 ]]; then
+                blob=$(bun test "${toggl_tests[@]}" 2>&1 | tee /dev/stderr) || status=$?
+                status=${status:-0}
+            else
+                blob=$(bun test "${toggl_tests[@]}" 2>&1) && status=0 || status=$?
+            fi
+
+            read -r pass fail < <(parse_bun_counts "$blob")
+            total_pass=$((total_pass + pass))
+            total_fail=$((total_fail + fail))
+
+            if [[ "$status" == 0 ]] && [[ "$fail" == 0 ]]; then
+                print_row "ok" "toggl-time " "$pass pass, $fail fail"
+            else
+                print_row "fail" "toggl-time " "$pass pass, $fail fail (exit=$status)"
+                ((group_failures++)) || true
+                if [[ "$QUIET" != 1 ]] && [[ "$VERBOSE" != 1 ]]; then
+                    printf '%s\n' "$blob" | sed 's/^/        /'
+                fi
+            fi
+        fi
+    else
+        print_row "skip" "toggl-time " "(symlink not present; --no-toggl-time or auto-skip)"
+    fi
+
+    TIER2_PASS=$total_pass
+    TIER2_FAIL=$total_fail
+    TIER2_FAILS=$group_failures
+    [[ "$QUIET" == 1 ]] || echo
+    return "$group_failures"
+}
+
+# --- tier 3: live opencode serve + log scan -------------------------------
+#
+# Spawn `opencode serve`, wait for it to be ready, trigger plugin loading
+# via a single HTTP request, then scan the freshly-written log for
+# (a) each expected plugin's `loading plugin` line and (b) the absence
+# of ERROR/panic lines tagged with service=plugin.
+#
+# Deviations from PLAN §Step 5:
+#
+#   - PLAN says wait-for-ready by mtime-sorting ~/.local/share/opencode/log/
+#     and looking for `service=server status=started` in the newest log.
+#     In practice both signals are unreliable on this machine:
+#       * mtime is unreliable when another opencode TUI is running in
+#         parallel (its log file is constantly being appended to and
+#         "wins" the newest-by-mtime ranking).
+#       * `service=server status=started` is emitted for *every* HTTP
+#         request, not the one-time startup event we want.
+#     Instead we use the stdout line `opencode server listening on
+#     http://HOST:PORT` as the ready signal, which is both definitive
+#     and easy to parse. The new log file is identified by a
+#     before/after filename-set diff, not mtime.
+#
+#   - opencode serve loads external plugins lazily — they only show up
+#     in the log after the first HTTP request that creates a directory
+#     instance. We hit /config/providers with curl after ready to
+#     trigger plugin loading.
+#
+#   - The PLAN's `--port 0` text implies kernel ephemeral allocation.
+#     opencode actually tries 4096 first (its default) and falls back
+#     to a kernel-allocated port only on collision. Either way, we
+#     read the port from the listening line, so collisions are
+#     transparent.
+
+run_tier3() {
+    print_section 3 "live opencode serve"
+
+    # --- preconditions (skip-not-fail per PLAN §Step 5 §Preconditions) -
+    if ! command -v opencode >/dev/null 2>&1; then
+        print_row "skip" "opencode not on PATH (tier 3 disabled)"
+        TIER3_SKIPPED=1
+        [[ "$QUIET" == 1 ]] || echo
+        return 0
+    fi
+
+    local auth="$HOME/.local/share/opencode/auth.json"
+    if [[ ! -s "$auth" ]]; then
+        print_row "skip" "auth.json missing or empty (tier 3 disabled)"
+        TIER3_SKIPPED=1
+        [[ "$QUIET" == 1 ]] || echo
+        return 0
+    fi
+
+    if ! command -v curl >/dev/null 2>&1; then
+        # Treat as a config error rather than skip — tier 3 explicitly
+        # needs an HTTP client to trigger plugin loading.
+        print_row "fail" "curl not on PATH (cannot trigger plugin load)"
+        TIER3_FAIL=1
+        [[ "$QUIET" == 1 ]] || echo
+        return 1
+    fi
+
+    local log_dir="$HOME/.local/share/opencode/log"
+    if [[ ! -d "$log_dir" ]]; then
+        print_row "fail" "log dir missing: $log_dir"
+        TIER3_FAIL=1
+        [[ "$QUIET" == 1 ]] || echo
+        return 1
+    fi
+
+    # --- sandbox plugin state writes (PLAN §Step 5 §Sandbox) -----------
+    # These are tracked by the EXIT trap; if the script dies between
+    # here and the explicit teardown, the trap still cleans up.
+    TIER3_COST_DB=$(mktemp -t opencode-cost-smoke.XXXXXX.db)
+    TIER3_TOGGL_DB=$(mktemp -t toggl-state-smoke.XXXXXX.db)
+    TIER3_STDOUT=$(mktemp -t opencode-smoke-stdout.XXXXXX)
+
+    # --- snapshot pre-existing log filenames ---------------------------
+    # File-set diff (not mtime) — see header comment for why mtime is
+    # unreliable. Filenames look like 2026-05-21T175156.log which sort
+    # lexicographically by creation time, but we don't depend on order
+    # here; just on set membership. Tracked globally so the EXIT trap
+    # cleans it up if the script is interrupted before run_tier3
+    # reaches its own cleanup line.
+    TIER3_PRE_LOGS=$(mktemp -t opencode-smoke-prelogs.XXXXXX)
+    local f
+    for f in "$log_dir"/*.log; do
+        [[ -e "$f" ]] || continue
+        basename -- "$f"
+    done >"$TIER3_PRE_LOGS"
+
+    # --- spawn opencode serve ------------------------------------------
+    local t0=$SECONDS
+    OPENCODE_COST_DB="$TIER3_COST_DB" \
+    TOGGL_STATE_DB="$TIER3_TOGGL_DB" \
+    OPENCODE_IDLE_NTFY_TOPIC="" \
+        opencode serve --hostname 127.0.0.1 --port 0 --log-level INFO \
+        >"$TIER3_STDOUT" 2>&1 &
+    TIER3_PID=$!
+
+    # --- wait for ready (stdout signal) --------------------------------
+    local timeout_sec="${SMOKE_LIVE_TIMEOUT_SEC:-10}"
+    local deadline=$((SECONDS + timeout_sec))
+    local port="" line=""
+    while ((SECONDS < deadline)); do
+        if ! kill -0 "$TIER3_PID" 2>/dev/null; then
+            print_row "fail" "opencode serve exited before becoming ready"
+            if [[ "$QUIET" != 1 ]]; then
+                sed 's/^/        /' "$TIER3_STDOUT" || true
+            fi
+            TIER3_FAIL=1
+            [[ "$QUIET" == 1 ]] || echo
+            return 1
+        fi
+        # Match the listening line; capture the port (digits after the
+        # last colon). grep -m1 stops at the first match.
+        line=$(grep -m1 'opencode server listening on http://' "$TIER3_STDOUT" 2>/dev/null || true)
+        if [[ -n "$line" ]]; then
+            port="${line##*:}"
+            break
+        fi
+        sleep 0.2
+    done
+
+    if [[ -z "$port" ]]; then
+        print_row "fail" "timed out after ${timeout_sec}s waiting for listening signal"
+        if [[ "$QUIET" != 1 ]] && [[ -s "$TIER3_STDOUT" ]]; then
+            sed 's/^/        /' "$TIER3_STDOUT" || true
+        fi
+        TIER3_FAIL=1
+        [[ "$QUIET" == 1 ]] || echo
+        return 1
+    fi
+
+    local elapsed=$((SECONDS - t0))
+    print_row "ok" "server started in ${elapsed}s on 127.0.0.1:${port}"
+
+    # --- trigger plugin load via HTTP request --------------------------
+    # opencode serve loads external plugins on first directory-instance
+    # creation, which is triggered by /config/providers (among others).
+    # --max-time guards against a hung response from the server itself.
+    if ! curl -sS --max-time 5 "http://127.0.0.1:${port}/config/providers" -o /dev/null 2>&1; then
+        print_row "fail" "curl /config/providers failed (server up but no response)"
+        TIER3_FAIL=1
+        [[ "$QUIET" == 1 ]] || echo
+        return 1
+    fi
+
+    # --- find the new log file -----------------------------------------
+    local new_log="" bn candidate
+    deadline=$((SECONDS + 5))
+    while [[ -z "$new_log" ]] && ((SECONDS < deadline)); do
+        for candidate in "$log_dir"/*.log; do
+            [[ -e "$candidate" ]] || continue
+            bn=$(basename -- "$candidate")
+            # `grep -Fxq` = fixed-string, whole-line match. If $bn is
+            # not in the pre-snapshot, this is our new log file.
+            if ! grep -Fxq "$bn" "$TIER3_PRE_LOGS"; then
+                new_log="$candidate"
+                break
+            fi
+        done
+        [[ -z "$new_log" ]] && sleep 0.2
+    done
+    rm -f "$TIER3_PRE_LOGS"
+    TIER3_PRE_LOGS=""  # signal trap that we already cleaned this up
+
+    if [[ -z "$new_log" ]]; then
+        print_row "fail" "no new log file in $log_dir"
+        TIER3_FAIL=1
+        [[ "$QUIET" == 1 ]] || echo
+        return 1
+    fi
+
+    # --- determine expected plugins ------------------------------------
+    # Mirror Tier 1's coverage set: cost-tracker + notify always;
+    # toggl-time only when the cross-repo symlink resolved.
+    local expected=(cost-tracker notify)
+    [[ -n "$TOGGL_TIME_DIR" ]] && expected+=(toggl-time)
+
+    # --- poll log for each expected plugin's load line -----------------
+    # Format (observed on opencode 1.14.28):
+    #   INFO  ... service=plugin path=file:///home/USER/.config/opencode/plugins/NAME.ts loading plugin
+    declare -A loaded=()
+    deadline=$((SECONDS + 5))
+    local plug all_loaded
+    while ((SECONDS < deadline)); do
+        all_loaded=1
+        for plug in "${expected[@]}"; do
+            [[ "${loaded[$plug]:-}" == 1 ]] && continue
+            if grep -qE "service=plugin path=file://.*/${plug}\\.ts loading plugin" "$new_log" 2>/dev/null; then
+                loaded[$plug]=1
+            else
+                all_loaded=0
+            fi
+        done
+        ((all_loaded == 1)) && break
+        sleep 0.2
+    done
+
+    local plugin_fail=0
+    for plug in "${expected[@]}"; do
+        if [[ "${loaded[$plug]:-}" == 1 ]]; then
+            print_row "ok" "${plug}.ts loaded"
+        else
+            print_row "fail" "${plug}.ts NOT loaded"
+            plugin_fail=1
+        fi
+    done
+
+    # PLAN §Notes-and-risks "Tier 3 false-positives on log scan":
+    # opencode's log format is not a stable API. If a future opencode
+    # version changes the `service=plugin path=...` line format, the
+    # per-plugin regex above can silently pass when nothing actually
+    # loaded. Defend against that by asserting the *total* number of
+    # `loading plugin` lines for external paths is at least what we
+    # expect. (Internal plugins use `name=...` instead of `path=...`
+    # and are filtered out by requiring `path=file://`.)
+    local load_lines
+    # `grep | wc -l` returns 0 cleanly on no match, unlike grep -c
+    # which exits 1 (which would fight set -euo pipefail).
+    load_lines=$( { grep -E 'service=plugin path=file://.* loading plugin' "$new_log" 2>/dev/null || true; } | wc -l)
+    if (( load_lines < ${#expected[@]} )); then
+        print_row "fail" "expected >=${#expected[@]} 'loading plugin' lines, found ${load_lines}"
+        plugin_fail=1
+    fi
+
+    if ((plugin_fail)); then
+        TIER3_FAIL=1
+    fi
+
+    # --- error scan ----------------------------------------------------
+    # Two patterns per PLAN §Step 5 §Assertions:
+    #   1. Any `^ERROR` line tagged service=plugin.
+    #   2. Any service=plugin line containing panic/exception/failed-to-load.
+    # Prefer ripgrep for speed/sanity; fall back to grep -E if absent.
+    local grepper
+    if command -v rg >/dev/null 2>&1; then
+        grepper=rg
+    else
+        grepper=grep
+    fi
+
+    local has_errors=0
+    if [[ "$grepper" == "rg" ]]; then
+        if rg -q '^ERROR.*service=plugin' "$new_log" 2>/dev/null \
+           || rg -q 'service=plugin.*(panic|exception|failed to load)' "$new_log" 2>/dev/null; then
+            has_errors=1
+        fi
+    else
+        if grep -qE '^ERROR.*service=plugin' "$new_log" 2>/dev/null \
+           || grep -qE 'service=plugin.*(panic|exception|failed to load)' "$new_log" 2>/dev/null; then
+            has_errors=1
+        fi
+    fi
+
+    if ((has_errors == 0)); then
+        print_row "ok" "no plugin errors in log"
+    else
+        print_row "fail" "ERROR/panic lines found in plugin log"
+        if [[ "$QUIET" != 1 ]]; then
+            if [[ "$grepper" == "rg" ]]; then
+                rg -n '^ERROR.*service=plugin|service=plugin.*(panic|exception|failed to load)' "$new_log" 2>/dev/null | sed 's/^/        /' || true
+            else
+                grep -nE '^ERROR.*service=plugin|service=plugin.*(panic|exception|failed to load)' "$new_log" 2>/dev/null | sed 's/^/        /' || true
+            fi
+        fi
+        TIER3_FAIL=1
+    fi
+
+    # --- teardown (explicit) -------------------------------------------
+    # Best-effort graceful shutdown here; the EXIT trap will still run
+    # and catch anything we miss (e.g. early returns above).
+    local pid_was="$TIER3_PID" kill_status="clean" wait_status=0
+    kill -TERM "$TIER3_PID" 2>/dev/null || true
+    local i
+    for i in 1 2 3 4 5 6 7 8 9 10; do
+        kill -0 "$TIER3_PID" 2>/dev/null || break
+        sleep 0.2
+    done
+    if kill -0 "$TIER3_PID" 2>/dev/null; then
+        kill -KILL "$TIER3_PID" 2>/dev/null || true
+        kill_status="killed"
+    fi
+    wait "$TIER3_PID" 2>/dev/null || wait_status=$?
+    # Reset so the EXIT trap doesn't try to kill an already-reaped pid.
+    TIER3_PID=""
+
+    print_row "ok" "teardown ${kill_status} (pid ${pid_was} exited ${wait_status})"
+
+    TIER3_PORT="$port"
+    [[ "$QUIET" == 1 ]] || echo
+    return "${TIER3_FAIL:-0}"
+}
+
+# --- run selected tiers ---------------------------------------------------
+
+TIER1_TOTAL=0
+TIER1_FAIL=0
+TIER2_PASS=0
+TIER2_FAIL=0
+TIER2_FAILS=0
+TIER3_FAIL=0
+TIER3_SKIPPED=0
+TIER3_PORT=""
+
+worst_exit=0
+
+if tier_enabled 1; then
+    if ! run_tier1; then
+        worst_exit=1
+    fi
+fi
+
+if tier_enabled 2; then
+    if ! run_tier2; then
+        worst_exit=1
+    fi
+fi
+
+if tier_enabled 3; then
+    if ! run_tier3; then
+        worst_exit=1
+    fi
+fi
+
+# Plugins covered: notify + cost-tracker are always in; toggl-time only
+# when its symlink resolved.
+plugin_count=2
+[[ -n "$TOGGL_TIME_DIR" ]] && plugin_count=3
+
+if [[ "$worst_exit" == 0 ]]; then
+    summary_status="pass"
+else
+    summary_status="fail"
+fi
+
+# Single-line summary, also the only output under --quiet. Append a
+# "+ live load" / "+ live skipped" suffix when tier 3 was selected so
+# the summary reflects whether the live-load smoke actually ran.
+test_count=$((TIER2_PASS + TIER2_FAIL))
+live_suffix=""
+if tier_enabled 3; then
+    if ((TIER3_SKIPPED)); then
+        live_suffix=" + live skipped"
+    elif ((TIER3_FAIL)); then
+        live_suffix=" + live FAILED"
+    else
+        live_suffix=" + live load"
+    fi
+fi
+printf 'smoke: %s (tier=%s / %d plugins / %d files parsed / %d tests%s)\n' \
+    "$summary_status" "$TIERS" "$plugin_count" "$TIER1_TOTAL" "$test_count" "$live_suffix"
+
+exit "$worst_exit"

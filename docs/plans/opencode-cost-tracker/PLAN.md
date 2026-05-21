@@ -13,8 +13,7 @@ spend vs billing; Opencode API/MCP session tracking?"
   cost-tracker plan and stubs`) on `MASTER-1703`, fast-forwarded into
   `m`. All stubs land as no-ops.
 - 2026-05-19 — activation steps §12.1 (symlinks) and §12.2 (PATH) done.
-  §12.3 plugin smoke test still pending; needs a fresh opencode
-  session.
+  §12.3 plugin smoke test closed out via `opencode-plugin-smoke --live`.
 - 2026-05-19 — Phase 1 (capture) implemented. db.ts schema + prepared stmts;
   cost-tracker.ts wires message.updated + session.idle to DB. In this phase,
   cost_recomputed_fxp8 copies cost_opencode_fxp8 (no recompute math yet).
@@ -821,8 +820,7 @@ integer at the per-message total.)
 
 1. [x] Land this PLAN.md + the stubs (commit `3a7e1c7`, 2026-05-19).
 2. [x] **Activate** (see §12) — symlink the tree and reload PATH
-   (2026-05-19). §12.3 smoke test still pending. Required before
-   any phase below runs.
+   (2026-05-19). §12.3 smoke test closed out via `opencode-plugin-smoke --live`.
 3. [x] Phase 1 (capture) — fills the DB on next opencode run (done 2026-05-19).
 4. [x] Phase 2 (recompute) — math correctness (done 2026-05-19).
 5. [x] Phase 3 (dump CLI) — query ergonomics (done 2026-05-19).
@@ -887,18 +885,11 @@ which opencode-cost          # → ~/.config/opencode/bin/opencode-cost
 opencode-cost --help         # prints the usage stub
 ```
 
-### 12.3 Plugin smoke test (PENDING — needs a fresh opencode session)
+### 12.3 Plugin smoke test (CLOSED — covered by opencode-plugin-smoke)
 
-The stub plugin loads but no-ops. Confirm opencode picks it up cleanly
-by running a single-prompt session and checking opencode's log doesn't
-contain a plugin-load error:
-
-```bash
-grep -i 'cost-tracker' ~/.local/share/opencode/log/*.log | tail
-```
-
-If the log mentions cost-tracker only via the import line (no
-`ERROR`/`failed`/`exception`), Phase 1 implementation can start.
+The §12.3 manual grep step is superseded by `opencode-plugin-smoke
+--live` (see `docs/plans/opencode-plugin-smoke/PLAN.md`). Run it after
+every opencode upgrade.
 
 ### 12.4 Pre-Phase-4 prerequisites (defer until Phase 4 starts)
 
