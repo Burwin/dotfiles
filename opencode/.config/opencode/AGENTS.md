@@ -127,6 +127,80 @@ Gotchas:
 OAuth callback URL (in case re-registration is needed):
 `http://127.0.0.1:19876/mcp/oauth/callback`
 
+## GitHub Copilot review re-trigger
+
+Re-requesting a Copilot review on a PR after the bot has already
+submitted a review is non-obvious. The standard REST endpoint
+(`POST /repos/{owner}/{repo}/pulls/{n}/requested_reviewers` with
+body `{"reviewers": ["Copilot"]}`) returns HTTP 201 but silently
+fails to fire a `review_requested` timeline event, and Copilot
+never re-reviews. Two workarounds, in escalation order:
+
+1. **First re-request: `gh pr edit <PR> --add-reviewer "@copilot"`.**
+   The `@copilot` syntax (note the `@` prefix and lowercase) was
+   added to the `gh` CLI in ~April 2026 and works against the
+   bot's app login. Simplest path; usually works once.
+
+2. **Subsequent re-requests: GraphQL `requestReviews` + `botIds`.**
+   If `gh pr edit` stops firing the timeline event after the first
+   re-request (observed during SH-274 — possibly rate-limit or
+   bot-state-machine quirk), fall back to:
+
+   ```bash
+   # Get the PR node ID
+   gh api graphql -f query='
+   query {
+     repository(owner: "ORG", name: "REPO") {
+       pullRequest(number: 51) { id }
+     }
+   }'
+
+   # Trigger the re-review
+   gh api graphql -f query='
+   mutation {
+     requestReviews(input: {
+       pullRequestId: "PR_NODE_ID",
+       botIds: ["BOT_kgDOCnlnWA"],
+       union: true
+     }) {
+       pullRequest {
+         reviewRequests(first: 5) {
+           nodes { requestedReviewer { ... on Bot { login } } }
+         }
+       }
+     }
+   }'
+   ```
+
+   The `botIds` field is GraphQL-only — REST and `gh pr edit`
+   don't surface it. `union: true` adds to the existing reviewer
+   set rather than replacing it. Copilot's bot node ID is
+   `BOT_kgDOCnlnWA`; discover others via `... on Bot { id }` on a
+   PR where the bot has reviewed.
+
+Validation gotchas:
+
+- **REST is authoritative**: `gh api repos/.../pulls/{n}/requested_reviewers`
+  shows Copilot in the `users` array if the re-request took.
+- **`gh pr view --json reviewRequests` lies**: the CLI wrapper
+  silently filters out bots. It returns `[]` even when REST and
+  GraphQL both confirm Copilot is queued. Don't trust it for
+  Copilot validation.
+- **Timeline lag**: `review_requested` events sometimes don't
+  appear immediately. Wait ~5s before checking.
+- **Review wait**: Copilot takes ~3 min from `copilot_work_started`
+  to submitted review. Poll `gh pr view <PR> --json reviews` for
+  a new entry with `author.login = "copilot-pull-request-reviewer"`.
+
+Loop exit signal: Copilot's review body reads "Copilot reviewed
+N out of N changed files in this pull request and generated no
+new comments." That's the clean state; merge can proceed.
+
+Reply-then-re-request etiquette: reply to each inline comment via
+`POST /repos/.../pulls/{n}/comments/{comment_id}/replies` with a
+brief "Fixed in <sha>" note before re-requesting. Future human
+reviewers see the resolution trail without having to diff commits.
+
 ## Plans
 
 Active implementation plans live in `docs/plans/`. When asked to work on a
