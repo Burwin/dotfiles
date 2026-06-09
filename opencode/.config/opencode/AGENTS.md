@@ -14,6 +14,7 @@ and take precedence on project-specific concerns.
   - `@rules/workflow.md` — commits, branches, PRs, testing
   - `@rules/tools.md` — preferred CLI tools and package managers
   - `@rules/project-structure.md` — file layout defaults
+  - `@rules/documentation.md` — two-layer (human + LLM) doc convention
 
 ## External File Loading
 
@@ -35,6 +36,7 @@ Instructions:
 - **Git workflow, commits, branches, PRs:** `@rules/workflow.md`
 - **Tooling and CLI preferences:** `@rules/tools.md`
 - **Project structure and file layout:** `@rules/project-structure.md`
+- **Documentation style (two-layer convention):** `@rules/documentation.md`
 
 ## Precedence
 

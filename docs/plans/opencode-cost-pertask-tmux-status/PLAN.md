@@ -243,7 +243,7 @@ Final state after Commit 6:
       since `newestKnown=null`. ~4450 rows landed before the manual
       120s timeout; a follow-up `--max-pages 10` added the trailing
       1 net-new row, total **4451 rows of `zen_usage` across 77
-      sessions in workspace `wrk_<your-workspace-id>…`** (May 14 18:47 UTC
+       sessions in workspace `wrk_<your-workspace-id>`** (May 14 18:47 UTC
       through 2026-05-20 03:39 UTC).
     - `cache_write_5m_tokens > 0` on 3855 of 4451 rows; `_1h` rows
       always 0 (consistent with current anthropic behavior); no
@@ -1449,7 +1449,7 @@ active pane's directory — same wrapper that toggl-tmux-status already
 uses:
 
 ```
-set -g status-right "#[fg=brightblack]#(cd '#{pane_current_path}' 2>/dev/null && opencode-cost-tmux-status)#(cd '#{pane_current_path}' 2>/dev/null && PATH=$HOME/.local/bin:$PATH toggl-tmux-status) | #h "
+set -g status-right "#[fg=brightblack]#(cd '#{pane_current_path}' 2>/dev/null && PATH=$HOME/.config/opencode/bin:$PATH opencode-cost-tmux-status)#(cd '#{pane_current_path}' 2>/dev/null && PATH=$HOME/.local/bin:$PATH toggl-tmux-status) | #h "
 ```
 
 Without the `cd '#{pane_current_path}'` prefix, the bar inherits

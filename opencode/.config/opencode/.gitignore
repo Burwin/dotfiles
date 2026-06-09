@@ -1,0 +1,20 @@
+# Runtime artifacts created by `bun install` / OpenCode runtime.
+#
+# IMPORTANT for future contributors (human and LLM): if you need to
+# install JS dependencies for OpenCode plugins or run `bun install`,
+# do it in the DEPLOYED config directory (`~/.config/opencode/`),
+# NOT inside this stow source dir (`opencode/.config/opencode/`).
+#
+# The dotfiles repo is the stow SOURCE; `~/.config/opencode/` is
+# where OpenCode actually runs. Installing deps in the source dir
+# creates duplicate copies that bloat the public repo and confuse
+# `stow` (which walks the source tree on disk). Anything matched
+# below is therefore allowed to exist locally for convenience but
+# must never be committed.
+node_modules
+package.json
+package-lock.json
+bun.lock
+
+# Local secrets directory — never commit.
+secrets/
