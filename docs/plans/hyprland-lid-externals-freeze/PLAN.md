@@ -1,10 +1,10 @@
 # Hyprland — externals freeze on lid close (Intel i915 multi-monitor)
 
-Status: investigating. Two failed iterations; reverted to `98abc12f`
-(focus-external-first hack) as the working baseline while we choose
-the next hypothesis. Active path: capture clean repro for upstream
-([aquamarine#308](https://github.com/hyprwm/aquamarine/issues/308)
-family).
+Status: clean repro captured 2026-06-10 (post-reboot fresh session).
+Upstream comment drafted in `UPSTREAM-COMMENT.md` and posted on
+[aquamarine#308](https://github.com/hyprwm/aquamarine/issues/308).
+Next: test `AQ_NO_ATOMIC=1` (path A) and follow up on the upstream
+thread with the result.
 
 ## Problem
 
@@ -74,6 +74,7 @@ The page-flip race is pre-existing regardless of lid handling — see
 | 2026-05-07 | Boot-with-lid-closed didn't disable eDP-1 (bindl only fires on transitions) | `exec-once` in `autostart.conf` reads `/proc/acpi/button/lid/LID*/state` at startup | Fixed. Plan archived. |
 | 2026-06-09 (commit `98abc12f`) | First lid-close after boot leaves externals' framebuffer frozen, cursor still moves | Focus first non-eDP-1 monitor before disabling eDP-1, so focus migrates cleanly | Initially appeared to fix but **did not** — see today's test. |
 | 2026-06-10 (uncommitted, now reverted) | Same symptom persists | Theorize aquamarine 0.11.0 stranded `isPageFlipPending` race; add `env = AQ_NO_ATOMIC,1` to a new `~/.config/hypr/envs.conf`; revert focus-first hack | **Did not test what we thought it did.** `envs.conf` was never sourced — see "Critical gotcha" below. The actual test ran without AQ_NO_ATOMIC and without the focus-first hack, i.e. plain `hyprctl keyword monitor`. Symptoms got slightly worse (initial lid-close did nothing; required mouse movement; transient keystroke repetition). |
+| 2026-06-10 (post-reboot) | Captured clean repro for upstream | Ran `capture-lid-event.sh` flow (split inline through opencode, fresh session post-restart) | Clean repro: 1 stranded page-flip on DP-6's modeset right after eDP-1 disable, exactly matching the visual wedge. 3 startup errors + 14 in 113s test window (1 wedge, 13 background race). Comment drafted at `UPSTREAM-COMMENT.md`, capture saved at `~/lid-capture-20260610-102949/` (+ tarball). |
 
 ## Today's test (2026-06-10)
 
