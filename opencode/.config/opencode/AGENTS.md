@@ -213,3 +213,25 @@ plan:
 3. Follow the phase order — each phase is independently shippable
 
 The cost-tracker plan is at `docs/plans/opencode-cost-tracker/PLAN.md`.
+
+### Archiving plans
+
+When a plan ships, is superseded, or otherwise becomes reference material,
+move it under `docs/archive/<category>/` (existing categories include
+`opencode/` and `toggl/`; pick the closest match or ask before adding a
+new one):
+
+- **Filename**: `PLAN-<topic>.md`. Strip the leading `<category>-` prefix
+  from the source directory name. Example:
+  `docs/plans/opencode-cost-breakdown/PLAN.md` →
+  `docs/archive/opencode/PLAN-cost-breakdown.md`.
+- **Use `git mv`** so history follows the file.
+- **Prepend a blockquote header** at the top of the moved file with the
+  archive date, what (if anything) supersedes it, and a "decision history
+  below preserved as-is" note. Existing files under
+  `docs/archive/opencode/` are the reference template.
+- **Remove the now-empty source directory** under `docs/plans/`.
+- **Cross-references inside other already-archived files are
+  intentionally left to rot** — see `docs/archive/README.md`. Update only
+  references in *active* plans/docs that materially mislead a reader
+  about the current state.
