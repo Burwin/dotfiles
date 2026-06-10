@@ -1,13 +1,19 @@
 # Hyprland — externals freeze on lid close (Intel i915 multi-monitor)
 
-Status (2026-06-10): **candidate C shipped** in commit
-`cef7a7a` (`fix(hypr): mirror+dpms eDP-1 on lid close to bypass
-i915 wedge`). The lid handler now puts eDP-1 into `mirror` mode
-against an external + DPMS-off, instead of `keyword monitor
-"eDP-1, disable"`. Mirror entry probed cascade-free; user-tested
-lid close/open cycle on legacy DRM passed both wedge avoidance
-and cursor containment (cursor can no longer wander onto the
-lidded panel because eDP-1 takes the external's coord space).
+Status (2026-06-10, **PAUSED**): candidate C
+(commit `cef7a7a`, mirror+dpms) **disconfirmed on atomic DRM** —
+the production-state lid cycle still wedges DP-6/DP-7. Work paused
+per user direction; relying on the next omarchy/aquamarine bump
+(targeting `f5cdaa8` "CRTC starvation recovery + clear stale
+page-flip state after suspend" or later) to fix this from upstream.
+Detail: `atomic-drm-wedge-evidence.md`.
+
+`cef7a7a` is **kept in place**, not reverted. On legacy DRM it is
+still a strict UX win (wedge avoidance + cursor clamping). On
+atomic DRM it is no worse than the prior baseline (focus-first hack
+also wedged), and reverting would lose the legacy-DRM benefit
+without fixing atomic. The mirror cascade-free claim only holds
+for legacy DRM — see disconfirmation entry in the timeline.
 
 Candidate A (`AQ_NO_ATOMIC=1`) was tested and disconfirmed earlier
 in the same session — wedge reproduced identically on legacy DRM,
@@ -16,13 +22,23 @@ reverted (never committed). Follow-up posted on aq#308:
 [issuecomment-4671818195](https://github.com/hyprwm/aquamarine/issues/308#issuecomment-4671818195)
 (local copy at `UPSTREAM-COMMENT-FOLLOWUP.md`).
 
-**Resume here:** atomic-DRM confirmation. The candidate C test ran
-on legacy DRM because AQ_NO_ATOMIC was still set in the session.
-Next natural logout will clear it; first lid close/open after that
-is the production-state confirmation. If it passes, mark C as fully
-verified and update this plan's status to "shipped & confirmed". If
-it wedges, revert `cef7a7a` and move to candidate E
-(aquamarine-git from AUR).
+**Resume signals (when picking this up again):**
+
+1. **Omarchy bumps `aquamarine` past 0.11.0-2** — first thing to
+   try. `pacman -Qi aquamarine` post-bump; if `f5cdaa8` is in,
+   re-test the lid cycle in a fresh session. If clean, mark this
+   plan archived.
+2. **If omarchy hasn't bumped and the wedge becomes painful** —
+   move to candidate E (build `aquamarine-git` from AUR).
+3. **If wanting to chase further within the current pin** — the
+   "mystery cluster" of 5 page-flip errors at lines 423–427 of
+   `atomic-drm-lid-events.log` (post-libinput-register, pre-
+   user-lid-event) is unexplained and could be compounding the
+   wedge. Investigate before attempting another mitigation.
+
+A follow-up upstream comment on aq#308 with the atomic-DRM repro
+data is **not** filed; if work resumes and we still need upstream
+attention, draft from `atomic-drm-wedge-evidence.md`.
 
 ## Problem
 
@@ -95,6 +111,7 @@ The page-flip race is pre-existing regardless of lid handling — see
 | 2026-06-10 (post-reboot) | Captured clean repro for upstream | Ran `capture-lid-event.sh` flow (split inline through opencode, fresh session post-restart) | Clean repro: 1 stranded page-flip on DP-6's modeset right after eDP-1 disable, exactly matching the visual wedge. 3 startup errors + 14 in 113s test window (1 wedge, 13 background race). Comment drafted at `UPSTREAM-COMMENT.md`, capture saved at `~/lid-capture-20260610-102949/` (+ tarball). |
 | 2026-06-10 (post-restart) | First lid-close after restart with `AQ_NO_ATOMIC=1` confirmed active | Stowed `uwsm/` package exporting `AQ_NO_ATOMIC=1`, restarted machine, verified env + legacy drm iface in log | **Wedge reproduced identically.** DP-6/DP-7 went black with cursor still moving; recovered on lid open. 12 page-flip errors at startup + 5 in test window — same family of "Cannot commit when a page-flip is awaiting" errors fire on the legacy path. Disconfirms H1's atomic-only framing. Reverted `uwsm/` package (never committed). |
 | 2026-06-10 (commit `cef7a7a`) | Candidate C: replace `keyword monitor "eDP-1, disable"` with `dpms off` + mirror against an external | First tried plain DPMS-off (passed wedge but cursor could still wander to lidded eDP-1 at x=3840). Probed `keyword monitor "eDP-1, ..., mirror, DP-6"` — 0 log lines, 0 cascade. Combined: focus external → DPMS off → mirror eDP-1 against the focused external. | **Both pass criteria met on legacy DRM.** Lid-close: externals stay live, no DP-6/DP-7 modeset cascade, cursor clamped to 0..3839. Lid-open cascade is real (3 page-flip errors, modesets across all 3 connectors) but does not wedge. Atomic-DRM confirmation pending next session. |
+| 2026-06-10 (post-restart, atomic DRM) | Candidate C atomic-DRM verification | Fresh session, `AQ_NO_ATOMIC` unset (verified via `cat /proc/<pid>/environ`), aquamarine logged `Atomic supported, using atomic for modesetting`. Single user-driven lid close+open cycle. | **Disconfirmed on atomic.** User-confirmed standard repro: externals wedged on lid close (black with cursor still moving), recovered with mouse-jiggle on lid open. 13 page-flip errors at startup, 5 in a "mystery cluster" before the lid event, 2 during the lid-close cascade, 0 on lid-open. The mirror command **did** cascade onto DP-6 + DP-7 on atomic (lines 443/445 of `atomic-drm-lid-events.log`), contrary to the legacy probe. Cascade-free claim holds for legacy iface only. Evidence preserved at `atomic-drm-wedge-evidence.md` + `atomic-drm-lid-events.log` + `atomic-drm-monitors-after.json`. Plan paused; cef7a7a kept (legacy gain, atomic break-even with revert baseline). |
 
 ## Today's test (2026-06-10)
 
@@ -183,7 +200,7 @@ known reference point.
 
 Ranked by current confidence, highest first.
 
-### H1 — Aquamarine 0.11.0 atomic-DRM page-flip race on Intel i915 (partially disconfirmed 2026-06-10)
+### H1 — Aquamarine 0.11.0 page-flip race on Intel i915 (still the leading hypothesis, atomic and legacy code paths affected differently)
 
 **Update 2026-06-10 (post-restart test):** the "atomic-only" framing
 was wrong. With `AQ_NO_ATOMIC=1` confirmed active (aquamarine logged
@@ -195,6 +212,22 @@ enable/disable sequencing inside aquamarine, or a kernel-side i915
 issue triggered by clustered modesets. Treat the page-flip race as
 real but **not** an atomic-iface bug. AQ_NO_ATOMIC mitigation
 candidate (1 below) is now **disconfirmed** for this configuration.
+
+**Update 2026-06-10 (atomic-DRM candidate C verification):** the
+mirror+dpms approach (cef7a7a) avoids the cascade on legacy iface
+but **not** on atomic. On atomic, applying `keyword monitor "eDP-1,
+..., mirror, DP-6"` triggers Hyprland's atomic-commit path to
+re-modeset all connectors, firing 2 page-flip errors and wedging
+DP-6/DP-7 just like the original `disable` form. Refines the
+hypothesis: the page-flip race is a shared problem on i915, but
+its cascade triggers differ between atomic and legacy. On legacy,
+the mirror command is a no-op-ish remap that doesn't cascade; on
+atomic, every monitor-config write goes through the same atomic
+state-machine and any change cascades. Mitigation requires
+either: (a) avoiding the cascade entirely (no realistic path
+within Hyprland userspace today), (b) the upstream aquamarine fix
+that recovers from stranded page-flips (`f5cdaa8` and successors,
+unreleased as of 2026-06-10).
 
 The 16 page-flip errors already in this session's log are
 diagnostic of the same wedge family upstream is tracking:
@@ -270,7 +303,7 @@ hypotheses are exhausted.
 
 ## Candidate next steps
 
-**C — DPMS + mirror (SHIPPED, awaiting atomic confirmation)**
+**C — DPMS + mirror (SHIPPED, atomic verification FAILED; kept anyway)**
 
 Shipped in commit `cef7a7a`. Final design:
 
@@ -278,32 +311,43 @@ Shipped in commit `cef7a7a`. Final design:
   eDP-1`, then `keyword monitor "eDP-1, preferred, 0x0, 1, mirror,
   $ext"`. The mirror reassigns eDP-1's coord space to overlap the
   external, so cursor and workspaces stay inside 0..3839; DPMS
-  keeps the panel dark. Mirror entry was probed cascade-free.
+  keeps the panel dark.
 - **Lid open:** `keyword monitor "eDP-1, preferred, auto, auto"`
   (revert mirror; this triggers a real modeset cascade) then
   `dpms on eDP-1`. The cascade on lid-open never produced a wedge
   in any of our tests — the wedge specifically requires a
   cascade-while-page-flip-pending at lid-close moment.
 
-**Remaining verification:** lid test on atomic DRM. The shipping
-test ran in a session with `AQ_NO_ATOMIC=1` still set from the
-candidate A test. Atomic-DRM is the production state on next
-logout. First close/open after that is the confirmation.
+**Atomic-DRM verification (2026-06-10): FAILED.** Wedge reproduced
+on first lid close in a fresh atomic-DRM session. The mirror
+command, which probed cascade-free on legacy DRM, does cascade on
+atomic. See `atomic-drm-wedge-evidence.md` for the full evidence
+and revised mechanism.
 
-- **Pass:** mark this section "shipped & confirmed", close the
-  plan to active edits, leave it as decision history.
-- **Fail (wedge re-appears on atomic):** `git revert cef7a7a`
-  and move to E.
+**Decision (2026-06-10): keep cef7a7a, do not revert.**
 
-**E — Build aquamarine-git from AUR (only if C's atomic test fails)**
+- On legacy DRM: cef7a7a is a strict win (no wedge, cursor clamped).
+- On atomic DRM: cef7a7a is no worse than the prior baseline (the
+  focus-first hack from `98abc12f` also wedged). Reverting would
+  give up the legacy benefit without fixing atomic.
+- Removing cef7a7a only makes sense if we're moving to a fix that
+  works on atomic (E below) and the mirror handler interferes —
+  no evidence of interference today.
+
+**E — Build aquamarine-git from AUR (PARKED, available if needed)**
+
+Not currently pursued. Trade-off rejected for now: deviates from
+omarchy's pinned set, needs ongoing maintenance, and may break on
+omarchy updates that pin aquamarine. Cheaper to wait for the next
+omarchy bump.
+
+If picking up later:
 
 1. `paru -S aquamarine-git` (or equivalent) and pin against the
    `f5cdaa8` commit or later.
 2. Restart full session.
-3. Re-run the capture-lid-event.sh flow.
-4. Trade-off: deviates from omarchy's pinned set — needs
-   maintenance, may break on omarchy updates that pin
-   aquamarine. Document in the commit if we go this way.
+3. Re-run the capture-lid-event.sh flow on atomic DRM.
+4. Document the deviation from omarchy's pin in the commit.
 
 **Reference (deprioritized) — done or rejected paths:**
 
@@ -521,14 +565,17 @@ After applying a candidate fix:
 
 Each candidate is a single-file change. To revert:
 
-- C (DPMS-only): `git restore hypr/.config/hypr/bindings.conf`,
-  `hyprctl reload`.
-- E (aquamarine-git): `paru -R aquamarine-git && paru -S aquamarine`
-  (or whatever omarchy's pin resolves to), restart session.
+- C (mirror+dpms): `git revert cef7a7a` returns to the
+  focus-first hack of `98abc12f`. Kept in place per the
+  decision in C above; rolling back is only meaningful if
+  another candidate replaces it.
+- E (aquamarine-git, not currently applied): `paru -R aquamarine-git
+  && paru -S aquamarine` (or whatever omarchy's pin resolves to),
+  restart session.
 
-Baseline = commit `98abc12f` (focus-external-first hack), which is
-the current HEAD state. The plan is decision history; revert ≠ archive
-until a candidate ships.
+Current HEAD ships cef7a7a as the live state. The plan is decision
+history; this file stays in `docs/plans/` until either an upstream
+fix lands or work resumes on E.
 
 ## Open questions for user
 
