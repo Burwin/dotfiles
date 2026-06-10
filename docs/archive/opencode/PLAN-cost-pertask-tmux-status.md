@@ -1,5 +1,17 @@
 # OpenCode Cost — Per-Task tmux Status Bar — PLAN.md
 
+> **Archived** 2026-06-10. All six commits shipped on
+> 2026-05-19 / 2026-05-20: plugin capture-bug fix (Commit 1);
+> Phase 5 backfill via `opencode-cost import-opencode` (Commit 2);
+> Z0' / Z3' RED scaffolds (Commit 3); Z0 + Z1 + Z2 + Z3 GREEN with
+> live per-row Zen integration into `zen_usage` (Commit 4);
+> `dump by-toggl` + §10 acceptance tests, 52/52 passing (Commit 5);
+> per-task tmux bar v2 + tmux.conf wiring fix + v1/per-request PLAN
+> archival (Commit 6). The PLAN's §13 archive list covered v1 and
+> the per-request PLAN but did not pre-specify self-archival; moved
+> here now that the work is reference material rather than active.
+> Decision history below is preserved as-is for reference.
+
 Status: proposal (2026-05-19); implementation not yet started.
 Owner: mbh
 Origin session: 2026-05-19 — extended planning rooted in two facts:
