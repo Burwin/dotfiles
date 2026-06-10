@@ -5,8 +5,8 @@
 // toggl (client/project/task) via the worktree JOIN.
 //
 // Design and rationale:
-//   ../../../../docs/plans/opencode-cost-tracker/PLAN.md (parent)
-//   ../../../../docs/plans/opencode-cost-pertask-tmux-status/PLAN.md (active)
+//   ../../../../docs/archive/opencode/PLAN-cost-tracker.md (parent)
+//   ../../../../docs/archive/opencode/PLAN-cost-pertask-tmux-status.md (per-task successor)
 //
 // Phase ownership of this file:
 //   Phase 3 (CLI dump, tier: cheap) — `dump messages` / `dump sessions`.

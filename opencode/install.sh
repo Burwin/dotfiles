@@ -25,7 +25,7 @@ SYSTEMD_DST_DIR="${HOME}/.config/systemd/user"
 # the PATH entry for ~/.config/opencode/bin lives in
 # ../../environment.d/.config/environment.d/path.conf so the CLI is
 # visible to non-interactive shells too. See
-# ../../docs/plans/opencode-cost-tracker/PLAN.md.
+# ../../docs/archive/opencode/PLAN-cost-tracker.md.
 FILES=(
     opencode.json
     tui.json
@@ -89,7 +89,7 @@ done
 # Heads up: opencode-cost-zen-sync needs a Zen session cookie at
 # ~/.config/opencode/secrets/zen-session-cookie (chmod 600) and a config
 # at ~/.config/opencode-cost/config.json. See
-# docs/plans/opencode-cost-tracker/PLAN.md §12.4. If those are missing
+# docs/archive/opencode/PLAN-cost-tracker.md §12.4. If those are missing
 # the timer will still install and enable, but each run will exit
 # non-zero (visible via `journalctl --user -u opencode-cost-zen-sync`).
 # ---------------------------------------------------------------------------

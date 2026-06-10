@@ -1,6 +1,6 @@
 [Unit]
 Description=opencode-cost: Zen daily-billed sync (every 10 minutes)
-Documentation=file:%h/src/dotfiles/docs/plans/opencode-cost-tracker/PLAN.md
+Documentation=file:%h/src/dotfiles/docs/archive/opencode/PLAN-cost-tracker.md
 
 [Timer]
 # Every 10 minutes on fixed wall-clock boundaries (xx:00, xx:10, ...).

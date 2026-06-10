@@ -3,7 +3,7 @@
 // recompute against Zen's daily per-model billed totals, surfacing the
 // drift in three columns.
 //
-// Design and rationale: ../../../../docs/plans/opencode-cost-tracker/PLAN.md
+// Design and rationale: ../../../../docs/archive/opencode/PLAN-cost-tracker.md
 //   plus ../../../../docs/plans/opencode-cost-pertask-tmux-status/PLAN.md
 //   §6.2 (per-message reconcile mode, new in Commit 5).
 //

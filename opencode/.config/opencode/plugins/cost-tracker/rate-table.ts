@@ -2,7 +2,7 @@
 // table (`GET /config/providers`) so the recompute step can use the same
 // rates the TUI is currently using.
 //
-// Design and rationale: ../../../../../docs/plans/opencode-cost-tracker/PLAN.md
+// Design and rationale: ../../../../../docs/archive/opencode/PLAN-cost-tracker.md
 //
 // Phase ownership of this file:
 //   Phase 2 (recompute, tier: mid) — implement `fetchRates(client)` and

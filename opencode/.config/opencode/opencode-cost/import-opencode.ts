@@ -3,8 +3,8 @@
 // own ~/.local/share/opencode/opencode.db.
 //
 // Design and rationale:
-//   ../../../../docs/plans/opencode-cost-pertask-tmux-status/PLAN.md §9 Commit 2
-//   ../../../../docs/plans/opencode-cost-tracker/PLAN.md §6 Phase 5
+//   ../../../../docs/archive/opencode/PLAN-cost-pertask-tmux-status.md §9 Commit 2
+//   ../../../../docs/archive/opencode/PLAN-cost-tracker.md §6 Phase 5
 //
 // Phase ownership of this file:
 //   Commit 2 of the per-task PLAN (Phase 5 of the cost-tracker PLAN) —

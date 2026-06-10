@@ -1,5 +1,18 @@
 # OpenCode Cost Tracking Accuracy — PLAN.md
 
+> **Archived** 2026-06-10. Phases 1–4 shipped code-side on 2026-05-19;
+> Phase 5 (historical backfill) shipped the same day under Commit 2 of
+> the per-task successor plan, since archived to
+> [PLAN-cost-pertask-tmux-status.md](./PLAN-cost-pertask-tmux-status.md)
+> (per-task tmux bar, per-row Zen integration, `dump by-toggl`). The
+> header status line below was last updated before that Commit 2
+> landed and so still calls Phase 5 "optional next"; the Progress
+> block records the actual ship. Open items in §10 (notably the
+> `cost_recomputed_fxp8` unit-mismatch bug) carry forward — fix is
+> intentionally deferred until per-request Zen truth replaces the
+> recompute-as-truth position. Decision history below is preserved
+> as-is for reference.
+
 Status: scaffolded + activated; Phases 1-4 complete (code-side; live
 zen-sync smoke test still pending — needs §12.4 prereqs); Phase 5
 (historical backfill) is optional next
@@ -888,8 +901,8 @@ opencode-cost --help         # prints the usage stub
 ### 12.3 Plugin smoke test (CLOSED — covered by opencode-plugin-smoke)
 
 The §12.3 manual grep step is superseded by `opencode-plugin-smoke
---live` (see `docs/plans/opencode-plugin-smoke/PLAN.md`). Run it after
-every opencode upgrade.
+--live` (see `docs/archive/opencode/PLAN-plugin-smoke.md`). Run it
+after every opencode upgrade.
 
 ### 12.4 Pre-Phase-4 prerequisites (defer until Phase 4 starts)
 

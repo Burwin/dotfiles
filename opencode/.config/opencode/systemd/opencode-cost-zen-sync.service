@@ -1,6 +1,6 @@
 [Unit]
 Description=opencode-cost: pull daily per-model billed totals from Zen
-Documentation=file:%h/src/dotfiles/docs/plans/opencode-cost-tracker/PLAN.md
+Documentation=file:%h/src/dotfiles/docs/archive/opencode/PLAN-cost-tracker.md
 After=network-online.target
 Wants=network-online.target
 

@@ -5,7 +5,7 @@ import type { Plugin } from "@opencode-ai/plugin"
  * a row to ~/.local/state/opencode-cost.db, mirroring opencode's locally-
  * computed `cost` field alongside our own tier-aware recompute.
  *
- * Design and rationale: ../../../../docs/plans/opencode-cost-tracker/PLAN.md
+ * Design and rationale: ../../../../docs/archive/opencode/PLAN-cost-tracker.md
  *
  * Phase ownership of this file:
  *   Phase 1 (capture, tier: cheap) — wires `message.updated` /
