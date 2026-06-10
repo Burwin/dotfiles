@@ -3,7 +3,7 @@
 // Covers fetchRates happy path, deterministic rate_version hashing,
 // persistSnapshot round-trip, and fetch failure handling.
 //
-// Spec source: docs/plans/opencode-plugin-smoke/PLAN.md Step 2.
+// Spec source: docs/archive/opencode/PLAN-plugin-smoke.md Step 2.
 
 import { describe, expect, test } from "bun:test"
 import { fetchRates, persistSnapshot, type RateTable } from "./rate-table.ts"

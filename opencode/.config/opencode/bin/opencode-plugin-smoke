@@ -3,7 +3,7 @@
 # plugin in this user's environment after an opencode upgrade.
 #
 # Design and rationale:
-#   ../../../../docs/plans/opencode-plugin-smoke/PLAN.md
+#   ../../../../docs/archive/opencode/PLAN-plugin-smoke.md
 #
 # Tiers:
 #   1  parse-checks  (`bun build --no-bundle`) — fastest signal, catches
