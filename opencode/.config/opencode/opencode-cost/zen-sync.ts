@@ -5,9 +5,9 @@
 // from `zen_usage` via UPSERT GROUP BY (date, model, key_id).
 //
 // Design and rationale:
-//   ../../../../docs/plans/opencode-cost-pertask-tmux-status/PLAN.md
+//   ../../../../docs/archive/opencode/PLAN-cost-pertask-tmux-status.md
 //   (§4.1 zen_usage schema, §5 sync loop, §10.6 + §10.7 acceptance
-//   tests, §13 archived parent at opencode-cost-tracker/PLAN.md).
+//   tests, §13 archived parent at PLAN-cost-tracker.md).
 //
 // Phase ownership of this file:
 //   Z0 (parser) — static $R[n] walker extended to recognize

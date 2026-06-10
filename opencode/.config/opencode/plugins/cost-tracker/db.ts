@@ -1,7 +1,7 @@
 // cost-tracker/db.ts — schema bootstrap + prepared statements for the
 // opencode cost-tracker plugin (../cost-tracker.ts).
 //
-// Design and rationale: ../../../../../docs/plans/opencode-cost-tracker/PLAN.md
+// Design and rationale: ../../../../../docs/archive/opencode/PLAN-cost-tracker.md
 //
 // Phase ownership of this file:
 //   Phase 1 (capture, tier: cheap) — define BOOTSTRAP_SQL exactly as

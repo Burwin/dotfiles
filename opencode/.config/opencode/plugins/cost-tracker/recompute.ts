@@ -1,7 +1,7 @@
 // cost-tracker/recompute.ts — pure cost math for the opencode
 // cost-tracker plugin (../cost-tracker.ts).
 //
-// Design and rationale: ../../../../../docs/plans/opencode-cost-tracker/PLAN.md
+// Design and rationale: ../../../../../docs/archive/opencode/PLAN-cost-tracker.md
 //
 // Phase ownership of this file:
 //   Phase 2 (recompute, tier: mid) — implement `recompute(rate, tokens)`

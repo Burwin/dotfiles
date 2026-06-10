@@ -212,7 +212,10 @@ plan:
 2. Check the Progress block and implementation order for what's pending
 3. Follow the phase order — each phase is independently shippable
 
-The cost-tracker plan is at `docs/plans/opencode-cost-tracker/PLAN.md`.
+The cost-tracker plan was archived 2026-06-10 to
+`docs/archive/opencode/PLAN-cost-tracker.md`; its per-task successor
+shipped and was archived alongside it as
+`docs/archive/opencode/PLAN-cost-pertask-tmux-status.md`.
 
 ### Archiving plans
 

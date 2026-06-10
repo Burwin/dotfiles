@@ -1,7 +1,7 @@
 // opencode-cost/dump.ts — `dump messages` and `dump sessions` subcommands
 // for the opencode-cost CLI (../bin/opencode-cost).
 //
-// Design and rationale: ../../../../docs/plans/opencode-cost-tracker/PLAN.md
+// Design and rationale: ../../../../docs/archive/opencode/PLAN-cost-tracker.md
 //
 // Phase ownership of this file:
 //   Phase 3 (CLI dump, tier: cheap) — `runDumpMessages` and `runDumpSessions`.
