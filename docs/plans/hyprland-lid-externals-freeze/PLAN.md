@@ -1,15 +1,25 @@
 # Hyprland — externals freeze on lid close (Intel i915 multi-monitor)
 
-Status (2026-06-10): clean repro captured (post-reboot fresh session);
-upstream comment posted on
-[aquamarine#308](https://github.com/hyprwm/aquamarine/issues/308#issuecomment-4671488815);
-`AQ_NO_ATOMIC=1` env edit applied and stowed as new `uwsm/` package
-in this repo (uncommitted, pending verification).
+Status (2026-06-10, post-restart test): **candidate A failed**.
+`AQ_NO_ATOMIC=1` confirmed active (aquamarine logged
+`legacy drm iface` for both card1 and card2), but the wedge
+reproduced identically — DP-6/DP-7 backlight on, no scanout, only
+cursor moves; recovered on lid open. The "Cannot commit when a
+page-flip is awaiting" error fires on the **legacy** path too
+(12 startup + 5 in test window), so H1's framing of this as an
+atomic-only race is disconfirmed. `uwsm/` package reverted (never
+committed). Trade-off "no gamma on legacy iface" is real — night
+light would break — so keeping AQ_NO_ATOMIC isn't free.
 
-**Resume here:** logout / log back in → verify env + log → repro lid
-close → commit `uwsm/` + post follow-up comment on aq#308 based on
-outcome. Full checklist is in "Candidate next steps — A" below
-(steps 1–2 done, resume at step 3).
+Follow-up posted on aq#308:
+[issuecomment-4671818195](https://github.com/hyprwm/aquamarine/issues/308#issuecomment-4671818195)
+(local copy at `UPSTREAM-COMMENT-FOLLOWUP.md`).
+
+**Resume here:** **candidate C (DPMS-only)** — replace the
+`hyprctl keyword monitor "eDP-1, disable"` lid handler with
+`hyprctl dispatch dpms off eDP-1` and test whether avoiding the
+connector-disable sidesteps the modeset cascade. Full checklist
+in "Candidate next steps — C" below.
 
 ## Problem
 
@@ -80,6 +90,7 @@ The page-flip race is pre-existing regardless of lid handling — see
 | 2026-06-09 (commit `98abc12f`) | First lid-close after boot leaves externals' framebuffer frozen, cursor still moves | Focus first non-eDP-1 monitor before disabling eDP-1, so focus migrates cleanly | Initially appeared to fix but **did not** — see today's test. |
 | 2026-06-10 (uncommitted, now reverted) | Same symptom persists | Theorize aquamarine 0.11.0 stranded `isPageFlipPending` race; add `env = AQ_NO_ATOMIC,1` to a new `~/.config/hypr/envs.conf`; revert focus-first hack | **Did not test what we thought it did.** `envs.conf` was never sourced — see "Critical gotcha" below. The actual test ran without AQ_NO_ATOMIC and without the focus-first hack, i.e. plain `hyprctl keyword monitor`. Symptoms got slightly worse (initial lid-close did nothing; required mouse movement; transient keystroke repetition). |
 | 2026-06-10 (post-reboot) | Captured clean repro for upstream | Ran `capture-lid-event.sh` flow (split inline through opencode, fresh session post-restart) | Clean repro: 1 stranded page-flip on DP-6's modeset right after eDP-1 disable, exactly matching the visual wedge. 3 startup errors + 14 in 113s test window (1 wedge, 13 background race). Comment drafted at `UPSTREAM-COMMENT.md`, capture saved at `~/lid-capture-20260610-102949/` (+ tarball). |
+| 2026-06-10 (post-restart) | First lid-close after restart with `AQ_NO_ATOMIC=1` confirmed active | Stowed `uwsm/` package exporting `AQ_NO_ATOMIC=1`, restarted machine, verified env + legacy drm iface in log | **Wedge reproduced identically.** DP-6/DP-7 went black with cursor still moving; recovered on lid open. 12 page-flip errors at startup + 5 in test window — same family of "Cannot commit when a page-flip is awaiting" errors fire on the legacy path. Disconfirms H1's atomic-only framing. Reverted `uwsm/` package (never committed). |
 
 ## Today's test (2026-06-10)
 
@@ -168,7 +179,18 @@ known reference point.
 
 Ranked by current confidence, highest first.
 
-### H1 — Aquamarine 0.11.0 atomic-DRM page-flip race on Intel i915 (strongest)
+### H1 — Aquamarine 0.11.0 atomic-DRM page-flip race on Intel i915 (partially disconfirmed 2026-06-10)
+
+**Update 2026-06-10 (post-restart test):** the "atomic-only" framing
+was wrong. With `AQ_NO_ATOMIC=1` confirmed active (aquamarine logged
+`legacy drm iface` for both cards), the same wedge reproduced and
+the same "Cannot commit when a page-flip is awaiting" errors fired
+on the legacy path (12 at startup, 5 during test). The wedge is in
+a code path shared by atomic and legacy drm — likely connector
+enable/disable sequencing inside aquamarine, or a kernel-side i915
+issue triggered by clustered modesets. Treat the page-flip race as
+real but **not** an atomic-iface bug. AQ_NO_ATOMIC mitigation
+candidate (1 below) is now **disconfirmed** for this configuration.
 
 The 16 page-flip errors already in this session's log are
 diagnostic of the same wedge family upstream is tracking:
@@ -194,24 +216,17 @@ package is still 0.11.0 without it.
 
 **Mitigation candidates:**
 
-1. **`AQ_NO_ATOMIC=1`** — switch aquamarine to legacy DRM iface,
-   bypass atomic commits entirely. Trade-off: no HDR, no advanced
-   VRR. Acceptable for our stack (1080p externals, no HDR display).
-   Must be set via:
-   - `~/.config/uwsm/env` (export, sourced by uwsm before Hyprland
-     starts), **or**
-   - a real source line for `~/.config/hypr/envs.conf` added to
-     `hyprland.conf` (with `env = AQ_NO_ATOMIC,1` in that file).
-
-   The uwsm path is the more reliable one — env vars in
-   `hyprland.conf`'s `env =` directive are passed to spawned children
-   but it's unclear whether aquamarine itself reads them at that
-   point in the boot cycle. The uwsm export sets the var on the
-   compositor process directly.
+1. ~~**`AQ_NO_ATOMIC=1`**~~ — **disconfirmed 2026-06-10.** Switching
+   aquamarine to legacy DRM iface had no effect on the wedge in our
+   multi-monitor i915 config. The legacy path also fires the
+   page-flip-awaiting errors, and the wedge symptom is identical.
+   Additional cost on legacy iface: `No support for gamma` (night
+   light breaks). Net: no benefit, real cost. Reverted.
 
 2. **Build aquamarine-git from AUR** — pulls latest fixes including
-   the page-flip race patches. Trade-off: deviates from omarchy's
-   pinned set; needs maintenance.
+   the page-flip race patches (notably f5cdaa8). Trade-off: deviates
+   from omarchy's pinned set; needs maintenance. Worth re-evaluating
+   now that AQ_NO_ATOMIC is out of the running.
 
 3. **Defer until next omarchy bump** — wait for upstream to ship the
    aquamarine fix and let omarchy pull it in.
@@ -249,88 +264,66 @@ corrected diagnosis (all monitors on Intel iGPU, NVIDIA dormant),
 this is much less likely. Keep as fallback only if Intel-side
 hypotheses are exhausted.
 
-## Candidate next steps (pick one)
+## Candidate next steps
 
-**A — Test H1 properly via uwsm env (recommended, smallest blast radius)**
+**C — Try H2 (DPMS-only) — ACTIVE**
 
-Status: **in progress** as of 2026-06-10. Steps 1–2 done, resume at step 3.
+Now that A is disconfirmed, this is the cheapest remaining
+candidate that doesn't require rebuilding aquamarine. The
+hypothesis is that `dpms off` doesn't force a re-modeset of
+DP-6/DP-7 the way `monitor=eDP-1,disable` does, so the page-flip
+race never fires.
 
-1. ✓ Add `export AQ_NO_ATOMIC=1` to `~/.config/uwsm/env` with a
-   comment block referencing this plan and aq#308.
-2. ✓ Stow in dotfiles as new `uwsm/` package
-   (`stow -d ~/src/dotfiles -t ~ uwsm`). Uncommitted on purpose
-   until the test confirms direction.
-3. Restart the Wayland session: `omarchy system logout`, log back
-   in. uwsm only reads `env` on session start, so `hyprctl reload`
-   is not sufficient.
-4. Verify the env propagated:
-   ```bash
-   printenv AQ_NO_ATOMIC   # should print: 1
+1. In `hypr/.config/hypr/bindings.conf`, replace the lid handlers:
    ```
-5. Verify aquamarine's atomic path is gone from the log:
-   ```bash
-   rg "Cannot commit when a page-flip is awaiting" \
-     /run/user/1000/hypr/*/hyprland.log
-   ```
-   On a clean AQ_NO_ATOMIC session this should return nothing
-   (or far fewer than the 3 we saw at startup in the prior test).
-6. Repro: close the lid. Observe whether externals (DP-6, DP-7)
-   stay live or wedge. If they wedge, run a fresh capture via
-   `capture-lid-event.sh` for a side-by-side comparison.
-7. Commit the `uwsm/` package, message reflecting the outcome:
-   - Pass: `feat(uwsm): set AQ_NO_ATOMIC=1 to fix lid externals freeze`
-   - Fail: `chore(uwsm): try AQ_NO_ATOMIC=1; did not prevent wedge`
-
-   (Either way the env edit stays — on fail we keep it set so the
-   upstream conversation has the cleaner page-flip-free baseline,
-   unless the trade-off — no HDR, no advanced VRR — bites us.)
-8. Post a follow-up comment on
-   [aq#308](https://github.com/hyprwm/aquamarine/issues/308):
-   - Pass: "AQ_NO_ATOMIC=1 prevents the wedge in this configuration."
-     Brief, link the commit.
-   - Fail: "AQ_NO_ATOMIC=1 does not prevent the wedge in this
-     multi-monitor i915 config. Fresh capture attached." Include
-     log slice + page-flip counts from the new capture.
-
-   Use `gh issue comment 308 --repo hyprwm/aquamarine --body-file <path>`.
-
-**B — Test H1 via Hyprland `env` directive**
-
-1. Source `~/.config/hypr/envs.conf` from `hyprland.conf` (add the
-   line; the file already exists in the dotfiles working tree as
-   reverted).
-2. Restore `envs.conf` with `env = AQ_NO_ATOMIC,1`.
-3. Restart Hyprland (or full session — safer).
-4. Same verification as A.
-
-This is closer to the original (failed) attempt, just with the
-sourcing fixed. Slightly more fragile because it depends on
-aquamarine reading the var at the right point.
-
-**C — Try H2 (DPMS-only) before rebooting**
-
-1. Replace the lid handlers in `bindings.conf`:
-   ```
-   bindl = , switch:on:Lid Switch, exec, hyprctl dispatch dpms off eDP-1
+   bindl = , switch:on:Lid Switch,  exec, hyprctl dispatch dpms off eDP-1
    bindl = , switch:off:Lid Switch, exec, hyprctl dispatch dpms on eDP-1
    ```
-2. Test the close → open cycle.
-3. Inspect `hyprland.log` for whether DP-6/DP-7 still get
-   re-modeset. If not, this is a clean win without touching
-   aquamarine.
+   The current handlers do focus-first + `hyprctl keyword monitor
+   "eDP-1, disable"`. Keeping the focus-first hack with DPMS is
+   probably unnecessary (eDP-1 stays "active" from Hyprland's POV)
+   but harmless to leave in for the test if it simplifies the
+   diff.
+2. `hyprctl reload` (no logout needed for `bindings.conf`).
+3. Test close → open. Pass criterion: DP-6/DP-7 stay live, no
+   wedge, log shows no `Modesetting DP-6/DP-7` lines after
+   the lid event.
+4. Decision tree:
+   - **Pass:** commit, e.g. `fix(hypr): use dpms instead of disable
+     to avoid lid-close externals wedge`. Note the workspace-ghost
+     trade-off in the message and verify it's tolerable in
+     practice.
+   - **Pass-with-caveat (workspace ghosting bites):** keep the
+     change behind a flag or revert and move to E.
+   - **Fail (wedge still fires):** revert, move to E (aquamarine-git).
 
-**D — Verbose-log capture for upstream**
+**E — Build aquamarine-git from AUR (next if C fails)**
 
-Run with `HYPRLAND_LOG_WLR=1` and `AQ_TRACE=1` (if supported) and
-capture the exact sequence around the lid close. Useful before
-filing/commenting on
-[hyprwm/aquamarine#304](https://github.com/hyprwm/aquamarine/issues/304)
-to give upstream a clean repro.
+1. `paru -S aquamarine-git` (or equivalent) and pin against the
+   `f5cdaa8` commit or later.
+2. Restart full session.
+3. Re-run the capture-lid-event.sh flow.
+4. Trade-off: deviates from omarchy's pinned set — needs
+   maintenance, may break on omarchy updates that pin
+   aquamarine. Document in the commit if we go this way.
 
-## Capture protocol (active path)
+**Reference (deprioritized) — done or rejected paths:**
 
-Per user direction (2026-06-10), next step is **D — Verbose log
-capture for upstream**. Procedure:
+- ~~**A — `AQ_NO_ATOMIC=1` via `~/.config/uwsm/env`**~~. Tested
+  2026-06-10, disconfirmed (see timeline). Wedge reproduced
+  identically on legacy DRM iface; gamma cost is real. Reverted.
+- ~~**B — `AQ_NO_ATOMIC=1` via Hyprland `env` directive**~~. Same
+  hypothesis as A, just a different mechanism. Disconfirmed by A's
+  result.
+- **D — Verbose-log capture for upstream.** Already done as part
+  of the 2026-06-10 capture flow; `~/lid-capture-20260610-102949/`
+  is the artifact. Re-run with `AQ_TRACE=1` if upstream asks.
+
+## Capture protocol (reference)
+
+Already executed once (artifact at `~/lid-capture-20260610-102949/`).
+Re-run for any candidate that produces a different outcome from the
+baseline so we have a side-by-side artifact for upstream. Procedure:
 
 ### Step 1 — Reproduce in a fresh session
 
@@ -530,12 +523,10 @@ After applying a candidate fix:
 
 Each candidate is a single-file change. To revert:
 
-- A: remove the export line from `uwsm/.config/uwsm/env` in this
-  repo (or `stow -D -d ~/src/dotfiles -t ~ uwsm` + `rm -rf uwsm/` to
-  fully unstow the package); log out / in.
-- B: remove the `source` line from `hyprland.conf` and delete
-  `envs.conf`, `hyprctl reload`.
-- C: `git restore hypr/.config/hypr/bindings.conf`, `hyprctl reload`.
+- C (DPMS-only): `git restore hypr/.config/hypr/bindings.conf`,
+  `hyprctl reload`.
+- E (aquamarine-git): `paru -R aquamarine-git && paru -S aquamarine`
+  (or whatever omarchy's pin resolves to), restart session.
 
 Baseline = commit `98abc12f` (focus-external-first hack), which is
 the current HEAD state. The plan is decision history; revert ≠ archive
@@ -543,11 +534,12 @@ until a candidate ships.
 
 ## Open questions for user
 
-1. Pick a candidate (A / B / C / D) for the next investigation pass.
-2. OK to do a full session logout+login during testing, or do we need
-   to keep the session live (which constrains us to `hyprctl`-only
-   changes)?
-3. Should we also attempt to scope-creep the `SUPER+CTRL+Delete` /
+1. If C passes but the workspace-ghost trade-off bites (windows
+   stuck on a lidded eDP-1), should we try to teach the lid handler
+   to migrate workspaces off eDP-1 first, then DPMS off? That puts
+   us back in `keyword monitor` territory which is the bug we're
+   avoiding.
+2. Should we also attempt to scope-creep the `SUPER+CTRL+Delete` /
    Hardware menu lid-toggle paths (which still call
    `omarchy-hyprland-monitor-internal toggle` and could re-introduce
    the original crash race), or keep that strictly out of scope?
