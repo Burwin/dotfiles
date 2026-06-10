@@ -1,10 +1,15 @@
 # Hyprland — externals freeze on lid close (Intel i915 multi-monitor)
 
-Status: clean repro captured 2026-06-10 (post-reboot fresh session).
-Upstream comment drafted in `UPSTREAM-COMMENT.md` and posted on
-[aquamarine#308](https://github.com/hyprwm/aquamarine/issues/308).
-Next: test `AQ_NO_ATOMIC=1` (path A) and follow up on the upstream
-thread with the result.
+Status (2026-06-10): clean repro captured (post-reboot fresh session);
+upstream comment posted on
+[aquamarine#308](https://github.com/hyprwm/aquamarine/issues/308#issuecomment-4671488815);
+`AQ_NO_ATOMIC=1` env edit applied and stowed as new `uwsm/` package
+in this repo (uncommitted, pending verification).
+
+**Resume here:** logout / log back in → verify env + log → repro lid
+close → commit `uwsm/` + post follow-up comment on aq#308 based on
+outcome. Full checklist is in "Candidate next steps — A" below
+(steps 1–2 done, resume at step 3).
 
 ## Problem
 
@@ -248,16 +253,46 @@ hypotheses are exhausted.
 
 **A — Test H1 properly via uwsm env (recommended, smallest blast radius)**
 
-1. Add `export AQ_NO_ATOMIC=1` to `~/.config/uwsm/env` (existing
-   user file, already sourced before Hyprland start).
-2. Stow it in dotfiles if not already (`uwsm` package in this repo).
-3. Restart the entire Wayland session (`omarchy system logout`,
-   then log back in — uwsm only reads env on session start).
-4. Verify `printenv AQ_NO_ATOMIC` in the new session = `1`.
-5. Verify `hyprland.log` now lacks the "Cannot commit when a
-   page-flip is awaiting" errors.
-6. Repro user's test sequence: cold boot, lid open, login, close
-   lid. Document outcome.
+Status: **in progress** as of 2026-06-10. Steps 1–2 done, resume at step 3.
+
+1. ✓ Add `export AQ_NO_ATOMIC=1` to `~/.config/uwsm/env` with a
+   comment block referencing this plan and aq#308.
+2. ✓ Stow in dotfiles as new `uwsm/` package
+   (`stow -d ~/src/dotfiles -t ~ uwsm`). Uncommitted on purpose
+   until the test confirms direction.
+3. Restart the Wayland session: `omarchy system logout`, log back
+   in. uwsm only reads `env` on session start, so `hyprctl reload`
+   is not sufficient.
+4. Verify the env propagated:
+   ```bash
+   printenv AQ_NO_ATOMIC   # should print: 1
+   ```
+5. Verify aquamarine's atomic path is gone from the log:
+   ```bash
+   rg "Cannot commit when a page-flip is awaiting" \
+     /run/user/1000/hypr/*/hyprland.log
+   ```
+   On a clean AQ_NO_ATOMIC session this should return nothing
+   (or far fewer than the 3 we saw at startup in the prior test).
+6. Repro: close the lid. Observe whether externals (DP-6, DP-7)
+   stay live or wedge. If they wedge, run a fresh capture via
+   `capture-lid-event.sh` for a side-by-side comparison.
+7. Commit the `uwsm/` package, message reflecting the outcome:
+   - Pass: `feat(uwsm): set AQ_NO_ATOMIC=1 to fix lid externals freeze`
+   - Fail: `chore(uwsm): try AQ_NO_ATOMIC=1; did not prevent wedge`
+
+   (Either way the env edit stays — on fail we keep it set so the
+   upstream conversation has the cleaner page-flip-free baseline,
+   unless the trade-off — no HDR, no advanced VRR — bites us.)
+8. Post a follow-up comment on
+   [aq#308](https://github.com/hyprwm/aquamarine/issues/308):
+   - Pass: "AQ_NO_ATOMIC=1 prevents the wedge in this configuration."
+     Brief, link the commit.
+   - Fail: "AQ_NO_ATOMIC=1 does not prevent the wedge in this
+     multi-monitor i915 config. Fresh capture attached." Include
+     log slice + page-flip counts from the new capture.
+
+   Use `gh issue comment 308 --repo hyprwm/aquamarine --body-file <path>`.
 
 **B — Test H1 via Hyprland `env` directive**
 
@@ -495,7 +530,9 @@ After applying a candidate fix:
 
 Each candidate is a single-file change. To revert:
 
-- A: remove the export line from `~/.config/uwsm/env`, log out / in.
+- A: remove the export line from `uwsm/.config/uwsm/env` in this
+  repo (or `stow -D -d ~/src/dotfiles -t ~ uwsm` + `rm -rf uwsm/` to
+  fully unstow the package); log out / in.
 - B: remove the `source` line from `hyprland.conf` and delete
   `envs.conf`, `hyprctl reload`.
 - C: `git restore hypr/.config/hypr/bindings.conf`, `hyprctl reload`.
