@@ -1,7 +1,7 @@
 // recompute.test.ts — bun:test suite for ./recompute.ts
 //
 // Covers every edge case documented in the source comments and in
-// docs/plans/opencode-plugin-smoke/PLAN.md Step 1.
+// docs/archive/opencode/PLAN-plugin-smoke.md Step 1.
 
 import { describe, expect, mock, test } from "bun:test"
 import { recompute, type Tokens } from "./recompute.ts"

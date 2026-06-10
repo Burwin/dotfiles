@@ -1,3 +1,26 @@
+# PLAN-plugin-smoke: green/red signal across every custom opencode plugin
+
+> **Status:** implemented; archived 2026-06-10.
+>
+> Implementation lives in:
+> - `opencode/.config/opencode/bin/opencode-plugin-smoke` — the runner
+>   (Tier 1 parse-checks + Tier 2 `bun:test` + Tier 3 `--live` opencode
+>   serve + log scan).
+> - `opencode/.config/opencode/plugins/cost-tracker/recompute.test.ts`
+>   — Step 1 unit tests for `recompute()`.
+> - `opencode/.config/opencode/plugins/cost-tracker/rate-table.test.ts`
+>   — Step 2 unit tests for `fetchRates` / `persistSnapshot`.
+> - `opencode/.config/opencode/plugins/cost-tracker/cost-tracker.test.ts`
+>   — Step 3 parse-checks (`bun build --no-bundle`) + dispatch harness.
+> - `README.md` "Tests" section — Step 6 docs update; documents the
+>   `opencode-plugin-smoke` and `opencode-plugin-smoke --live` entry
+>   points.
+> - `docs/plans/opencode-cost-tracker/PLAN.md` §12.3 — Step 6 docs
+>   update; closed out the manual grep smoke step in favor of this
+>   runner.
+>
+> Decision history below preserved as-is.
+
 # opencode-plugin-smoke tests
 
 A single `opencode-plugin-smoke` command that gives a green/red signal across

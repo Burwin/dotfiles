@@ -1,7 +1,7 @@
 // cost-tracker.test.ts — bun:test suite for ../cost-tracker.ts.
 //
 // Combines static parse-checks (Group A) with a synthetic-event dispatch
-// harness (Group B). Spec source: docs/plans/opencode-plugin-smoke/PLAN.md
+// harness (Group B). Spec source: docs/archive/opencode/PLAN-plugin-smoke.md
 // Step 3.
 //
 // Lives in this `cost-tracker/` subdirectory so opencode's plugin loader
