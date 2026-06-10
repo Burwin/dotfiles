@@ -2,6 +2,68 @@
   "$schema": "https://opencode.ai/config.json",
   "autoupdate": false,
   "instructions": ["rules/safety.md", "rules/communication.md"],
+  "provider": {
+    "opencode": {
+      "models": {
+        "claude-opus-4-7": {
+          "options": {
+            "thinking": { "type": "adaptive" },
+            "effort": "max"
+          },
+          "variants": {
+            "high": {
+              "thinking": { "type": "adaptive" },
+              "effort": "high"
+            },
+            "max": {
+              "thinking": { "type": "adaptive" },
+              "effort": "max"
+            }
+          }
+        },
+        "claude-opus-4-8": {
+          "options": {
+            "thinking": { "type": "adaptive" },
+            "effort": "max"
+          },
+          "variants": {
+            "high": {
+              "thinking": { "type": "adaptive" },
+              "effort": "high"
+            },
+            "xhigh": {
+              "thinking": { "type": "adaptive" },
+              "effort": "xhigh"
+            },
+            "max": {
+              "thinking": { "type": "adaptive" },
+              "effort": "max"
+            }
+          }
+        },
+        "claude-fable-5": {
+          "options": {
+            "thinking": { "type": "adaptive" },
+            "effort": "max"
+          },
+          "variants": {
+            "high": {
+              "thinking": { "type": "adaptive" },
+              "effort": "high"
+            },
+            "xhigh": {
+              "thinking": { "type": "adaptive" },
+              "effort": "xhigh"
+            },
+            "max": {
+              "thinking": { "type": "adaptive" },
+              "effort": "max"
+            }
+          }
+        }
+      }
+    }
+  },
   "mcp": {
     "asana": {
       "type": "remote",
