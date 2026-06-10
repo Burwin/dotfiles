@@ -1,0 +1,51 @@
+361:DEBUG from aquamarine ]: drm: Modesetting eDP-1 with 1920x1080@60.00Hz
+362:DEBUG from aquamarine ]: drm: Modesetting eDP-1 with 1920x1080@60.00Hz
+363:ERR from aquamarine ]: drm: Cannot commit when a page-flip is awaiting
+364:DEBUG from aquamarine ]: drm: Modesetting eDP-1 with 1920x1080@60.00Hz
+365:ERR from aquamarine ]: drm: Cannot commit when a page-flip is awaiting
+366:DEBUG from aquamarine ]: drm: Modesetting eDP-1 with 1920x1080@60.00Hz
+367:ERR from aquamarine ]: drm: Cannot commit when a page-flip is awaiting
+372:DEBUG from aquamarine ]: drm: Modesetting DP-6 with 1920x1080@60.00Hz
+373:DEBUG from aquamarine ]: drm: Modesetting eDP-1 with 1920x1080@60.00Hz
+374:ERR from aquamarine ]: drm: Cannot commit when a page-flip is awaiting
+375:DEBUG from aquamarine ]: drm: Modesetting DP-6 with 1920x1080@60.00Hz
+376:ERR from aquamarine ]: drm: Cannot commit when a page-flip is awaiting
+377:DEBUG from aquamarine ]: drm: Modesetting DP-6 with 1920x1080@60.00Hz
+378:ERR from aquamarine ]: drm: Cannot commit when a page-flip is awaiting
+379:DEBUG from aquamarine ]: drm: Modesetting DP-6 with 1920x1080@60.00Hz
+380:ERR from aquamarine ]: drm: Cannot commit when a page-flip is awaiting
+385:DEBUG from aquamarine ]: drm: Modesetting DP-7 with 1920x1080@60.00Hz
+386:DEBUG from aquamarine ]: drm: Modesetting eDP-1 with 1920x1080@60.00Hz
+387:ERR from aquamarine ]: drm: Cannot commit when a page-flip is awaiting
+388:DEBUG from aquamarine ]: drm: Modesetting DP-6 with 1920x1080@60.00Hz
+389:ERR from aquamarine ]: drm: Cannot commit when a page-flip is awaiting
+390:DEBUG from aquamarine ]: drm: Modesetting DP-7 with 1920x1080@60.00Hz
+391:ERR from aquamarine ]: drm: Cannot commit when a page-flip is awaiting
+392:DEBUG from aquamarine ]: drm: Modesetting DP-7 with 1920x1080@60.00Hz
+393:ERR from aquamarine ]: drm: Cannot commit when a page-flip is awaiting
+394:DEBUG from aquamarine ]: drm: Modesetting DP-7 with 1920x1080@60.00Hz
+395:ERR from aquamarine ]: drm: Cannot commit when a page-flip is awaiting
+416:DEBUG from aquamarine ]: libinput: New device Lid Switch: 0-5
+421:DEBUG from aquamarine ]: drm: Modesetting eDP-1 with 1920x1080@60.00Hz
+422:DEBUG from aquamarine ]: drm: Modesetting DP-6 with 1920x1080@60.00Hz
+423:ERR from aquamarine ]: drm: Cannot commit when a page-flip is awaiting
+424:DEBUG from aquamarine ]: drm: Modesetting DP-7 with 1920x1080@60.00Hz
+425:ERR from aquamarine ]: drm: Cannot commit when a page-flip is awaiting
+426:ERR from aquamarine ]: drm: Cannot commit when a page-flip is awaiting
+427:ERR from aquamarine ]: drm: Cannot commit when a page-flip is awaiting
+428:DEBUG from aquamarine ]: drm: Modesetting DP-6 with 1920x1080@60.00Hz
+429:DEBUG from aquamarine ]: drm: Modesetting DP-7 with 1920x1080@60.00Hz
+439:DEBUG from aquamarine ]: [libinput] event13 - lid: suspending touchpad
+441:DEBUG from aquamarine ]: drm: Modesetting eDP-1 with 1920x1080@60.00Hz
+442:ERR from aquamarine ]: drm: Cannot commit when a page-flip is awaiting
+443:DEBUG from aquamarine ]: drm: Modesetting DP-6 with 1920x1080@60.00Hz
+444:ERR from aquamarine ]: drm: Cannot commit when a page-flip is awaiting
+445:DEBUG from aquamarine ]: drm: Modesetting DP-7 with 1920x1080@60.00Hz
+446:DEBUG from aquamarine ]: drm: Modesetting eDP-1 with 1920x1080@60.00Hz
+447:DEBUG from aquamarine ]: drm: Modesetting DP-6 with 1920x1080@60.00Hz
+456:DEBUG from aquamarine ]: drm: Modesetting eDP-1 with 1920x1080@60.00Hz
+459:DEBUG from aquamarine ]: [libinput] event13 - lid: resume touchpad
+461:DEBUG from aquamarine ]: drm: Modesetting eDP-1 with 1920x1080@60.00Hz
+462:DEBUG from aquamarine ]: drm: Modesetting eDP-1 with 1920x1080@60.00Hz
+463:DEBUG from aquamarine ]: drm: Modesetting DP-6 with 1920x1080@60.00Hz
+464:DEBUG from aquamarine ]: drm: Modesetting DP-7 with 1920x1080@60.00Hz
