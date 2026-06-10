@@ -25,7 +25,7 @@ Final state after Commit 6:
 |---|---|
 | `../opencode-cost-tmux-status/PLAN.md` (v1) | Moved to `docs/archive/opencode/PLAN-cost-tmux-status-v1.md` with a supersession note. Decision history preserved. |
 | `../opencode-cost-zen-per-request/PLAN.md` | Moved to `docs/archive/opencode/PLAN-cost-zen-per-request.md` with a supersession note. Z0-Z5 + §10 are absorbed here verbatim; Z6/Z7 dropped (Z6 was optional sanity check; Z7 was "update other plans", which is this work). |
-| `../opencode-cost-breakdown/PLAN.md` | Kept in place. Option A (per-toggl-project breakdown via worktree JOIN) marked superseded by §7 + §10 of this PLAN. Option B (per-tmux-session) preserved as reference; not implemented. |
+| `../opencode-cost-breakdown/PLAN.md` | Originally kept in place with Option A (per-toggl-project breakdown via worktree JOIN) marked superseded by §7 + §10 of this PLAN. Moved to `docs/archive/opencode/PLAN-cost-breakdown.md` on 2026-06-10 — comparison reasoning no longer needed in the active plans tree. Option B (per-tmux-session) preserved as reference; not implemented. |
 | `../opencode-cost-tracker/PLAN.md` | Kept in place. Parent design doc; Phases 1-4 stand. Phase 5 (`import-opencode` backfill) shipped under Commit 2 of this PLAN; Progress entry references this PLAN. |
 
 ## Progress
@@ -362,7 +362,7 @@ All three are addressed below.
 | 11 | Bar implementation form | Separate bash script with own SQL (no Bun spawn on each tmux tick) | scope expansion |
 | 12 | Sync timer cadence | `OnCalendar=*:0/10` (shipped in v1) | tmux-status v1 |
 | 13 | Round-up math | Ceiling-by-floor: `(x + 99999999) / 100000000` (shipped in v1) | tmux-status v1 |
-| 14 | Master PLAN form | This file. Archives `opencode-cost-tmux-status/` v1 and `opencode-cost-zen-per-request/`; marks `opencode-cost-breakdown/` Option A superseded | scope expansion |
+| 14 | Master PLAN form | This file. Archives `opencode-cost-tmux-status/` v1 and `opencode-cost-zen-per-request/`; marks `opencode-cost-breakdown/` Option A superseded (file later archived 2026-06-10) | scope expansion |
 | 15 | Session segmentation | One agent session per commit (6 sessions) | scope expansion |
 
 ---

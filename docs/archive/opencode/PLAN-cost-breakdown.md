@@ -1,5 +1,16 @@
 # OpenCode Cost Breakdown — PLAN.md
 
+> **Archived** 2026-06-10. Option A (per-toggl-project breakdown via
+> worktree JOIN) was superseded on 2026-05-19 by
+> [docs/plans/opencode-cost-pertask-tmux-status/PLAN.md](../../plans/opencode-cost-pertask-tmux-status/PLAN.md)
+> §7 (CLI surface `opencode-cost dump by-toggl`) and §10 (acceptance
+> tests). At the time, this PLAN was kept in place as Option A vs
+> Option B reference material; the comparison reasoning is no longer
+> needed in the active plans tree, so the file is moved here.
+> Option B (per-tmux-session) was never implemented and the
+> recommendation against it stands. Decision history below is
+> preserved as-is for reference.
+
 Status: proposal (no work started; needs design decision before
 implementation)
 Owner: mbh
