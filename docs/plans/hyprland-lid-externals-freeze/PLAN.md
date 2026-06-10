@@ -1,25 +1,28 @@
 # Hyprland — externals freeze on lid close (Intel i915 multi-monitor)
 
-Status (2026-06-10, post-restart test): **candidate A failed**.
-`AQ_NO_ATOMIC=1` confirmed active (aquamarine logged
-`legacy drm iface` for both card1 and card2), but the wedge
-reproduced identically — DP-6/DP-7 backlight on, no scanout, only
-cursor moves; recovered on lid open. The "Cannot commit when a
-page-flip is awaiting" error fires on the **legacy** path too
-(12 startup + 5 in test window), so H1's framing of this as an
-atomic-only race is disconfirmed. `uwsm/` package reverted (never
-committed). Trade-off "no gamma on legacy iface" is real — night
-light would break — so keeping AQ_NO_ATOMIC isn't free.
+Status (2026-06-10): **candidate C shipped** in commit
+`cef7a7a` (`fix(hypr): mirror+dpms eDP-1 on lid close to bypass
+i915 wedge`). The lid handler now puts eDP-1 into `mirror` mode
+against an external + DPMS-off, instead of `keyword monitor
+"eDP-1, disable"`. Mirror entry probed cascade-free; user-tested
+lid close/open cycle on legacy DRM passed both wedge avoidance
+and cursor containment (cursor can no longer wander onto the
+lidded panel because eDP-1 takes the external's coord space).
 
-Follow-up posted on aq#308:
+Candidate A (`AQ_NO_ATOMIC=1`) was tested and disconfirmed earlier
+in the same session — wedge reproduced identically on legacy DRM,
+plus gamma support is lost on legacy iface. `uwsm/` package
+reverted (never committed). Follow-up posted on aq#308:
 [issuecomment-4671818195](https://github.com/hyprwm/aquamarine/issues/308#issuecomment-4671818195)
 (local copy at `UPSTREAM-COMMENT-FOLLOWUP.md`).
 
-**Resume here:** **candidate C (DPMS-only)** — replace the
-`hyprctl keyword monitor "eDP-1, disable"` lid handler with
-`hyprctl dispatch dpms off eDP-1` and test whether avoiding the
-connector-disable sidesteps the modeset cascade. Full checklist
-in "Candidate next steps — C" below.
+**Resume here:** atomic-DRM confirmation. The candidate C test ran
+on legacy DRM because AQ_NO_ATOMIC was still set in the session.
+Next natural logout will clear it; first lid close/open after that
+is the production-state confirmation. If it passes, mark C as fully
+verified and update this plan's status to "shipped & confirmed". If
+it wedges, revert `cef7a7a` and move to candidate E
+(aquamarine-git from AUR).
 
 ## Problem
 
@@ -91,6 +94,7 @@ The page-flip race is pre-existing regardless of lid handling — see
 | 2026-06-10 (uncommitted, now reverted) | Same symptom persists | Theorize aquamarine 0.11.0 stranded `isPageFlipPending` race; add `env = AQ_NO_ATOMIC,1` to a new `~/.config/hypr/envs.conf`; revert focus-first hack | **Did not test what we thought it did.** `envs.conf` was never sourced — see "Critical gotcha" below. The actual test ran without AQ_NO_ATOMIC and without the focus-first hack, i.e. plain `hyprctl keyword monitor`. Symptoms got slightly worse (initial lid-close did nothing; required mouse movement; transient keystroke repetition). |
 | 2026-06-10 (post-reboot) | Captured clean repro for upstream | Ran `capture-lid-event.sh` flow (split inline through opencode, fresh session post-restart) | Clean repro: 1 stranded page-flip on DP-6's modeset right after eDP-1 disable, exactly matching the visual wedge. 3 startup errors + 14 in 113s test window (1 wedge, 13 background race). Comment drafted at `UPSTREAM-COMMENT.md`, capture saved at `~/lid-capture-20260610-102949/` (+ tarball). |
 | 2026-06-10 (post-restart) | First lid-close after restart with `AQ_NO_ATOMIC=1` confirmed active | Stowed `uwsm/` package exporting `AQ_NO_ATOMIC=1`, restarted machine, verified env + legacy drm iface in log | **Wedge reproduced identically.** DP-6/DP-7 went black with cursor still moving; recovered on lid open. 12 page-flip errors at startup + 5 in test window — same family of "Cannot commit when a page-flip is awaiting" errors fire on the legacy path. Disconfirms H1's atomic-only framing. Reverted `uwsm/` package (never committed). |
+| 2026-06-10 (commit `cef7a7a`) | Candidate C: replace `keyword monitor "eDP-1, disable"` with `dpms off` + mirror against an external | First tried plain DPMS-off (passed wedge but cursor could still wander to lidded eDP-1 at x=3840). Probed `keyword monitor "eDP-1, ..., mirror, DP-6"` — 0 log lines, 0 cascade. Combined: focus external → DPMS off → mirror eDP-1 against the focused external. | **Both pass criteria met on legacy DRM.** Lid-close: externals stay live, no DP-6/DP-7 modeset cascade, cursor clamped to 0..3839. Lid-open cascade is real (3 page-flip errors, modesets across all 3 connectors) but does not wedge. Atomic-DRM confirmation pending next session. |
 
 ## Today's test (2026-06-10)
 
@@ -266,38 +270,32 @@ hypotheses are exhausted.
 
 ## Candidate next steps
 
-**C — Try H2 (DPMS-only) — ACTIVE**
+**C — DPMS + mirror (SHIPPED, awaiting atomic confirmation)**
 
-Now that A is disconfirmed, this is the cheapest remaining
-candidate that doesn't require rebuilding aquamarine. The
-hypothesis is that `dpms off` doesn't force a re-modeset of
-DP-6/DP-7 the way `monitor=eDP-1,disable` does, so the page-flip
-race never fires.
+Shipped in commit `cef7a7a`. Final design:
 
-1. In `hypr/.config/hypr/bindings.conf`, replace the lid handlers:
-   ```
-   bindl = , switch:on:Lid Switch,  exec, hyprctl dispatch dpms off eDP-1
-   bindl = , switch:off:Lid Switch, exec, hyprctl dispatch dpms on eDP-1
-   ```
-   The current handlers do focus-first + `hyprctl keyword monitor
-   "eDP-1, disable"`. Keeping the focus-first hack with DPMS is
-   probably unnecessary (eDP-1 stays "active" from Hyprland's POV)
-   but harmless to leave in for the test if it simplifies the
-   diff.
-2. `hyprctl reload` (no logout needed for `bindings.conf`).
-3. Test close → open. Pass criterion: DP-6/DP-7 stay live, no
-   wedge, log shows no `Modesetting DP-6/DP-7` lines after
-   the lid event.
-4. Decision tree:
-   - **Pass:** commit, e.g. `fix(hypr): use dpms instead of disable
-     to avoid lid-close externals wedge`. Note the workspace-ghost
-     trade-off in the message and verify it's tolerable in
-     practice.
-   - **Pass-with-caveat (workspace ghosting bites):** keep the
-     change behind a flag or revert and move to E.
-   - **Fail (wedge still fires):** revert, move to E (aquamarine-git).
+- **Lid close:** focus first non-eDP-1 external, then `dpms off
+  eDP-1`, then `keyword monitor "eDP-1, preferred, 0x0, 1, mirror,
+  $ext"`. The mirror reassigns eDP-1's coord space to overlap the
+  external, so cursor and workspaces stay inside 0..3839; DPMS
+  keeps the panel dark. Mirror entry was probed cascade-free.
+- **Lid open:** `keyword monitor "eDP-1, preferred, auto, auto"`
+  (revert mirror; this triggers a real modeset cascade) then
+  `dpms on eDP-1`. The cascade on lid-open never produced a wedge
+  in any of our tests — the wedge specifically requires a
+  cascade-while-page-flip-pending at lid-close moment.
 
-**E — Build aquamarine-git from AUR (next if C fails)**
+**Remaining verification:** lid test on atomic DRM. The shipping
+test ran in a session with `AQ_NO_ATOMIC=1` still set from the
+candidate A test. Atomic-DRM is the production state on next
+logout. First close/open after that is the confirmation.
+
+- **Pass:** mark this section "shipped & confirmed", close the
+  plan to active edits, leave it as decision history.
+- **Fail (wedge re-appears on atomic):** `git revert cef7a7a`
+  and move to E.
+
+**E — Build aquamarine-git from AUR (only if C's atomic test fails)**
 
 1. `paru -S aquamarine-git` (or equivalent) and pin against the
    `f5cdaa8` commit or later.
