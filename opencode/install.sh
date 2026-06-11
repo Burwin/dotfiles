@@ -20,8 +20,10 @@ SYSTEMD_DST_DIR="${HOME}/.config/systemd/user"
 # symlinked manually before this script existed and is left alone. The
 # `cost-tracker` plugin (cost-tracker.ts entrypoint + cost-tracker/
 # helpers subdirectory) is managed here so a fresh-machine install picks
-# it up automatically. `bin/` and `opencode-cost/` are whole-dir links
-# (their contents change without needing install.sh edits each time);
+# it up automatically. `bin/`, `opencode-cost/`, and `skills/` are
+# whole-dir links (their contents change without needing install.sh edits
+# each time); new global skills under skills/<name>/SKILL.md are picked up
+# with no install.sh change and auto-discovered by opencode on restart;
 # the PATH entry for ~/.config/opencode/bin lives in
 # ../../environment.d/.config/environment.d/path.conf so the CLI is
 # visible to non-interactive shells too. See
@@ -34,6 +36,7 @@ FILES=(
     plugins/cost-tracker
     bin
     opencode-cost
+    skills
 )
 
 mkdir -p "${DST_DIR}"

@@ -1,21 +1,22 @@
 # OpenCode UI Iteration Workflows
 
 **Date**: 2026-06-10
-**Status**: SKILL.md authored at `opencode/.config/opencode/skills/ui-iteration/SKILL.md` (uncommitted, MASTER-1774 worktree). Next: validate on a real Vite + React + Tailwind + shadcn project, then publish.
+**Status**: SHIPPED — skill authored, published to the public dotfiles repo (branch `m`), and symlinked live via `opencode/install.sh`. Asana card MASTER-1774 closed (DONE). Validation skipped per direction; revalidate on a real Vite + React + Tailwind + shadcn project if issues surface.
 **Related**: Asana MASTER-1774 — "Document how to iterate on UI tasks within opencode"
 **Scope**: Web UI only (React + Vite + Tailwind + shadcn). Other surfaces explicitly out of scope.
 
-> **Progress** (2026-06-10, updated): the skill is **authored** at
-> `opencode/.config/opencode/skills/ui-iteration/SKILL.md` (stow-mapped to
-> `~/.config/opencode/skills/ui-iteration/SKILL.md`; auto-discovered as a global skill once
-> merged + stowed + opencode restarted). It implements the **Workflow shape (Phase 1:
+> **Progress** (2026-06-10, shipped): the skill is **authored and published** at
+> `opencode/.config/opencode/skills/ui-iteration/SKILL.md`. The repo installs opencode config
+> via `opencode/install.sh` (not GNU stow); `skills` was added to its `FILES` list, so the
+> installer symlinks `~/.config/opencode/skills/` → the repo and opencode auto-discovers the
+> skill on restart. It implements the **Workflow shape (Phase 1:
 > prototype fan-out)** spec and all 8 entries of the **Decisions (v1 design)** table below,
 > plus a copy-paste project-rules block, a `DESIGN.md` template, and a prereq check.
-> To resume: validate the skill on a real Vite + React + Tailwind + shadcn project, then
-> publish to the public dotfiles repo. Side-note still pending (unrelated to this card):
-> Opus 4.7+ rejects opencode's default thinking config (deprecated `thinking.type.enabled`);
-> a fix for `~/.config/opencode/opencode.json` (override the `claude-opus-4-7`/`-4-8`
-> variants to `thinking.type=adaptive` + `effort`) — apply whenever convenient.
+> Remaining (optional): validate on a real Vite + React + Tailwind + shadcn project — already
+> published to the public dotfiles repo. Side-note (unrelated to this card) is now **resolved**:
+> the deprecated `thinking.type.enabled` issue was fixed by committing the
+> `claude-opus-4-7`/`-4-8`/`fable-5` `thinking.type=adaptive` + `effort` config in `49d5f84`
+> ("enable Opus 4.8 and Fable 5 models", MASTER-1783).
 
 ## Executive Summary
 
