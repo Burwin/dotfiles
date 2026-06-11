@@ -35,6 +35,7 @@ Instructions:
 - **Code style and language conventions:** `@rules/code-style.md`
 - **Git workflow, commits, branches, PRs:** `@rules/workflow.md`
 - **Tooling and CLI preferences:** `@rules/tools.md`
+- **Sending / reading email (Gmail):** `gmail-send` / `gmail-*` CLI — details in `@rules/tools.md`
 - **Project structure and file layout:** `@rules/project-structure.md`
 - **Documentation style (two-layer convention):** `@rules/documentation.md`
 
@@ -43,6 +44,19 @@ Instructions:
 When in doubt: project `AGENTS.md` > these global rules > generic defaults.
 If a project rule contradicts a global rule, follow the project rule and
 optionally note the divergence in your response.
+
+## Email (`gmail-*` CLI)
+
+Send and read email with the `gmail-*` CLI in `~/.local/bin/` (`gmail-send`,
+`gmail-list`, `gmail-get`, `gmail-needs-reply`, …). There is **no**
+`sendmail`/`msmtp`/`mutt`/`gam` — don't probe for them. Quick send:
+
+    gmail-send --to <addr> --subject <s> --body-file <path>   # + --cc/--bcc/--attach/--draft
+
+`--draft` stages the message in Gmail for human review (preferred for
+customer-facing mail); auth via `gmail-auth status|login` (a `gmail-*`
+command that prints nothing and exits 3 = re-login). Full flags and the
+read/triage subcommands live in `@rules/tools.md`.
 
 ## Asana MCP
 

@@ -35,6 +35,47 @@ For now: defer to whatever the repo uses (`pyproject.toml` + `uv.lock`,
 - Prefer `dotnet test --filter "FullyQualifiedName~..."` over editing csproj /
   test config to narrow runs.
 
+## Email (`gmail-*` CLI suite)
+
+Personal Gmail tooling lives in `~/.local/bin/gmail-*` (a single bash
+dispatcher symlinked per subcommand, each exec'ing a `tsx` TypeScript
+impl). **This is the way to send or read email — do NOT reach for
+`sendmail`/`msmtp`/`mutt`/`gam`; none are installed, and probing for them
+is the wrong instinct.**
+
+Auth: `gmail-auth login` (browser OAuth; token cached at
+`~/.local/state/gmail/token.json`, override `GMAIL_TOKEN_PATH`). Check with
+`gmail-auth status`. Access tokens auto-refresh; a `gmail-*` command that
+prints nothing and exits `3` means the token fully lapsed — run
+`gmail-auth login`. Don't run `login` proactively; it's interactive.
+
+Send / draft:
+
+    gmail-send --to <addr> --subject <s> --body-file <path>
+    #   --cc <addr> / --bcc <addr>   repeatable
+    #   --attach <path>              repeatable
+    #   --draft                      stage in Gmail drafts instead of sending
+    #   --reply-to <id>              thread a reply (auto "Re:" + threadId)
+    #   --body <s>                   inline body (short only); or pipe body on stdin
+    #   --from <alias>               only a verified send-as alias
+    #   --format json|table|ndjson   (default json)
+
+Prefer `--body-file` for anything multi-line (sidesteps shell quoting).
+For customer-facing mail, send `--draft` first so a human can eyeball it
+in Gmail, then send. `--to` is single; put extra recipients on repeated
+`--cc`/`--bcc`. Send exit codes: `0` ok, `1` usage, `3` auth, `4` API.
+
+Read / triage (all accept `--format json|table|ndjson`):
+
+    gmail-list           list / search messages
+    gmail-get <id>       fetch one message or thread
+    gmail-threads        list threads
+    gmail-needs-reply    messages awaiting a reply
+    gmail-draft-context  gather context for drafting a reply
+    gmail-modify         labels / read state / archive
+    gmail-labels         list labels
+    gmail-filters        list filters
+
 ## General
 
 - Prefer the project's existing test runner, linter, and formatter. Don't
