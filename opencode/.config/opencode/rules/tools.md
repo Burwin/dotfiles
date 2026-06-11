@@ -76,6 +76,39 @@ Read / triage (all accept `--format json|table|ndjson`):
     gmail-labels         list labels
     gmail-filters        list filters
 
+### Stdin gotcha on mutations (2026-06-11 incident)
+
+`gmail-modify` accepts message IDs from BOTH positional args AND stdin.
+Inside a pipeline block, leftover stdin lines are consumed as additional
+IDs and the mutation applies to ALL of them. Incident: the line below
+was meant to trash 1 draft; `gmail-modify` read the other 13 piped IDs
+from stdin and trashed the entire email thread. Recovered — but only
+because the IDs were still visible in earlier tool output.
+
+    # WRONG: read consumes one line; gmail-modify slurps the other 13
+    gmail-get --thread "$T" --format json | jq -r '.messages[].id' |
+      { read -r ID; gmail-modify "$ID" --trash; }
+
+Rules for mutating gmail-* commands (`gmail-modify`, `gmail-send`):
+
+- **Close stdin** — append `< /dev/null` — unless stdin is deliberately
+  part of the invocation (a curated ID list piped to `gmail-modify`, or
+  a body piped to `gmail-send`):
+
+      gmail-modify "$ID" --trash < /dev/null
+
+- **Never mix positional IDs with piped stdin** in the same
+  `gmail-modify` invocation. Pick one source.
+- **Prefer `--dry-run` first** for any multi-ID mutation.
+
+Recovery notes:
+
+- `--untrash` does NOT restore the INBOX label (unread state survives
+  trashing; INBOX does not). After `--untrash`, follow with
+  `--add-label INBOX < /dev/null`.
+- A draft has its own message ID, discoverable via
+  `gmail-list in:draft`; trash that ID to discard the draft.
+
 ## General
 
 - Prefer the project's existing test runner, linter, and formatter. Don't
