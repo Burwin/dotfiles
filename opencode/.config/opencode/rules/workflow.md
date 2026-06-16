@@ -58,6 +58,24 @@ PR review comments", "what does the review say?"):
    - These are NOT included in `gh pr view --comments` output — a separate API call is required.
 3. Report both the review summary AND any individual file/line comments.
 
+## Goal-driven execution
+
+Turn a task into a verifiable goal before writing code, then loop until it's
+met — strong success criteria let you self-correct instead of guessing.
+
+- **Define "done" up front.** Restate the task as a checkable outcome, not a
+  vague instruction ("make it work" is too weak to verify against).
+- **Prefer test-first for bugs and behavior changes.** Write a failing test
+  that reproduces the bug (or pins the new behavior), then make it pass.
+- **State a brief plan for multi-step work,** with a verification check per
+  step:
+  ```
+  1. <step> → verify: <check>
+  2. <step> → verify: <check>
+  ```
+- **Loop until verified.** Run the check; if it fails, fix and re-run rather
+  than declaring success. See also mutation-verification in `@rules/safety.md`.
+
 ## Testing
 
 - Run tests after non-trivial refactors. Mention if you skipped them and why
