@@ -72,9 +72,9 @@ For Asana work, **default to the local `asana-*` CLIs** in `src/asana`
 back to the MCP only for what the CLIs don't yet cover. They exist because
 the MCP can't reach several REST capabilities we keep needing — intra-section
 task reordering, attachment upload, enum-option add/remove — so reaching for
-them first stops us re-discovering those gaps. All take `--help`, default to
-JSON on stdout, and exit `0` ok / `1` usage / `2` no results / `3` auth /
-`4` API error.
+them first stops us from rediscovering those gaps. All take `--help`,
+default to JSON on stdout, and exit `0` ok / `1` usage / `2` no results /
+`3` auth / `4` API error.
 
 Shipped commands (8):
 
@@ -93,10 +93,11 @@ Shipped commands (8):
 - `asana-field-remove-option` — disable an enum option (Asana can't delete
   them; `--dry-run`, idempotent).
 
-The CLIs need their own **Personal Access Token** (`src/asana/.env`,
-`ASANA_PAT=…`) — the MCP's OAuth token can't authenticate against the REST
-API. Roadmap + remaining gaps: `~/src/bamboo/tools/asana.md`; setup +
-per-command usage: `~/src/bamboo/tools/src/asana/README.md`.
+The CLIs need their own **Personal Access Token**
+(`~/src/bamboo/tools/src/asana/.env`, `ASANA_PAT=…`) — the MCP's OAuth
+token can't authenticate against the REST API. Roadmap + gaps:
+`~/src/bamboo/tools/asana.md`; setup + usage:
+`~/src/bamboo/tools/src/asana/README.md`.
 
 **Still go through the MCP for** (no CLI yet): task **creation** — there is
 no create command, so new tasks need `asana_create_tasks` (or a raw PAT REST
@@ -172,8 +173,9 @@ Gotchas:
 - `asana_delete_task` is permanent.
 - Not exposed via MCP (REST-only): time tracking, goal mutation, tag CRUD,
   custom-field *definition* CRUD, sections-as-standalone, and webhooks. Of
-  these, enum-option add/remove already has CLIs (`asana-field-add-option` /
-  `-remove-option`); the rest are still unbuilt (see `asana.md`).
+  these, enum-option add/remove already has CLIs
+  (`asana-field-add-option` / `asana-field-remove-option`); the rest
+  are still unbuilt (see `asana.md`).
 - **Use plain text for comments.** When using `asana_add_comment`, prefer
   the `text` field over `html_text` to avoid rendering issues. Asana has
   limited HTML support — avoid `<p>`, `<div>`, block-level tags. Stick to
