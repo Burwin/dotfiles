@@ -175,7 +175,7 @@ Gotchas:
   custom-field *definition* CRUD, sections-as-standalone, and webhooks. Of
   these, enum-option add/remove already has CLIs
   (`asana-field-add-option` / `asana-field-remove-option`); the rest
-  are still unbuilt (see `asana.md`).
+  are still unbuilt (see `~/src/bamboo/tools/asana.md`).
 - **Use plain text for comments.** When using `asana_add_comment`, prefer
   the `text` field over `html_text` to avoid rendering issues. Asana has
   limited HTML support — avoid `<p>`, `<div>`, block-level tags. Stick to
