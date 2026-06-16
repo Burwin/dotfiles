@@ -65,7 +65,46 @@ all sessions). Tools are namespaced `asana_*` (~21 tools across tasks,
 projects, portfolios, goals, teams, users, status updates). The OAuth token
 is workspace-scoped to Bamboo.
 
-When the user asks about Asana work, prefer:
+### Prefer the local `asana-*` CLIs (CLI-first)
+
+For Asana work, **default to the local `asana-*` CLIs** in `src/asana`
+(`~/src/bamboo/tools/src/asana`, symlinked into `~/.local/bin`), and fall
+back to the MCP only for what the CLIs don't yet cover. They exist because
+the MCP can't reach several REST capabilities we keep needing — intra-section
+task reordering, attachment upload, enum-option add/remove — so reaching for
+them first stops us re-discovering those gaps. All take `--help`, default to
+JSON on stdout, and exit `0` ok / `1` usage / `2` no results / `3` auth /
+`4` API error.
+
+Shipped commands (8):
+
+- `asana-attach` — upload a file to a task (the MCP can't write
+  attachments); optionally also comment / append to the description.
+- `asana-task-get` — resolve a task by GID or task-number text (e.g.
+  `NS-803`) and print it.
+- `asana-task-update` — set `Client` / `Project` custom-field values on a task.
+- `asana-task-move` — move a task to a section; reorder *within* a section
+  via `--before` / `--after` (the MCP can't reorder).
+- `asana-project-get` — fetch a project with custom-field settings +
+  sections denormalized.
+- `asana-list-projects` — list workspace projects (`--team`, `--archived`,
+  `--include-custom-fields`).
+- `asana-field-add-option` — add an enum option to a custom field.
+- `asana-field-remove-option` — disable an enum option (Asana can't delete
+  them; `--dry-run`, idempotent).
+
+The CLIs need their own **Personal Access Token** (`src/asana/.env`,
+`ASANA_PAT=…`) — the MCP's OAuth token can't authenticate against the REST
+API. Roadmap + remaining gaps: `~/src/bamboo/tools/asana.md`; setup +
+per-command usage: `~/src/bamboo/tools/src/asana/README.md`.
+
+**Still go through the MCP for** (no CLI yet): task **creation** — there is
+no create command, so new tasks need `asana_create_tasks` (or a raw PAT REST
+call) until `asana-task-insert` ships (MASTER-1798) — plus general reads
+(`asana_get_my_tasks`, `asana_get_status_overview`), search, comments
+(`asana_add_comment`), and anything in the gotchas below.
+
+When you do go through the MCP, prefer these tools:
 
 - `asana_get_my_tasks` for "what's on my plate" / "what's due" queries.
 - `asana_search_objects` to resolve names to GIDs before calling
@@ -123,18 +162,18 @@ For repeat moves in the Schneller project, the section GIDs are:
 
 Gotchas:
 
-- MCP tokens cannot be used against Asana's REST API. If we ever build a
-  local `src/asana/` package in `~/src/bamboo/tools`, it needs a separate
-  API app + PAT.
+- MCP tokens cannot be used against Asana's REST API — that's why the
+  `src/asana` CLIs (see above) use a separate API app + PAT.
 - Schema bloat: ~5–10K input tokens per turn always-on. Revisit per-agent
   gating if context costs become annoying.
 - Workspace-scoped: only Bamboo. Switching workspaces requires
   `opencode mcp logout asana && opencode mcp auth asana`.
 - `asana_search_tasks` is Premium-tier-and-up only; we have it on Advanced.
 - `asana_delete_task` is permanent.
-- Time tracking, goal mutation, tag CRUD, custom-field-definition CRUD,
-  sections-as-standalone, and webhooks are NOT exposed via MCP — they
-  require the REST API.
+- Not exposed via MCP (REST-only): time tracking, goal mutation, tag CRUD,
+  custom-field *definition* CRUD, sections-as-standalone, and webhooks. Of
+  these, enum-option add/remove already has CLIs (`asana-field-add-option` /
+  `-remove-option`); the rest are still unbuilt (see `asana.md`).
 - **Use plain text for comments.** When using `asana_add_comment`, prefer
   the `text` field over `html_text` to avoid rendering issues. Asana has
   limited HTML support — avoid `<p>`, `<div>`, block-level tags. Stick to
