@@ -72,6 +72,10 @@
         "clientId": "{file:~/.config/opencode/secrets/asana-mcp-client-id}",
         "clientSecret": "{file:~/.config/opencode/secrets/asana-mcp-client-secret}"
       }
+    },
+    "readai": {
+      "type": "remote",
+      "url": "https://api.read.ai/mcp"
     }
   }
 }
