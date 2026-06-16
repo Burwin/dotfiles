@@ -181,6 +181,47 @@ relevant breakpoints.
   the DOM?"), use `browser_snapshot` (accessibility tree) — it is cheaper
   and avoids vision tokens.
 
+### Posting rounds to Asana (API rendering constraints)
+
+Learned the hard way during SH-262.3 (2026-06-11, three rejected
+posting formats). If the human wants fan-out screenshots reviewable
+on an Asana card, know what the API can and cannot render **before**
+posting:
+
+- **Comments can never display images.** Attachments hang off tasks,
+  not stories — there is no "attach to a comment" endpoint (see the
+  `asana-attach.ts` header in the MASTER-1773 tools repo). Both
+  `<a data-asana-gid>` and `<img data-asana-gid>` in a story's
+  `html_text` render as plain links in the feed. The `<img>` form is
+  extra deceptive: the API *accepts* it and echoes back a fully
+  resolved tag (src + thumbnail URLs), but the feed UI still draws a
+  bare link. Do not burn a round rediscovering this.
+- **True inline images exist only in `html_notes`** (task / project
+  descriptions). A description gallery is the only API surface that
+  actually renders pictures.
+- **Workaround that survives link-rendering:** bake each
+  screenshot's label + description into the image itself (header
+  band), then post one comment per screenshot with the same text +
+  the attachment link (`asana-attach <task> --file <abs-path>
+  --comment-file <txt>`). The artifact is self-describing wherever
+  it opens — feed link, attachments pane, or download. Band recipe:
+
+  ```bash
+  magick -background white -fill '#111827' -font LiberationSans-Bold \
+    -pointsize 21 -size 1240x caption:@label.txt l.png
+  magick -background white -fill '#374151' -font LiberationSans-Regular \
+    -pointsize 15 -size 1240x caption:@desc.txt d.png
+  magick l.png \( -size 1240x8 xc:white \) d.png -append \
+    -bordercolor white -border 20x16 band.png
+  magick band.png \( -size 1280x2 xc:'#cbd5e1' \) shot.png -append out.png
+  ```
+
+- **Real image-in-comment bubbles are UI-only.** Only a human pasting
+  into the Asana comment box gets them; no API equivalent.
+- One comment per screenshot, desktop viewport only (most products
+  under iteration here are desktop web apps — check the project's
+  `DESIGN.md` screenshot policy).
+
 ### Dev server (bash)
 
 Decision 5: drive the dev server with raw bash, not an orchestrator MCP.
@@ -325,8 +366,10 @@ Settled during the 2026-06-10 design conversation (source:
   rendered from the same code that ships.
 - **Phase 3 — visual regression / pixelmatch baselines.** Revisit if drift
   becomes a real problem; its own future card.
-- **Asana attachment posting.** Needs a REST helper (the MCP can't upload
-  files). Separate follow-up.
+- **Asana attachment posting.** Resolved in practice via the
+  `asana-attach` REST helper (MASTER-1773 tools) — but read
+  [Posting rounds to Asana](#posting-rounds-to-asana-api-rendering-constraints)
+  for what the API will and will not render before using it.
 - **Greenfield ideation on-ramps** (Claude Design export-bundle handoff,
   Stitch round-tripping). Candidate sibling skill
   `ui-from-claude-design/` if a concrete need emerges. Both were evaluated
