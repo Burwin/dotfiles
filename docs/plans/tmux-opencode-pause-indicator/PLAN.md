@@ -307,39 +307,66 @@ so the conversion is safe.)
 
 Phases are independently shippable. Each leaves the system working.
 
+Each step ends with a **Next →** handoff trigger: a one-sentence,
+paste-ready prompt naming the next step (N of 19), its title, the model
+it calls for, and this plan's path — so a fresh LLM session can resume
+cold. Model routing: **Opus 4.8** for design, real code logic, test
+authoring, and risky live-config edits; **Grok Build 0.1** for
+mechanical scaffolding, verbatim config-line adds, and
+command/reload/test runs.
+
 ### Phase A — Alt+n + symlink + scripts skeleton
 1. `mkdir -p tmux/.config/tmux/bin` in dotfiles.
+   - **Next →** step 2 of 19, *add the three no-op stub scripts and `chmod +x`*, with **Grok Build 0.1** — plan: `docs/plans/tmux-opencode-pause-indicator/PLAN.md`.
 2. Add placeholder `tmux-pause-glyph`, `tmux-status-left`,
    `tmux-cycle-paused` (no-op stubs that return empty / "not yet
    implemented"). Make executable.
+   - **Next →** step 3 of 19, *convert `~/.config/tmux/tmux.conf` to a symlink (diff-verify byte parity first)*, with **Opus 4.8** — plan: `docs/plans/tmux-opencode-pause-indicator/PLAN.md`.
 3. Convert `~/.config/tmux/tmux.conf` to symlink.
+   - **Next →** step 4 of 19, *add the `bind -n M-n new-session -c "#{pane_current_path}"` line to `tmux.conf`*, with **Grok Build 0.1** — plan: `docs/plans/tmux-opencode-pause-indicator/PLAN.md`.
 4. Add `bind -n M-n new-session -c "#{pane_current_path}"` to
    `tmux.conf`.
+   - **Next →** step 5 of 19, *reload tmux (`prefix + q`) and test Alt+n*, with **Grok Build 0.1** — plan: `docs/plans/tmux-opencode-pause-indicator/PLAN.md`.
 5. Reload tmux (`prefix + q`). Test Alt+n.
+   - **Next →** step 6 of 19, *add the pure `tmuxSlug` helper to `notify/lib.ts`*, with **Grok Build 0.1** — plan: `docs/plans/tmux-opencode-pause-indicator/PLAN.md`.
 
 ### Phase B — Plugin state-file write/unlink
 6. Add `tmuxSlug` helper to `notify/lib.ts`.
+   - **Next →** step 7 of 19, *add init-time stale-marker cleanup + marker write/unlink to `notify.ts` (preserve the never-crash invariant)*, with **Opus 4.8** — plan: `docs/plans/tmux-opencode-pause-indicator/PLAN.md`.
 7. Add init-time cleanup + write/unlink to `notify.ts`.
+   - **Next →** step 8 of 19, *add `tmuxSlug` + dispatch-regression tests in `notify/notify.test.ts`*, with **Opus 4.8** — plan: `docs/plans/tmux-opencode-pause-indicator/PLAN.md`.
 8. Add tests for `tmuxSlug` in `notify/notify.test.ts`.
+   - **Next →** step 9 of 19, *run `bun test ./opencode/.config/opencode/plugins/`*, with **Grok Build 0.1** — plan: `docs/plans/tmux-opencode-pause-indicator/PLAN.md`.
 9. Run `bun test ./opencode/.config/opencode/plugins/`.
+   - **Next →** step 10 of 19, *run `opencode-plugin-smoke --live` to confirm the plugin still loads*, with **Grok Build 0.1** — plan: `docs/plans/tmux-opencode-pause-indicator/PLAN.md`.
 10. Run `opencode-plugin-smoke --live` (per repo `README.md`) to
     verify the plugin still loads in a real opencode runtime.
+    - **Next →** step 11 of 19, *restart active opencode TUIs to load the new plugin*, with **Grok Build 0.1** — plan: `docs/plans/tmux-opencode-pause-indicator/PLAN.md`.
 11. Restart any active opencode TUIs to pick up the new plugin.
+    - **Next →** step 12 of 19, *implement `tmux-pause-glyph` and `tmux-status-left` for real*, with **Opus 4.8** — plan: `docs/plans/tmux-opencode-pause-indicator/PLAN.md`.
 
 ### Phase C — Indicator wiring
 12. Implement `tmux-pause-glyph` and `tmux-status-left` for real.
+    - **Next →** step 13 of 19, *rewire `status-left` in `tmux.conf` to call `tmux-status-left`*, with **Grok Build 0.1** — plan: `docs/plans/tmux-opencode-pause-indicator/PLAN.md`.
 13. Update `status-left` in `tmux.conf` to call the script.
+    - **Next →** step 14 of 19, *reload tmux and visually verify `status-left` with no paused sessions*, with **Grok Build 0.1** — plan: `docs/plans/tmux-opencode-pause-indicator/PLAN.md`.
 14. Reload tmux. Visually verify status-left still renders correctly
     when no sessions are paused.
+    - **Next →** step 15 of 19, *force a `session.idle` and confirm the glyph appears, then clears on follow-up*, with **Grok Build 0.1** — plan: `docs/plans/tmux-opencode-pause-indicator/PLAN.md`.
 15. Force a `session.idle` (let an opencode finish responding) →
     expect yellow glyph in status-left. Type a follow-up → expect
     glyph disappears.
+    - **Next →** step 16 of 19, *add the `bind -n M-s choose-tree -sZ -F ...` picker line to `tmux.conf`*, with **Grok Build 0.1** — plan: `docs/plans/tmux-opencode-pause-indicator/PLAN.md`.
 
 ### Phase D — Picker + smart cycle
 16. Add `bind -n M-s choose-tree -sZ -F ...` to `tmux.conf`.
+    - **Next →** step 17 of 19, *implement `tmux-cycle-paused` for real (neighbor selection + wrap-around per the behavior matrix)*, with **Opus 4.8** — plan: `docs/plans/tmux-opencode-pause-indicator/PLAN.md`.
 17. Implement `tmux-cycle-paused` for real.
+    - **Next →** step 18 of 19, *add the `bind -n M-S-Up` / `bind -n M-S-Down` smart-cycle bindings to `tmux.conf`*, with **Grok Build 0.1** — plan: `docs/plans/tmux-opencode-pause-indicator/PLAN.md`.
 18. Add `bind -n M-S-Up` / `bind -n M-S-Down` to `tmux.conf`.
+    - **Next →** step 19 of 19, *test smart cycle with 0, 1, and 2+ paused sessions*, with **Grok Build 0.1** — plan: `docs/plans/tmux-opencode-pause-indicator/PLAN.md`.
 19. Test with 0, 1, 2+ paused sessions.
+    - **Done →** no step 20 — implementation complete; tick the Progress boxes and archive the plan per AGENTS.md, with **Opus 4.8** — plan: `docs/plans/tmux-opencode-pause-indicator/PLAN.md`.
 
 ## Testing strategy
 
