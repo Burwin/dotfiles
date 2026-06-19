@@ -75,7 +75,7 @@ some body text here`;
     expect(issues.length).toBe(0);
   });
 
-  test("happy path good-bam-example.md produces zero issues", () => {
+  test("happy path bam-good-example.md produces zero issues", () => {
     const fileName = "bam-good-example.md";
     const content = loadFixture("bam-good-example.md");
     const issues = validateCommand(fileName, content);
@@ -98,5 +98,11 @@ describe("validateAll", () => {
     expect(badFilesSeen.has("bad-name.md")).toBe(true);
     expect(badFilesSeen.has("bad-no-description.md")).toBe(true);
     expect(badFilesSeen.has("bad-empty-body.md")).toBe(true);
+  });
+
+  test("surfaces an issue (not an empty list) when the directory can't be read", () => {
+    const issues = validateAll(join(fixturesDir, "does-not-exist-xyz"));
+    expect(issues.length).toBeGreaterThan(0);
+    expect(issues.some(i => /cannot read|directory/i.test(i.problem))).toBe(true);
   });
 });

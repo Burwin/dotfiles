@@ -63,8 +63,12 @@ export function validateAll(dir: string): CommandIssue[] {
   let entries: string[];
   try {
     entries = readdirSync(dir);
-  } catch {
-    return [];
+  } catch (err) {
+    // Surface an explicit issue rather than returning [] — a silent empty
+    // result would let a run pointed at the wrong/missing directory falsely
+    // "pass" with no issues.
+    const message = err instanceof Error ? err.message : String(err);
+    return [{ file: dir, problem: `cannot read commands directory: ${message}` }];
   }
   const issues: CommandIssue[] = [];
   for (const entry of entries) {
