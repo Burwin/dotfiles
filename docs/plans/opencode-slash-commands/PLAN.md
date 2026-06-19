@@ -62,11 +62,13 @@ opencode/.config/opencode/
 │   └── bam-copilot-loop.md
 └── commands-validate/              # NEW — dev/CI only, NOT linked
     ├── validate.ts                 #   pure validator (no deps; bun:test)
-    ├── validate.test.ts            #   the TDD suite
+    ├── validate.test.ts            #   the validator's own TDD suite
+    ├── commands.test.ts            #   content tests for the real commands
     └── fixtures/                   #   good/bad command files for tests
-        ├── good-bam-example.md
+        ├── bam-good-example.md
         ├── bad-name.md
-        └── bad-no-description.md
+        ├── bad-no-description.md
+        └── bad-empty-body.md
 ```
 
 - `commands/` is added to the `FILES` array in `opencode/install.sh` as a
@@ -137,7 +139,7 @@ Conventions for this section:
 | 7 | GREEN | Implement the body-non-empty rule. Test 6 passes. | Grok Build 0.1 |
 | 8 | RED   | Test: flags a bad `model` (no `/`) and an unknown `agent`, but allows their absence. | Grok Build 0.1 |
 | 9 | GREEN | Implement optional `model`/`agent` rules. Test 8 passes. | Grok Build 0.1 |
-| 10| REFACTOR | Collapse the checks into a rule table iterated by `validateCommand`; add a happy-path test (`good-bam-example.md` → zero issues) and keep the whole suite green. | Grok Build 0.1 |
+| 10| REFACTOR | Collapse the checks into a rule table iterated by `validateCommand`; add a happy-path test (`bam-good-example.md` → zero issues) and keep the whole suite green. | Grok Build 0.1 |
 | 11| RED   | Test: `validateAll(fixtures)` returns issues for the bad fixtures and none for the good one. | Grok Build 0.1 |
 | 12| GREEN | Implement `validateAll` (dir scan of `*.md`). Test 11 passes. | Grok Build 0.1 |
 
@@ -241,7 +243,7 @@ sensitivity. Each uses `$ARGUMENTS` where a target is passed.
 - [x] Phase A — validator red-green-refactor (steps 1–12)
 - [x] Phase B — author four `bam-` commands (steps 13–20)
 - [x] Phase C — install.sh wiring (steps 21–22)
-- [x] Phase D — integration smoke + deploy/PR/Copilot/merge (steps 23–24)
+- [ ] Phase D — integration smoke ✓ (step 23); deploy/PR/Copilot/merge in progress (step 24)
 
 ## References
 

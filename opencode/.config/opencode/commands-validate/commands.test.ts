@@ -11,7 +11,7 @@ const commandsDir = join(import.meta.dir, "..", "commands");
 // Mirror the validator's frontmatter strip so body assertions see only the
 // prompt/template text, not the `description:`/`model:` keys.
 function stripFrontmatter(content: string): string {
-  const fm = content.match(/^---\s*\n[\s\S]*?\n---\s*(\n|$)/);
+  const fm = content.match(/^---[ \t]*\r?\n[\s\S]*?\r?\n---[ \t]*(\r?\n|$)/);
   return fm ? content.slice(fm[0].length) : content;
 }
 

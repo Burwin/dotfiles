@@ -12,7 +12,7 @@ export function validateCommand(fileName: string, content: string): CommandIssue
     issues.push({ file: fileName, problem: "filename must match ^bam-[a-z0-9]+(-[a-z0-9]+)*\\.md$" });
   }
 
-  const fmMatch = content.match(/^---\s*\n([\s\S]*?)\n---\s*(\n|$)/);
+  const fmMatch = content.match(/^---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(\r?\n|$)/);
   if (!fmMatch) {
     issues.push({ file: fileName, problem: "missing or unparseable frontmatter" });
     return issues;
@@ -21,7 +21,7 @@ export function validateCommand(fileName: string, content: string): CommandIssue
   const fmBlock = fmMatch[1];
   const frontmatter: Record<string, string> = {};
   let parseOk = true;
-  for (const line of fmBlock.split("\n")) {
+  for (const line of fmBlock.split(/\r?\n/)) {
     const trimmed = line.trim();
     if (!trimmed) continue;
     const colonIdx = trimmed.indexOf(":");
