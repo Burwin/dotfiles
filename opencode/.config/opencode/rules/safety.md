@@ -25,6 +25,30 @@ rm, mv, drop table, etc. — never claim success without verifying.
 - **Read-only commands are exempt.** `2>/dev/null` is fine on `ls`,
   `cat`, `gmail-list`, etc., where stderr noise might be cosmetic.
 
+## Browser automation must be headless — never pop a window
+
+The user works on a graphical desktop. A visible browser window stealing
+focus mid-task is a serious interruption. Any time you drive a browser —
+Playwright e2e runs, `playwright-mcp`, screenshots, walkthrough/video
+recordings, scraping — it **must run headless**, no exceptions.
+
+- **Never drive the user's real browser.** Do not launch or attach to
+  `/usr/bin/chromium` (or any `--executable-path` pointing at the user's
+  installed browser/profile); that always opens visible, focus-stealing
+  windows. Use the automation tool's own bundled, isolated browser.
+- **Force headless explicitly.** Don't rely on defaults. Pass `headless:
+  true` / `--headless`; never pass `--headed` or set `PWDEBUG=1`. This
+  holds even for slow-mo, recording, and walkthrough modes — Playwright
+  records video fine while headless.
+- **Belt-and-suspenders: strip the display env** for the browser
+  subprocess so a window is physically impossible even if a config is
+  wrong: prefix with `DISPLAY= WAYLAND_DISPLAY= OZONE_PLATFORM=`. With no
+  display a stray headed launch *fails loudly* instead of popping up.
+- **If you can't guarantee headless, don't run it.** Stop and ask.
+  (Real-world miss from this codebase: an NS-1000 `WALKTHROUGH=1 npx
+  playwright test` slow-mo run surfaced a Chromium window and interrupted
+  the user; the repo config never pinned `headless: true`.)
+
 ## Don't invent CLI flags — check `--help` first
 
 Guessing flag names produces silent no-ops that masquerade as success
