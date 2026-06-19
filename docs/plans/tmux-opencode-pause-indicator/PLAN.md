@@ -30,7 +30,7 @@ We want:
 - **New keybindings**:
   - `Alt+s` → session picker
   - `Alt+Shift+Up` / `Alt+Shift+Down` → smart cycle
-  - `Alt+n` → new session in current pane's cwd
+  - `Alt+n` → new session in home dir `~` (updated 2026-06-19: was pane cwd)
 - **State source**: extend `~/.config/opencode/plugins/notify.ts` to
   write per-tmux-session marker files at
   `~/.local/state/opencode/paused/<tmux-session>`. Decoupled from
@@ -223,8 +223,8 @@ feels wrong.
 ### 7. `tmux/.config/tmux/tmux.conf` — modify
 
 ```diff
-+ # New session in current pane's cwd, no prefix
-+ bind -n M-n new-session -c "#{pane_current_path}"
++ # New session in home dir, no prefix
++ bind -n M-n new-session -c "#{HOME}"
 
 + # Session picker with paused indicator
 + bind -n M-s choose-tree -sZ -F \
@@ -239,18 +239,36 @@ feels wrong.
 + set -g status-left "#(~/.config/tmux/bin/tmux-status-left)"
 ```
 
-### 8. One-time: convert `~/.config/tmux/tmux.conf` to symlink
+### 8. One-time: ~~convert `~/.config/tmux/tmux.conf` to symlink~~ — ALREADY DONE
 
-Currently it's a real file kept in sync with the dotfiles version
-manually. Convert it to a symlink to match `~/.config/opencode/...`
-and `~/.config/hypr/bindings.conf` (which are already symlinks):
+**Resolved 2026-06-19 (step 3): the premise below was wrong; no action
+taken.** `~/.config/tmux` is itself a **directory symlink**:
+
+```
+~/.config/tmux -> ../src/dotfiles/tmux/.config/tmux   (main checkout)
+```
+
+So `~/.config/tmux/tmux.conf` is **already the same inode** as the
+dotfiles file (verified: inode `7315061` for both; `diff` of worktree
+vs main checkout is identical). It was never a manually-synced real
+file. The functional goal — live config == dotfiles, zero drift — is
+already met. Bonus: because it's a *directory* symlink (stow tree-fold),
+the new `bin/` scripts appear live automatically once merged.
+
+**Do NOT run the original command** below — it is destructive:
 
 ```bash
+# ❌ DESTRUCTIVE — do not run.
+# Dest resolves *through the parent symlink* back to the dotfiles file
+# itself, so `ln -sf` would unlink the real repo file and create a
+# self-referential symlink.
 ln -sf ~/src/dotfiles/tmux/.config/tmux/tmux.conf ~/.config/tmux/tmux.conf
 ```
 
-(Pre-flight check: `diff` confirms they are byte-identical today,
-so the conversion is safe.)
+(Form note: `hypr/bindings.conf` and `opencode/plugins/notify.ts` are
+*per-file* symlinks under *real* parent dirs; tmux differs in form
+(dir symlink) but achieves the same result. Keeping the dir symlink —
+it also auto-exposes `bin/`.)
 
 ## Edge cases & gotchas
 
@@ -322,9 +340,12 @@ command/reload/test runs.
    `tmux-cycle-paused` (no-op stubs that return empty / "not yet
    implemented"). Make executable.
    - **Next →** step 3 of 19, *convert `~/.config/tmux/tmux.conf` to a symlink (diff-verify byte parity first)*, with **Opus 4.8** — plan: `docs/plans/tmux-opencode-pause-indicator/PLAN.md`.
-3. Convert `~/.config/tmux/tmux.conf` to symlink.
-   - **Next →** step 4 of 19, *add the `bind -n M-n new-session -c "#{pane_current_path}"` line to `tmux.conf`*, with **Grok Build 0.1** — plan: `docs/plans/tmux-opencode-pause-indicator/PLAN.md`.
-4. Add `bind -n M-n new-session -c "#{pane_current_path}"` to
+3. ~~Convert `~/.config/tmux/tmux.conf` to symlink.~~ **DONE (no-op):**
+   already a symlink via the `~/.config/tmux` directory symlink → main
+   checkout (same inode, byte parity verified). See §8 — the literal
+   `ln -sf` would have been destructive and was not run.
+   - **Next →** step 4 of 19, *add the `bind -n M-n new-session -c "#{HOME}"` line to `tmux.conf`*, with **Grok Build 0.1** — plan: `docs/plans/tmux-opencode-pause-indicator/PLAN.md`.
+4. Add `bind -n M-n new-session -c "#{HOME}"` to
    `tmux.conf`.
    - **Next →** step 5 of 19, *reload tmux (`prefix + q`) and test Alt+n*, with **Grok Build 0.1** — plan: `docs/plans/tmux-opencode-pause-indicator/PLAN.md`.
 5. Reload tmux (`prefix + q`). Test Alt+n.
@@ -396,9 +417,9 @@ command/reload/test runs.
      `~/.config/opencode/bin/opencode-cost-tmux-status`, so adding
      `~/.config/tmux/bin/...` is consistent.
 2. **Convert `~/.config/tmux/tmux.conf` to symlink as part of this
-   work?** Lean: yes. Matches `notify.ts`, `bindings.conf` pattern;
-   prevents drift; `diff` confirms current parity so conversion is
-   safe.
+   work?** RESOLVED (step 3): no conversion needed — `~/.config/tmux`
+   is already a directory symlink to the dotfiles main checkout, so
+   `tmux.conf` is already the same inode. See §8.
 3. **Smart-cycle sort order**: alphabetical (matches `M-Up`/`M-Down`
    intuition) vs mtime (oldest-paused first → longest-waiting comes
    up first)? Lean: alphabetical for v1.
@@ -409,7 +430,7 @@ command/reload/test runs.
 
 ## Progress
 
-- [ ] Phase A — Alt+n + scripts skeleton + tmux.conf symlink
+- [x] Phase A — Alt+n + scripts skeleton + tmux.conf symlink
 - [ ] Phase B — notify.ts state-file write/unlink + tests
 - [ ] Phase C — pause-glyph + status-left script + status-left rewire
 - [ ] Phase D — Alt+s picker + smart cycle bindings + cycle script
