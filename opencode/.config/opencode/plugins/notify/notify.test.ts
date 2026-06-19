@@ -18,6 +18,8 @@
 //     encoding, header construction (Title/Tags/Authorization).
 //   - makeDismissTracker: add → dismissAll calls the injected dismiss once
 //     per id, per-session isolation, error tolerance.
+//   - tmuxSlug: marker-filename sanitization, incl. the `/` and `..`
+//     path-traversal guard and pass-through of conventional names.
 //   - ../notify.ts: parse / typecheck via `bun build --no-bundle` so the
 //     entrypoint can't drift away from the lib's API silently.
 //
@@ -34,6 +36,7 @@ import {
   dispatchEvent,
   makeDismissTracker,
   pingNtfy,
+  tmuxSlug,
   type NtfyConfig,
 } from "./lib.ts"
 
@@ -159,6 +162,32 @@ describe("dispatchEvent", () => {
       titleBase,
     )
     expect(a).toEqual({ kind: "noop" })
+  })
+})
+
+describe("tmuxSlug", () => {
+  // The slug becomes a filename under ~/.local/state/opencode/paused/, so the
+  // security-critical cases are `/` (nesting) and `..` (path traversal).
+  test("collapses path separators and traversal to underscores", () => {
+    expect(tmuxSlug("a/b")).toBe("a_b")
+    expect(tmuxSlug("..")).toBe("__")
+    expect(tmuxSlug("../x")).toBe("___x")
+  })
+
+  test("replaces spaces and other non-[A-Za-z0-9_-] chars", () => {
+    expect(tmuxSlug("my session")).toBe("my_session")
+    expect(tmuxSlug("a.b")).toBe("a_b")
+    expect(tmuxSlug("café:1")).toBe("caf__1")
+  })
+
+  test("passes conventional session names through unchanged", () => {
+    expect(tmuxSlug("SH-280")).toBe("SH-280")
+    expect(tmuxSlug("MASTER-1771")).toBe("MASTER-1771")
+    expect(tmuxSlug("feature_branch-2")).toBe("feature_branch-2")
+  })
+
+  test("empty string stays empty", () => {
+    expect(tmuxSlug("")).toBe("")
   })
 })
 

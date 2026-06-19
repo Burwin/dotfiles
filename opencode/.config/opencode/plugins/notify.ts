@@ -1,5 +1,13 @@
 import type { Plugin } from "@opencode-ai/plugin"
-import { dispatchEvent, makeDismissTracker, pingNtfy } from "./notify/lib.ts"
+import { mkdir, unlink, writeFile } from "node:fs/promises"
+import { homedir } from "node:os"
+import { join } from "node:path"
+import {
+  dispatchEvent,
+  makeDismissTracker,
+  pingNtfy,
+  tmuxSlug,
+} from "./notify/lib.ts"
 
 /**
  * Native OS notifications + optional ntfy phone alerts for opencode on Linux
@@ -46,6 +54,19 @@ import { dispatchEvent, makeDismissTracker, pingNtfy } from "./notify/lib.ts"
  * best-effort (stale or expired ids are harmless no-ops, errors swallowed).
  * ntfy phone alerts are NOT dismissed — phones don't reliably know you've
  * returned to the laptop.
+ *
+ * Paused-state markers (tmux only): alongside the toast/push, every halting
+ * event touches `~/.local/state/opencode/paused/<tmux-session>` and every
+ * subsequent non-halting (dismiss) event removes it. This gives tmux a
+ * filesystem signal for which sessions are waiting on the user, consumed by
+ * the status-left / choose-tree indicator scripts (see
+ * docs/plans/tmux-opencode-pause-indicator/PLAN.md). The marker is keyed by
+ * tmux session name — so it's a silent no-op when opencode runs outside tmux
+ * — and its content is the event `tag` (robot/lock/question/warning) so the
+ * indicator can color idle vs urgent states differently. Every fs op is
+ * best-effort (`.catch(() => {})`), preserving the plugin's never-crash
+ * invariant; it is deliberately decoupled from mako, whose `normal`-urgency
+ * idle toast auto-expires in 5s and so cannot be the source of truth.
  *
  * ntfy: best-effort, never crashes the plugin runtime. Configured via env:
  *
@@ -125,6 +146,24 @@ export const NotifyPlugin: Plugin = async ({ $ }) => {
     : ""
   const titleBase = tmuxSession || "OpenCode"
 
+  // Paused-state marker file for this tmux session (see docstring). Resolved
+  // once at load: XDG_STATE_HOME (or ~/.local/state) + opencode/paused/<slug>,
+  // where the slug is the filesystem-sanitized tmux session name. Empty when
+  // opencode is launched outside tmux, which disables the whole mechanism.
+  const pausedDir = join(
+    process.env.XDG_STATE_HOME || join(homedir(), ".local", "state"),
+    "opencode",
+    "paused",
+  )
+  const markerFile = tmuxSession ? join(pausedDir, tmuxSlug(tmuxSession)) : ""
+  if (markerFile) {
+    // Ensure paused/ exists, then clear any stale marker this tmux session may
+    // have left behind: `dismiss` never fires if the prior opencode was killed
+    // (SIGKILL / crash), so a fresh launch must start un-paused. Best-effort.
+    await mkdir(pausedDir, { recursive: true }).catch(() => {})
+    await unlink(markerFile).catch(() => {})
+  }
+
   // The dismiss tracker holds the per-session mako-id lists. The injected
   // dismiss callback drives `makoctl dismiss -n <id>` via Bun's `$`; errors
   // are swallowed so a missing makoctl / dbus failure can't crash the plugin.
@@ -150,6 +189,8 @@ export const NotifyPlugin: Plugin = async ({ $ }) => {
           return
         case "dismiss":
           await tracker.dismissAll(action.sessionID)
+          // Session resumed → clear the paused marker. Best-effort.
+          if (markerFile) await unlink(markerFile).catch(() => {})
           return
         case "notify": {
           // Fire both transports in parallel. notify-send -p prints the mako
@@ -166,6 +207,10 @@ export const NotifyPlugin: Plugin = async ({ $ }) => {
             const id = Number.parseInt(stdoutText.trim(), 10)
             tracker.tryAdd(action.sessionID, id)
           }
+          // Arm the paused marker; content = tag so the indicator can color
+          // idle (robot) vs urgent (lock/question/warning). Best-effort.
+          if (markerFile)
+            await writeFile(markerFile, action.tag).catch(() => {})
           return
         }
       }

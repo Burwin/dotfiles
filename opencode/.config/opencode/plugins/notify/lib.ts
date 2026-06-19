@@ -10,7 +10,7 @@
 // imported as a Plugin entrypoint, which would fail for these helpers and
 // for the test file. Subdirectories are not scanned.
 //
-// Three pieces are factored out:
+// Four pieces are factored out:
 //
 //   dispatchEvent(type, properties, titleBase) — pure mapping from an
 //     opencode event tuple to the action the plugin should take. Returns
@@ -29,7 +29,11 @@
 //     tracked id when `dismissAll(sessionID)` runs; the entrypoint passes
 //     a Bun-`$`-driven implementation, tests pass a mock.
 //
-// All three are intentionally side-effect-free at module load (no env
+//   tmuxSlug(name) — sanitize a tmux session name into a filesystem-safe
+//     marker-file key (../notify.ts writes ~/.local/state/opencode/paused/
+//     <slug>). Pure so the path-traversal guard is unit-testable.
+//
+// All four are intentionally side-effect-free at module load (no env
 // reads, no global state). The entrypoint owns env-var resolution and
 // shell/$-bound state.
 
@@ -236,4 +240,13 @@ export function makeDismissTracker(
       return m.get(sessionID)?.length ?? 0
     },
   }
+}
+
+// tmuxSlug — make a tmux session name safe to use as a marker filename under
+// ~/.local/state/opencode/paused/. `tmux rename-session` accepts arbitrary
+// strings, including `/` and `..`, so an unsanitized name could escape the
+// paused/ dir or create nested paths. Collapse anything outside [A-Za-z0-9_-]
+// to `_`; conventional session names ([A-Za-z0-9_-]) pass through unchanged.
+export function tmuxSlug(name: string): string {
+  return name.replace(/[^A-Za-z0-9_-]/g, "_")
 }
