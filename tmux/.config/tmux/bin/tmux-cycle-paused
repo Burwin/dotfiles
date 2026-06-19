@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Phase D: smart cycle — jump to the prev/next paused opencode session.
+exit 0

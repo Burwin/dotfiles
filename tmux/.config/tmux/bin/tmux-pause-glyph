@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Phase C: render a paused-indicator glyph for one tmux session.
+exit 0

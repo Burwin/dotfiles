@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Phase C: build the status-left session list with per-session pause glyphs.
+exit 0
