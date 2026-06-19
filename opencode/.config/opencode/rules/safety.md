@@ -48,6 +48,10 @@ recordings, scraping — it **must run headless**, no exceptions.
   (Real-world miss from this codebase: an NS-1000 `WALKTHROUGH=1 npx
   playwright test` slow-mo run surfaced a Chromium window and interrupted
   the user; the repo config never pinned `headless: true`.)
+- **Better yet, don't run heavy e2e locally at all.** Headless avoids the
+  window; offloading to GitHub CI avoids the memory hit that starves parallel
+  work streams. e2e and video-recording runs default to CI — see Testing in
+  `@rules/workflow.md`.
 
 ## Don't invent CLI flags — check `--help` first
 

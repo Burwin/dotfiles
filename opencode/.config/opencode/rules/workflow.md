@@ -82,8 +82,34 @@ met — strong success criteria let you self-correct instead of guessing.
   (e.g., "tests need live DB; ran build only").
 - Don't disable failing tests to make a change pass. Fix them or surface them.
 - For repos with multiple test tiers (unit / integration / e2e), default to
-  the cheapest tier that exercises the change; escalate if the change is
+  the cheapest tier that exercises the change — cheapest in **local resource
+  footprint**, not just wall-clock — and escalate if the change is
   cross-cutting.
+
+### Offload heavy tests to GitHub, not local memory
+
+Local memory is the bottleneck for running multiple work streams in parallel,
+so resource-heavy test runs default to GitHub CI rather than this machine.
+This trades wall-clock and CI minutes for local headroom — an accepted trade
+for now; GH cost is a later problem, and future devbox scaling may revisit it
+(MASTER-1792 / 1799).
+
+- **Unit tests → local.** They're cheap; run them here. Exception: if a repo
+  exposes a single combined `test` command (unit + integration + e2e) and
+  splitting the cheap part out locally is more hassle than just running the
+  lot on CI, run the whole thing on CI.
+- **e2e tests → always GitHub.** Especially anything that records video or
+  spins up browsers/containers — don't run these locally. If you must touch a
+  browser locally at all, it stays headless (see `@rules/safety.md`).
+- **Integration tests → GitHub when possible.** Run locally only when the
+  slice is small and isolated; otherwise offload.
+- **"When possible" = a CI job actually covers it.** Check
+  `.github/workflows/` for a job exercising the tier. If none exists, run
+  locally (headless) and say so.
+- **Trigger CI without breaking the push guardrail.** Prefer
+  `gh workflow run <wf> --ref <branch>` (workflow_dispatch), then poll with
+  `gh run watch` / `gh run view --log`. If CI only triggers on push, **ask
+  first** — this default does not authorize commits or pushes on its own.
 
 ## Force operations
 
