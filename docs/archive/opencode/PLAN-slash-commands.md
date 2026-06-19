@@ -1,6 +1,14 @@
 # Convert common prompts into opencode slash commands (MASTER-1804)
 
-Status: shipping — steps 1–23 complete, Step 24 (deploy via PR → `m`) in progress.
+> **Status:** shipped; archived 2026-06-18. Merged to `m` as
+> `feat(opencode): add bam- slash commands + convention validator` (PR #5,
+> squash `2bcadd3`); nothing supersedes it. Shipped artifacts:
+> `opencode/.config/opencode/commands/` (the four `/bam-*` commands),
+> `opencode/.config/opencode/commands-validate/` (the convention validator),
+> and the `commands/` whole-dir link in `opencode/install.sh`. Decision
+> history below is preserved as-is for reference.
+
+Status: shipped 2026-06-18 (merged to `m`, PR #5, squash `2bcadd3`).
 
 Asana: MASTER-1804 — "Convert common prompts into slash commands"
 (https://app.asana.com/1/1203819684139908/project/1204506183888935/task/1215832930545833)
@@ -243,7 +251,7 @@ sensitivity. Each uses `$ARGUMENTS` where a target is passed.
 - [x] Phase A — validator red-green-refactor (steps 1–12)
 - [x] Phase B — author four `bam-` commands (steps 13–20)
 - [x] Phase C — install.sh wiring (steps 21–22)
-- [ ] Phase D — integration smoke ✓ (step 23); deploy/PR/Copilot/merge in progress (step 24)
+- [x] Phase D — integration smoke + deploy/PR/Copilot/merge (steps 23–24)
 
 ## References
 
