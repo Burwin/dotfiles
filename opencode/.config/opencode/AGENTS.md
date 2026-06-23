@@ -15,6 +15,7 @@ and take precedence on project-specific concerns.
   - `@rules/tools.md` — preferred CLI tools and package managers
   - `@rules/project-structure.md` — file layout defaults
   - `@rules/documentation.md` — two-layer (human + LLM) doc convention
+  - `@rules/plans.md` — multi-step plan trigger sentences + model tiers
 
 ## External File Loading
 
@@ -38,6 +39,7 @@ Instructions:
 - **Sending / reading email (Gmail):** `gmail-send` / `gmail-*` CLI — details in `@rules/tools.md`
 - **Project structure and file layout:** `@rules/project-structure.md`
 - **Documentation style (two-layer convention):** `@rules/documentation.md`
+- **Multi-step plan trigger sentences + model tiers:** `@rules/plans.md`
 
 ## Precedence
 
@@ -266,6 +268,14 @@ plan:
 1. Read the plan file to understand the current status and next step
 2. Check the Progress block and implementation order for what's pending
 3. Follow the phase order — each phase is independently shippable
+
+Plans are run **one step per fresh LLM session**. Each step carries a **trigger
+sentence** for the next step and a **model tier** (Opus 4.8 / GLM 5.2 / Grok
+Build 0.1); when a step completes, post the next step's trigger verbatim so the
+human can paste it into a new session. Authoring and executing conventions —
+the canonical trigger shape, the four required parts, and the friendly-name →
+model-id mapping — live in `@rules/plans.md`. `/bam-tdd-plan` applies them to
+TDD plans.
 
 The cost-tracker plan was archived 2026-06-10 to
 `docs/archive/opencode/PLAN-cost-tracker.md`; its per-task successor

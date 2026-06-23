@@ -30,21 +30,22 @@ Rules for the decomposition:
 
 ## 3. Trigger sentence per step
 
-**Every step carries an explicit trigger sentence** so the next step — and the model that should run it — is unambiguous. When a step completes, the executing agent posts the **next** step's trigger verbatim. Use this exact shape (`N` = step number, `M` = total step count):
+**Every step carries an explicit trigger sentence** so the next step — and the model that should run it — is unambiguous. When a step completes, the executing agent posts the **next** step's trigger verbatim. Use the canonical shape from `@rules/plans.md` (`N` = step number, `M` = total step count; `<label>` is the step label — for TDD, `<kind>: <title>` where `<kind>` is `RED` / `GREEN` / `REFACTOR`):
 
-> ▶️ Step `N` of `M` — `<kind>: <title>` — model: `<provider/model-id>` — plan:
+> ▶️ Step `N` of `M` — `<label>` — model: `<tier>` — plan:
 > `docs/plans/<topic>/PLAN.md`
 
-Put the trigger for step 1 (the kickoff) at the bottom of the plan so execution can begin with one copy-paste.
+`<tier>` is the friendly model-tier name (see §4). Put the trigger for step 1 (the kickoff) at the bottom of the plan so execution can begin with one copy-paste.
 
-## 4. Name a model for every step
+## 4. Name a model tier for every step
 
-**Every step names an LLM model** capable of executing it with confidence — don't leave it implicit. Match the model to the work:
+**Every step names a model tier** capable of executing it with confidence — don't leave it implicit. Use the three tiers and routing in `@rules/plans.md`:
 
-- Mechanical / well-specified steps (scaffolding, wiring, writing a test to a precise spec, renames) → a cheaper, fast build model.
-- Judgment-heavy steps (designing the decomposition, authoring prose/prompts, the deploy + review loop, anything needing taste) → a stronger reasoning model.
+- **Grok Build 0.1** — mechanical / well-specified steps (scaffolding, wiring, writing a test to a precise spec, renames).
+- **GLM 5.2** — mid: moderate but bounded logic, straightforward well-specified implementation.
+- **Opus 4.8** — judgment-heavy steps (designing the decomposition, authoring prose/prompts, the deploy + review loop, anything needing taste).
 
-Record the choice in a **Model** column in the step table and echo it in each trigger sentence. Pick only models you're confident can do the step; if unsure, choose the stronger one and say why.
+Record the tier in a **Model** column in the step table and echo it in each trigger sentence — the friendly name in the trigger; the full `provider/model-id` lives in the `@rules/plans.md` table. Pick only a tier you're confident can do the step; if unsure, choose the stronger one and say why.
 
 ## 5. Write the plan file
 
