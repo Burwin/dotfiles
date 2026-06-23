@@ -33,9 +33,10 @@
 	email = michael@bamboo.dev
 [url "https://github.com/"]
 	insteadOf = git@github.com:
+	insteadOf = ssh://git@github.com/
 [credential "https://github.com"]
-	helper = 
+	helper =
 	helper = !gh auth git-credential
 [credential "https://gist.github.com"]
-	helper = 
+	helper =
 	helper = !gh auth git-credential
