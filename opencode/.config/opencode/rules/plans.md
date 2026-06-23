@@ -18,19 +18,23 @@ LLM should run each step.
   the next step.
 - **Put the kickoff trigger (step 1) at the bottom of the plan** so execution
   starts with one copy-paste.
-- **One sentence, nothing extra** — only what the next session needs to load the
-  plan, find the step, and continue.
+- **Just the trigger, nothing extra** — it carries only what the next session
+  needs to load the plan, find the step, and continue. It is one logical line
+  (it may wrap onto two for readability), and the `— plan: <path>` portion is
+  required, never dropped.
 
-Canonical shape (`N` = step number, `M` = total step count; `<kind>:` is
-optional — TDD plans use `RED:` / `GREEN:` / `REFACTOR:`, others may omit it):
+Canonical shape (`N` = step number, `M` = total step count). `<label>` is the
+step label: `<kind>: <title>` for TDD plans (where `<kind>` is `RED` / `GREEN`
+/ `REFACTOR`), or just a short `<title>` for other plans:
 
-> ▶️ Step `N` of `M` — `<kind>: <title>` — model: `<tier>` — plan:
+> ▶️ Step `N` of `M` — `<label>` — model: `<tier>` — plan:
 > `docs/plans/<topic>/PLAN.md`
 
 Every trigger has exactly these four parts:
 
 1. **Step `N` of `M`** — how far along we are.
-2. **`<title>`** — short description of the step, for context.
+2. **`<label>`** — the step label: `<kind>: <title>` for TDD, or a short
+   `<title>` otherwise.
 3. **model: `<tier>`** — the friendly tier name (see table), so the human knows
    which model to pick when opening the session.
 4. **plan path** — so the session can load the plan and read the step.
