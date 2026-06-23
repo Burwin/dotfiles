@@ -1,3 +1,46 @@
 #!/usr/bin/env bash
-# Phase C: render a paused-indicator glyph for one tmux session.
-exit 0
+# tmux-pause-glyph — render a paused-indicator glyph for ONE tmux session.
+#
+# Part of the opencode pause-indicator
+# (docs/plans/tmux-opencode-pause-indicator/PLAN.md). The opencode notify
+# plugin (opencode/.config/opencode/plugins/notify.ts) drops a marker file
+#   $XDG_STATE_HOME/opencode/paused/<slug>
+# whenever a session halts for input. <slug> is the tmux session name with
+# every byte outside [A-Za-z0-9_-] collapsed to '_' — the tmuxSlug() transform
+# in opencode/.config/opencode/plugins/notify/lib.ts. This script applies the
+# SAME transform to its argument before the lookup; statting the raw name would
+# silently miss any session whose name contains spaces, slashes, etc.
+#
+# The marker's CONTENT is the notify event tag, which selects the colour:
+#   lock | warning | question  -> red  ● (urgent: permission / error / question)
+#   robot (or anything else)   -> yellow ● (idle: session.idle)
+#
+# Args:   $1 = tmux session name (RAW — do not pre-slug; this script slugs it).
+# Output: a tmux-format glyph string on stdout, no trailing newline; or nothing
+#         (exit 0) when the session is not paused.
+#
+# Style contract: the glyph sets only fg + bold, then resets fg to default and
+# clears bold — it never touches bg. That makes it safe to drop in verbatim
+# both standalone (the choose-tree picker) and inside a coloured status-left
+# block (the active black-on-blue session keeps its blue background).
+
+name=$1
+[[ -n $name ]] || exit 0
+
+dir="${XDG_STATE_HOME:-$HOME/.local/state}/opencode/paused"
+
+# Mirror lib.ts tmuxSlug(): name.replace(/[^A-Za-z0-9_-]/g, "_"). Bash glob
+# bracket replacement collapses every disallowed character to '_'. (The '-' is
+# last in the class so it is literal, not a range.)
+slug="${name//[^A-Za-z0-9_-]/_}"
+marker="$dir/$slug"
+
+[[ -f $marker ]] || exit 0
+
+tag=$(<"$marker")
+case "$tag" in
+  lock | warning | question) color=red ;;
+  robot | *) color=yellow ;;
+esac
+
+printf '#[fg=%s,bold]●#[fg=default,nobold]' "$color"

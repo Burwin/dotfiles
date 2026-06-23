@@ -1,3 +1,49 @@
 #!/usr/bin/env bash
-# Phase C: build the status-left session list with per-session pause glyphs.
-exit 0
+# tmux-status-left — build the status-left session list with per-session
+# opencode pause glyphs, preserving the attached-session highlight.
+#
+# Replaces the former inline (double-escaped) status-left format. For each
+# session from `tmux list-sessions` it emits the same two blocks the old
+# format produced, with the pause glyph injected after the name:
+#
+#   active session (the one $1 names)  -> #[fg=black,bg=blue,bold] NAME ● #[bg=default]
+#   every other session                -> #[fg=brightblack] NAME ●
+#
+# "active" is the requesting client's OWN session, passed in as $1 (the format
+# string supplies '#{session_name}', which tmux expands per-client). Comparing
+# against that — rather than #{session_attached} — keeps exactly one block
+# highlighted even when several sessions each have a client attached, matching
+# the previous `#{==:#{session_name},#{session_name}}` behaviour.
+#
+# The glyph comes from the sibling tmux-pause-glyph, which owns the marker-file
+# lookup AND the filesystem-slug transform — so this script never has to know
+# how marker files are named (see that script's GOTCHA note). It prints nothing
+# for un-paused sessions, so their spacing is identical to the old format.
+#
+# Args: $1 = the client's attached session name (for the active highlight).
+#            Empty (e.g. invoked with no client) -> nothing highlighted, which
+#            is harmless.
+# Output: the full status-left string on stdout, no trailing newline.
+
+active=$1
+glyph_bin="$(dirname "$0")/tmux-pause-glyph"
+
+out=""
+while IFS= read -r name; do
+  [[ -n $name ]] || continue
+
+  glyph="$("$glyph_bin" "$name")"
+  if [[ -n $glyph ]]; then
+    inner=" ${name} ${glyph} "
+  else
+    inner=" ${name} "
+  fi
+
+  if [[ $name == "$active" ]]; then
+    out+="#[fg=black,bg=blue,bold]${inner}#[bg=default] "
+  else
+    out+="#[fg=brightblack]${inner}"
+  fi
+done < <(tmux list-sessions -F '#{session_name}')
+
+printf '%s' "$out"
