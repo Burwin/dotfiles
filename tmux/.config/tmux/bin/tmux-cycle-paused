@@ -1,3 +1,111 @@
 #!/usr/bin/env bash
-# Phase D: smart cycle — jump to the prev/next paused opencode session.
-exit 0
+# tmux-cycle-paused — "smart cycle" between tmux sessions whose opencode is
+# paused (the Alt+Shift+Up / Alt+Shift+Down bindings).
+#
+# Part of the opencode pause-indicator
+# (docs/plans/tmux-opencode-pause-indicator/PLAN.md). The opencode notify
+# plugin drops a marker file
+#   $XDG_STATE_HOME/opencode/paused/<slug>
+# for every tmux session whose opencode has halted for input. <slug> is the
+# session name with every byte outside [A-Za-z0-9_-] collapsed to '_' — the
+# tmuxSlug() transform in opencode/.config/opencode/plugins/notify/lib.ts,
+# also mirrored by the sibling tmux-pause-glyph.
+#
+# This jumps the calling client to the previous/next such session.
+#
+# Args:   $1 = "next" | "prev"   (direction to cycle)
+# Output: nothing on stdout; user-facing feedback goes via `tmux display-message`.
+#
+# WHY WE ITERATE LIVE SESSIONS AND FORWARD-SLUG THEM (rather than just listing
+# the marker dir, as the PLAN's first-cut sketch did):
+#   1. Reverse-mapping. Marker filenames are slugs, but `switch-client` needs
+#      the RAW session name, and slugging is lossy (no reliable inverse).
+#      Slugging a live name forward is exact, so we recover the real target.
+#   2. Orphan markers. A marker left by a session that was since killed or
+#      renamed (the plugin's `dismiss` never fires on a hard kill) would be an
+#      un-switchable target. Intersecting with live sessions silently drops it.
+#   3. Consistency. tmux-status-left builds its glyphs the same way (iterate
+#      live sessions, stat the marker), so the set we cycle through is exactly
+#      the set the user sees marked in the status bar.
+#
+# Ordering is tmux's own `list-sessions` order (alphabetical by name), which is
+# the PLAN's chosen v1 sort AND matches the left-to-right order of the
+# status-left glyphs — so cycling visits sessions in the order they appear.
+#
+# Behaviour matrix (from the PLAN):
+#   0 paused                    -> status-line message, no switch
+#   1 paused, current is it     -> message, stay (no switch)
+#   1 paused, current is not it -> switch to it
+#   2+ paused, current in list  -> step to neighbour, wrapping around the ends
+#   2+ paused, current not in   -> jump to the first in the list
+
+dir="${XDG_STATE_HOME:-$HOME/.local/state}/opencode/paused"
+
+direction=$1
+case "$direction" in
+  next | prev) ;;
+  *)
+    tmux display-message "tmux-cycle-paused: expected 'next' or 'prev', got '${direction:-}'"
+    exit 2
+    ;;
+esac
+
+# Live, paused sessions in tmux's listing order. For each live session apply the
+# SAME slug transform the notify plugin uses, then keep it only if its marker
+# file exists. (Bash bracket replacement collapses every disallowed byte to '_';
+# '-' is last in the class so it is literal, not a range.) A missing marker dir
+# just means no match for every session -> the empty-list path below.
+paused=()
+while IFS= read -r name; do
+  [[ -n $name ]] || continue
+  slug="${name//[^A-Za-z0-9_-]/_}"
+  [[ -f "$dir/$slug" ]] && paused+=("$name")
+done < <(tmux list-sessions -F '#{session_name}' 2>/dev/null)
+
+count=${#paused[@]}
+
+if (( count == 0 )); then
+  # 0-paused: visible status-line message only. The PLAN deliberately skips the
+  # terminal bell here — it is filtered too inconsistently across emulators to
+  # rely on. Do not switch.
+  tmux display-message "no opencode sessions waiting"
+  exit 0
+fi
+
+# The calling client's current session. Run from a key binding via run-shell,
+# `display-message -p` resolves against that client, so this is the session the
+# user is looking at when they press the key.
+current=$(tmux display-message -p '#S')
+
+# Index of the current session within the paused list (-1 if not paused).
+idx=-1
+for i in "${!paused[@]}"; do
+  if [[ ${paused[i]} == "$current" ]]; then
+    idx=$i
+    break
+  fi
+done
+
+if (( idx < 0 )); then
+  # Current session is not itself paused -> enter the ring at its first member.
+  # Covers both "1 paused, current is not it" and "2+ paused, current not in".
+  target=${paused[0]}
+elif (( count == 1 )); then
+  # The only paused session is the one we are already on. Nothing to switch to;
+  # surface a message instead of a silent no-op (an unexplained dead keypress
+  # reads as a broken binding). This still honours the matrix's "no switch".
+  tmux display-message "already on the only paused opencode session"
+  exit 0
+else
+  # In the ring with neighbours -> step one over, wrapping at both ends.
+  if [[ $direction == next ]]; then
+    next_idx=$(( (idx + 1) % count ))
+  else
+    next_idx=$(( (idx - 1 + count) % count ))
+  fi
+  target=${paused[next_idx]}
+fi
+
+# Leading '=' forces an exact session-name match, so a name that is a prefix of
+# another (e.g. "m" vs "master") can never switch to the wrong session.
+tmux switch-client -t "=$target"
