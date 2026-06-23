@@ -2,6 +2,12 @@
   "$schema": "https://opencode.ai/config.json",
   "autoupdate": false,
   "instructions": ["rules/safety.md", "rules/communication.md"],
+  "permission": {
+    "external_directory": {
+      "~/.config/opencode/**": "allow",
+      "~/.config/opencode/secrets/**": "deny"
+    }
+  },
   "provider": {
     "opencode": {
       "models": {
