@@ -30,9 +30,9 @@ Rules for the decomposition:
 
 ## 3. Trigger sentence per step
 
-**Every step carries an explicit trigger sentence** so the next step — and the model that should run it — is unambiguous. When a step completes, the executing agent posts the **next** step's trigger verbatim. Use the canonical shape from `@rules/plans.md` (`N` = step number, `M` = total step count; for TDD, `<kind>` is `RED` / `GREEN` / `REFACTOR`):
+**Every step carries an explicit trigger sentence** so the next step — and the model that should run it — is unambiguous. When a step completes, the executing agent posts the **next** step's trigger verbatim. Use the canonical shape from `@rules/plans.md` (`N` = step number, `M` = total step count; `<label>` is the step label — for TDD, `<kind>: <title>` where `<kind>` is `RED` / `GREEN` / `REFACTOR`):
 
-> ▶️ Step `N` of `M` — `<kind>: <title>` — model: `<tier>` — plan:
+> ▶️ Step `N` of `M` — `<label>` — model: `<tier>` — plan:
 > `docs/plans/<topic>/PLAN.md`
 
 `<tier>` is the friendly model-tier name (see §4). Put the trigger for step 1 (the kickoff) at the bottom of the plan so execution can begin with one copy-paste.
