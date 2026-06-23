@@ -41,19 +41,31 @@ describe("recompute", () => {
     expect(recompute(rate, tokens)).toBe(2925000000)
   })
 
-  test("missing rate warns once and returns 0", () => {
+  test("missing rate warns once and returns 0", async () => {
+    // recompute.ts's `warnedMissingRate` latch is module-scoped and fires
+    // at most once per bun:test process. When this file runs alongside its
+    // siblings (as `opencode-plugin-smoke` does via `bun test <dir>`),
+    // cost-tracker.test.ts trips that latch first — so the statically
+    // imported `recompute` would already be latched here, and the warn
+    // assertion below would see 0 calls. Cache-bust a fresh module copy
+    // (the same `?test=` idiom cost-tracker.test.ts uses for `warnedNoDb`)
+    // so the latch starts unset regardless of sibling execution order.
+    const { recompute: freshRecompute } = await import(
+      "./recompute.ts?test=missing-rate-warn"
+    )
+
     const warnSpy = mock(() => {})
     const originalWarn = console.warn
     console.warn = warnSpy
 
     try {
       const tokens = makeTokens({ input: 1, output: 1 })
-      expect(recompute(undefined, tokens)).toBe(0)
+      expect(freshRecompute(undefined, tokens)).toBe(0)
       expect(warnSpy).toHaveBeenCalledTimes(1)
       expect(warnSpy.mock.calls[0][0]).toBe("[cost-tracker] no rate found for model, using 0 cost")
 
       // Second call should not warn again (module-scoped latch)
-      expect(recompute(undefined, tokens)).toBe(0)
+      expect(freshRecompute(undefined, tokens)).toBe(0)
       expect(warnSpy).toHaveBeenCalledTimes(1)
     } finally {
       console.warn = originalWarn

@@ -11,8 +11,10 @@
 #                    @opencode-ai/sdk.
 #   2  bun:test     — helper-lib unit tests + dispatch-logic suites for
 #                    notify, cost-tracker, and (cross-repo) toggl-time.
-#   3  --live       — spawns `opencode serve` and scans the log for
-#                    plugin-load errors. Deferred to Step 5 of the PLAN.
+#   3  --live       — spawns `opencode serve --print-logs` and scans the
+#                    captured stream for plugin-load errors, plus a
+#                    cost-tracker load canary. Re-baselined for opencode
+#                    1.17.3 (see run_tier3 + PLAN Step 0).
 #
 # In scope:
 #   - plugins/notify.ts            (this repo)
@@ -117,7 +119,6 @@ TIER3_PID=""
 TIER3_COST_DB=""
 TIER3_TOGGL_DB=""
 TIER3_STDOUT=""
-TIER3_PRE_LOGS=""
 
 cleanup() {
     local rc=$?
@@ -139,7 +140,6 @@ cleanup() {
     [[ -n "$TIER3_COST_DB" ]] && rm -f "$TIER3_COST_DB" "${TIER3_COST_DB}-shm" "${TIER3_COST_DB}-wal"
     [[ -n "$TIER3_TOGGL_DB" ]] && rm -f "$TIER3_TOGGL_DB" "${TIER3_TOGGL_DB}-shm" "${TIER3_TOGGL_DB}-wal"
     [[ -n "$TIER3_STDOUT" ]] && rm -f "$TIER3_STDOUT"
-    [[ -n "$TIER3_PRE_LOGS" ]] && rm -f "$TIER3_PRE_LOGS"
     exit "$rc"
 }
 trap cleanup EXIT INT TERM
@@ -442,32 +442,39 @@ run_tier2() {
     return "$group_failures"
 }
 
-# --- tier 3: live opencode serve + log scan -------------------------------
+# --- tier 3: live opencode serve + stream scan ----------------------------
 #
-# Spawn `opencode serve`, wait for it to be ready, trigger plugin loading
-# via a single HTTP request, then scan the freshly-written log for
-# (a) each expected plugin's `loading plugin` line and (b) the absence
-# of ERROR/panic lines tagged with service=plugin.
+# Spawn `opencode serve --print-logs`, wait for it to be ready, trigger
+# plugin loading via a single HTTP request, then scan the process's own
+# captured stdout+stderr stream for plugin-load errors.
 #
-# Deviations from PLAN §Step 5:
+# Re-baselined for opencode 1.17.3 (was 1.14.28; see PLAN Step 0 for the
+# capture this is derived from — do not guess these patterns):
 #
-#   - PLAN says wait-for-ready by mtime-sorting ~/.local/share/opencode/log/
-#     and looking for `service=server status=started` in the newest log.
-#     In practice both signals are unreliable on this machine:
-#       * mtime is unreliable when another opencode TUI is running in
-#         parallel (its log file is constantly being appended to and
-#         "wins" the newest-by-mtime ranking).
-#       * `service=server status=started` is emitted for *every* HTTP
-#         request, not the one-time startup event we want.
-#     Instead we use the stdout line `opencode server listening on
-#     http://HOST:PORT` as the ready signal, which is both definitive
-#     and easy to parse. The new log file is identified by a
-#     before/after filename-set diff, not mtime.
+#   - SCAN SOURCE is the captured serve stream ($TIER3_STDOUT), not a log
+#     *file*. `--print-logs` routes this serve process's structured logs
+#     to stderr; the spawn redirects stdout+stderr into $TIER3_STDOUT
+#     (`2>&1`). This kills two 1.14.28-era hazards at once: the
+#     new-log-file hunt (1.17.3 appends to one rolling opencode.log, so a
+#     before/after filename diff is always empty) AND the shared-file
+#     concurrency race (every concurrent opencode appends to that same
+#     rolling file). The stream is process-isolated, so a parallel TUI
+#     can't pollute or satisfy our scan.
 #
-#   - opencode serve loads external plugins lazily — they only show up
-#     in the log after the first HTTP request that creates a directory
-#     instance. We hit /config/providers with curl after ready to
-#     trigger plugin loading.
+#   - READINESS is the stdout line `opencode server listening on
+#     http://HOST:PORT`. Verified unchanged in 1.17.3 and NOT moved or
+#     reworded by `--print-logs` (it stays on stdout; structured logs go
+#     to stderr). Definitive and easy to parse for the port.
+#
+#   - opencode serve loads external plugins lazily — they only run after
+#     the first HTTP request that creates a directory instance. We hit
+#     /config/providers with curl after ready to trigger plugin loading.
+#
+#   - 1.17.3 emits NO structured per-plugin "load" line (verified at INFO
+#     and DEBUG). So tier 3 cannot assert a per-plugin load regex the way
+#     the 1.14.28 script did. It instead rests on two signals — a
+#     non-vacuous ERROR scan and a cost-tracker stdout canary — both
+#     documented at the scan site below.
 #
 #   - The PLAN's `--port 0` text implies kernel ephemeral allocation.
 #     opencode actually tries 4096 first (its default) and falls back
@@ -503,14 +510,6 @@ run_tier3() {
         return 1
     fi
 
-    local log_dir="$HOME/.local/share/opencode/log"
-    if [[ ! -d "$log_dir" ]]; then
-        print_row "fail" "log dir missing: $log_dir"
-        TIER3_FAIL=1
-        [[ "$QUIET" == 1 ]] || echo
-        return 1
-    fi
-
     # --- sandbox plugin state writes (PLAN §Step 5 §Sandbox) -----------
     # These are tracked by the EXIT trap; if the script dies between
     # here and the explicit teardown, the trap still cleans up.
@@ -518,26 +517,12 @@ run_tier3() {
     TIER3_TOGGL_DB=$(mktemp -t toggl-state-smoke.XXXXXX.db)
     TIER3_STDOUT=$(mktemp -t opencode-smoke-stdout.XXXXXX)
 
-    # --- snapshot pre-existing log filenames ---------------------------
-    # File-set diff (not mtime) — see header comment for why mtime is
-    # unreliable. Filenames look like 2026-05-21T175156.log which sort
-    # lexicographically by creation time, but we don't depend on order
-    # here; just on set membership. Tracked globally so the EXIT trap
-    # cleans it up if the script is interrupted before run_tier3
-    # reaches its own cleanup line.
-    TIER3_PRE_LOGS=$(mktemp -t opencode-smoke-prelogs.XXXXXX)
-    local f
-    for f in "$log_dir"/*.log; do
-        [[ -e "$f" ]] || continue
-        basename -- "$f"
-    done >"$TIER3_PRE_LOGS"
-
     # --- spawn opencode serve ------------------------------------------
     local t0=$SECONDS
     OPENCODE_COST_DB="$TIER3_COST_DB" \
     TOGGL_STATE_DB="$TIER3_TOGGL_DB" \
     OPENCODE_IDLE_NTFY_TOPIC="" \
-        opencode serve --hostname 127.0.0.1 --port 0 --log-level INFO \
+        opencode serve --print-logs --hostname 127.0.0.1 --port 0 --log-level INFO \
         >"$TIER3_STDOUT" 2>&1 &
     TIER3_PID=$!
 
@@ -589,94 +574,80 @@ run_tier3() {
         return 1
     fi
 
-    # --- find the new log file -----------------------------------------
-    local new_log="" bn candidate
-    deadline=$((SECONDS + 5))
-    while [[ -z "$new_log" ]] && ((SECONDS < deadline)); do
-        for candidate in "$log_dir"/*.log; do
-            [[ -e "$candidate" ]] || continue
-            bn=$(basename -- "$candidate")
-            # `grep -Fxq` = fixed-string, whole-line match. If $bn is
-            # not in the pre-snapshot, this is our new log file.
-            if ! grep -Fxq "$bn" "$TIER3_PRE_LOGS"; then
-                new_log="$candidate"
-                break
-            fi
-        done
-        [[ -z "$new_log" ]] && sleep 0.2
-    done
-    rm -f "$TIER3_PRE_LOGS"
-    TIER3_PRE_LOGS=""  # signal trap that we already cleaned this up
+    # --- scan the captured serve stream (1.17.3) -----------------------
+    # No file hunt: $TIER3_STDOUT already holds this serve process's
+    # stdout + `--print-logs` stderr. opencode 1.17.3 emits NO structured
+    # per-plugin "load" line (verified at INFO and DEBUG; PLAN Step 0), so
+    # tier 3 rests on two stream signals, each preserving the intent of a
+    # 1.14.28-era check:
+    #
+    #   (1) cost-tracker load canary  (positive tripwire; was the
+    #       per-plugin "loaded" check + count-guard). cost-tracker is the
+    #       ONLY in-scope plugin that announces itself on stdout
+    #       (`[cost-tracker] ...`), printed when its init runs. Its
+    #       presence proves opencode actually loaded + ran external
+    #       plugins for this directory instance; if opencode ever stops
+    #       loading external plugins, or moves the lazy-load trigger, the
+    #       marker vanishes -> RED. notify.ts and toggl-time.ts are SILENT
+    #       on success in 1.17.3 (no console output on load), so they have
+    #       no positive signal here; they are covered by tier 1
+    #       (parse/import health) + the error scan below (runtime init
+    #       errors). Documented deviation from PLAN Step 2, which assumed a
+    #       per-plugin load line that 1.17.3 does not emit.
+    #
+    #   (2) plugin-load error scan    (non-vacuous; the headline guard
+    #       against a false-green). A plugin whose init function throws is
+    #       logged by 1.17.3 as:
+    #         ... level=ERROR ... message="failed to load plugin" \
+    #           path=file://.../NAME.ts error="..."
 
-    if [[ -z "$new_log" ]]; then
-        print_row "fail" "no new log file in $log_dir"
-        TIER3_FAIL=1
-        [[ "$QUIET" == 1 ]] || echo
-        return 1
-    fi
-
-    # --- determine expected plugins ------------------------------------
-    # Mirror Tier 1's coverage set: cost-tracker + notify always;
-    # toggl-time only when the cross-repo symlink resolved.
-    local expected=(cost-tracker notify)
-    [[ -n "$TOGGL_TIME_DIR" ]] && expected+=(toggl-time)
-
-    # --- poll log for each expected plugin's load line -----------------
-    # Format (observed on opencode 1.14.28):
-    #   INFO  ... service=plugin path=file:///home/USER/.config/opencode/plugins/NAME.ts loading plugin
-    declare -A loaded=()
-    deadline=$((SECONDS + 5))
-    local plug all_loaded
-    while ((SECONDS < deadline)); do
-        all_loaded=1
-        for plug in "${expected[@]}"; do
-            [[ "${loaded[$plug]:-}" == 1 ]] && continue
-            if grep -qE "service=plugin path=file://.*/${plug}\\.ts loading plugin" "$new_log" 2>/dev/null; then
-                loaded[$plug]=1
-            else
-                all_loaded=0
-            fi
-        done
-        ((all_loaded == 1)) && break
+    # --- (1) cost-tracker load canary ----------------------------------
+    # Poll the stream: cost-tracker's marker is printed asynchronously,
+    # after its init fires a rate fetch against the just-started server.
+    local canary="" cdeadline=$((SECONDS + 8))
+    while ((SECONDS < cdeadline)); do
+        # Fixed-string match — the marker contains regex metachars ([]).
+        # Any `[cost-tracker] ...` line (loaded / DB warn / rate warn)
+        # proves the plugin's init ran; the error scan handles real
+        # load failures separately.
+        if grep -Fq '[cost-tracker]' "$TIER3_STDOUT" 2>/dev/null; then
+            canary=1
+            break
+        fi
         sleep 0.2
     done
 
     local plugin_fail=0
-    for plug in "${expected[@]}"; do
-        if [[ "${loaded[$plug]:-}" == 1 ]]; then
-            print_row "ok" "${plug}.ts loaded"
-        else
-            print_row "fail" "${plug}.ts NOT loaded"
-            plugin_fail=1
-        fi
-    done
-
-    # PLAN §Notes-and-risks "Tier 3 false-positives on log scan":
-    # opencode's log format is not a stable API. If a future opencode
-    # version changes the `service=plugin path=...` line format, the
-    # per-plugin regex above can silently pass when nothing actually
-    # loaded. Defend against that by asserting the *total* number of
-    # `loading plugin` lines for external paths is at least what we
-    # expect. (Internal plugins use `name=...` instead of `path=...`
-    # and are filtered out by requiring `path=file://`.)
-    local load_lines
-    # `grep | wc -l` returns 0 cleanly on no match, unlike grep -c
-    # which exits 1 (which would fight set -euo pipefail).
-    load_lines=$( { grep -E 'service=plugin path=file://.* loading plugin' "$new_log" 2>/dev/null || true; } | wc -l)
-    if (( load_lines < ${#expected[@]} )); then
-        print_row "fail" "expected >=${#expected[@]} 'loading plugin' lines, found ${load_lines}"
+    if [[ -n "$canary" ]]; then
+        print_row "ok" "cost-tracker canary" "load marker present"
+    else
+        print_row "fail" "cost-tracker canary" "no [cost-tracker] marker in serve stream"
         plugin_fail=1
     fi
+    # notify + toggl-time: no positive load signal in 1.17.3 (see above).
+    print_row "note" "notify, toggl-time" "no 1.17.3 load signal — see error scan + tier 1"
 
     if ((plugin_fail)); then
         TIER3_FAIL=1
     fi
 
-    # --- error scan ----------------------------------------------------
-    # Two patterns per PLAN §Step 5 §Assertions:
-    #   1. Any `^ERROR` line tagged service=plugin.
-    #   2. Any service=plugin line containing panic/exception/failed-to-load.
-    # Prefer ripgrep for speed/sanity; fall back to grep -E if absent.
+    # --- (2) plugin-load error scan ------------------------------------
+    # Patterns derived from a real 1.17.3 capture (PLAN Step 0 — do not
+    # guess), preserving the two-pattern intent of the 1.14.28 scan now
+    # that `service=plugin` is gone:
+    #   A. an ERROR line scoped to a plugin — the load-failure shape
+    #      (message="failed to load plugin"), or any ERROR carrying a
+    #      plugin path (path=file://.../plugins/...).
+    #   B. belt-and-suspenders: a plugin-path / load-failure line that
+    #      also carries panic/exception.
+    # CAVEAT (verified Step 0): module-eval / syntax / bad-import failures
+    # are SILENT in the serve stream — opencode only logs "failed to load
+    # plugin" when the plugin's exported function throws. Those silent
+    # modes are tier 1's job (`bun build --no-bundle`), not tier 3's;
+    # keeping both tiers is what closes that gap.
+    local err_a='level=ERROR.*(message="failed to load plugin"|path=file://[^ ]*/plugins/)'
+    local err_b='(path=file://[^ ]*/plugins/|failed to load plugin).*(panic|exception)'
+
     local grepper
     if command -v rg >/dev/null 2>&1; then
         grepper=rg
@@ -686,26 +657,26 @@ run_tier3() {
 
     local has_errors=0
     if [[ "$grepper" == "rg" ]]; then
-        if rg -q '^ERROR.*service=plugin' "$new_log" 2>/dev/null \
-           || rg -q 'service=plugin.*(panic|exception|failed to load)' "$new_log" 2>/dev/null; then
+        if rg -qe "$err_a" "$TIER3_STDOUT" 2>/dev/null \
+           || rg -qe "$err_b" "$TIER3_STDOUT" 2>/dev/null; then
             has_errors=1
         fi
     else
-        if grep -qE '^ERROR.*service=plugin' "$new_log" 2>/dev/null \
-           || grep -qE 'service=plugin.*(panic|exception|failed to load)' "$new_log" 2>/dev/null; then
+        if grep -qE "$err_a" "$TIER3_STDOUT" 2>/dev/null \
+           || grep -qE "$err_b" "$TIER3_STDOUT" 2>/dev/null; then
             has_errors=1
         fi
     fi
 
     if ((has_errors == 0)); then
-        print_row "ok" "no plugin errors in log"
+        print_row "ok" "no plugin load errors in serve stream"
     else
-        print_row "fail" "ERROR/panic lines found in plugin log"
+        print_row "fail" "plugin load errors in serve stream"
         if [[ "$QUIET" != 1 ]]; then
             if [[ "$grepper" == "rg" ]]; then
-                rg -n '^ERROR.*service=plugin|service=plugin.*(panic|exception|failed to load)' "$new_log" 2>/dev/null | sed 's/^/        /' || true
+                rg -ne "$err_a" -e "$err_b" "$TIER3_STDOUT" 2>/dev/null | sed 's/^/        /' || true
             else
-                grep -nE '^ERROR.*service=plugin|service=plugin.*(panic|exception|failed to load)' "$new_log" 2>/dev/null | sed 's/^/        /' || true
+                grep -nE "$err_a|$err_b" "$TIER3_STDOUT" 2>/dev/null | sed 's/^/        /' || true
             fi
         fi
         TIER3_FAIL=1
