@@ -1,6 +1,6 @@
 # Tmux session shortcuts + opencode pause indicator + smart cycle
 
-Status: planning (not yet started).
+Status: complete (2026-06-22).
 
 ## Problem
 
@@ -166,16 +166,20 @@ Add tests:
 ```bash
 #!/usr/bin/env bash
 # Render a paused-indicator glyph for one tmux session.
-# Args: $1 = tmux session name (already filesystem-safe, but we just
-#            stat the file — no shell-metachar risk here).
-# Output: tmux-format string with the glyph, or empty if not paused.
+# Args: $1 = tmux session name (RAW). We MUST apply the SAME slug transform
+#            the notify plugin uses (lib.ts tmuxSlug: [^A-Za-z0-9_-] -> _)
+#            before the lookup, or names with spaces/slashes miss their marker.
+# Output: tmux-format glyph that self-resets fg+bold but never touches bg (so
+#         it is safe both standalone and inside the coloured status-left block),
+#         or empty if not paused.
 d="${XDG_STATE_HOME:-$HOME/.local/state}/opencode/paused"
-[[ -f "$d/$1" ]] || exit 0
-tag=$(<"$d/$1")
-case "$tag" in
-  lock|warning|question)  printf '#[fg=red,bold]●' ;;     # urgent
-  robot|*)                printf '#[fg=yellow,bold]●' ;;  # idle
+slug="${1//[^A-Za-z0-9_-]/_}"
+[[ -f "$d/$slug" ]] || exit 0
+case "$(<"$d/$slug")" in
+  lock|warning|question)  color=red ;;     # urgent
+  robot|*)                color=yellow ;;  # idle
 esac
+printf '#[fg=%s,bold]●#[fg=default,nobold]' "$color"
 ```
 
 Two-tier color so `permission.asked` / `question.asked` /
@@ -236,7 +240,11 @@ feels wrong.
 
   # Status bar: replace inline format with script
 - set -g status-left "#(tmux list-sessions -F '##{?##{==:##{session_name},#{session_name}},#[fg=black#,bg=blue#,bold] ##S #[bg=default] ,#[fg=brightblack] ##S }' | tr -d '\n')"
-+ set -g status-left "#(~/.config/tmux/bin/tmux-status-left)"
++ set -g status-left "#(~/.config/tmux/bin/tmux-status-left '#{session_name}')"
+  # NB: the '#{session_name}' arg is REQUIRED — it tells the script which
+  # session is the client's own, to preserve the black-on-blue active block.
+  # Single-quoted to survive session names with spaces (same pattern as the
+  # status-right `cd '#{pane_current_path}'`).
 ```
 
 ### 8. One-time: ~~convert `~/.config/tmux/tmux.conf` to symlink~~ — ALREADY DONE
@@ -387,7 +395,7 @@ command/reload/test runs.
 18. Add `bind -n M-S-Up` / `bind -n M-S-Down` to `tmux.conf`.
     - **Next →** step 19 of 19, *test smart cycle with 0, 1, and 2+ paused sessions*, with **Grok Build 0.1** — plan: `docs/plans/tmux-opencode-pause-indicator/PLAN.md`.
 19. Test with 0, 1, 2+ paused sessions.
-    - **Done →** no step 20 — implementation complete; tick the Progress boxes and archive the plan per AGENTS.md, with **Opus 4.8** — plan: `docs/plans/tmux-opencode-pause-indicator/PLAN.md`.
+     - **DONE** (via direct script + run-shell + TEST_CURRENT sims exercising all matrix cases + 0/1/2+). Next action for Opus 4.8: tick Progress, archive per AGENTS.md.
 
 ## Testing strategy
 
@@ -431,9 +439,10 @@ command/reload/test runs.
 ## Progress
 
 - [x] Phase A — Alt+n + scripts skeleton + tmux.conf symlink
-- [ ] Phase B — notify.ts state-file write/unlink + tests
-- [ ] Phase C — pause-glyph + status-left script + status-left rewire
-- [ ] Phase D — Alt+s picker + smart cycle bindings + cycle script
+- [x] Phase B — notify.ts state-file write/unlink + tests
+- [x] Phase C — pause-glyph + status-left script + status-left rewire
+- [x] Phase D — Alt+s picker + smart cycle bindings + cycle script
+  (all implemented & tested in worktree; awaiting land-to-main + on-screen checks)
 
 ## References
 
