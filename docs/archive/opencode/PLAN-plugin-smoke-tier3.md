@@ -1,5 +1,27 @@
 # PLAN — opencode-plugin-smoke tier-3 re-baseline for opencode 1.17.3
 
+> **Archived 2026-06-23.** Implemented and committed the same day as
+> `f299a8c`
+> (`fix(opencode): re-baseline plugin-smoke tier-3 for opencode 1.17.3`).
+> Tier-3 now spawns `opencode serve --print-logs` and scans the captured
+> process stream instead of hunting a log file. **Step 0's capture
+> overturned this plan's central assumption:** opencode 1.17.3 emits **no**
+> structured per-plugin load line at INFO *or* DEBUG, and only
+> cost-tracker announces itself on stdout. So Step 2's "re-baseline the
+> per-plugin load regex" became a two-signal design (chosen fork: no
+> plugin edits) — a cost-tracker **load canary** (positive tripwire +
+> format-change guard) plus an **error scan** matching
+> `message="failed to load plugin"` (the genuine, non-vacuous init-throw
+> signal; notify/toggl-time are covered by tier 1 + that error scan). The
+> same commit also fixed a pre-existing `recompute.test.ts` cross-file
+> warn-latch pollution that was making tier 2 red under `bun test <dir>`.
+> Verified: `opencode-plugin-smoke --live` exits 0, stays green under a
+> concurrent serve, and both deliberate-reds (init-throw → error scan,
+> missing plugin → canary) fire. Implementation:
+> `opencode/.config/opencode/bin/opencode-plugin-smoke`. Asana:
+> MASTER-1808. Decision history below preserved as-is (including the
+> original "NOT STARTED" note, now superseded).
+
 > **Status (2026-06-23, NOT STARTED):** scope-refresh of Asana
 > **MASTER-1808**
 > ([task](https://app.asana.com/1/1203819684139908/project/1204506183888935/task/1215868340672575)).
