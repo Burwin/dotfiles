@@ -1,4 +1,15 @@
-# Tmux session shortcuts + opencode pause indicator + smart cycle
+# Tmux session shortcuts + opencode pause indicator + smart cycle — PLAN.md
+
+> **Archived** 2026-06-22. Shipped to `m` the same day via PR #7
+> (squash `cec50bc`). All four phases (A–D) landed: the opencode pause
+> indicator — `tmux-pause-glyph` + `tmux-status-left` (status-left
+> rewrite), `tmux-cycle-paused`, the `M-s` picker, and the
+> `M-S-Up`/`M-S-Down` smart-cycle bindings — on top of the Phase B
+> `notify.ts` marker writer (`f59e9fd`). Implementation lives in
+> `tmux/.config/tmux/bin/` and `tmux/.config/tmux/tmux.conf`; the notify
+> plugin under `opencode/.config/opencode/plugins/`. Verified live in the
+> main checkout. Asana: MASTER-1772. Decision history below is preserved
+> as-is for reference.
 
 Status: complete (2026-06-22).
 
