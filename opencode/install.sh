@@ -39,6 +39,7 @@ FILES=(
     opencode-cost
     skills
     commands
+    rules
 )
 
 mkdir -p "${DST_DIR}"

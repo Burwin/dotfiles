@@ -11,6 +11,13 @@ How to talk to the user and structure responses.
 - GitHub-flavored markdown is fine; CLI-rendered, so prefer simple structure
   (headings, bullets, fenced code blocks).
 
+## Brevity for outbound comms
+
+For emails, Asana/Zendesk/GitHub comments, PR descriptions, commit
+messages, and other outbound human-facing writing, follow the compression
+procedure in `@rules/brevity.md`. Does not apply to code explanations,
+plan docs, or review outputs the user requested in a specific format.
+
 ## Reasoning out loud
 
 - Surface assumptions briefly before acting on them when ambiguity exists. One
