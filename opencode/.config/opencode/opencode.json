@@ -5,7 +5,7 @@
   "permission": {
     "external_directory": {
       "~/.config/opencode/**": "allow",
-      "~/.config/opencode/secrets/**": "deny"
+      "~/.config/opencode/secrets/**": "ask"
     }
   },
   "provider": {
