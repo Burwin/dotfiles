@@ -60,7 +60,7 @@ import {
  * subsequent non-halting (dismiss) event removes it. This gives tmux a
  * filesystem signal for which sessions are waiting on the user, consumed by
  * the status-left / choose-tree indicator scripts (see
- * docs/plans/tmux-opencode-pause-indicator/PLAN.md). The marker is keyed by
+ * docs/archive/opencode/PLAN-tmux-pause-indicator.md). The marker is keyed by
  * tmux session name — so it's a silent no-op when opencode runs outside tmux
  * — and its content is the event `tag` (robot/lock/question/warning) so the
  * indicator can color idle vs urgent states differently. Every fs op is
