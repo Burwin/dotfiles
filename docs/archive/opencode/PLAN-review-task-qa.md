@@ -1,5 +1,16 @@
 # `/bam-review-task` interactive ending — Q&A, plan handoff, card refresh (MASTER-1848)
 
+> **Status:** shipped; archived 2026-06-23. Merged to `m` as
+> `feat(opencode): make /bam-review-task end with interactive Q&A` (PR #12,
+> squash `c8c533d`); nothing supersedes it. Shipped artifacts:
+> `opencode/.config/opencode/commands/bam-review-task.md` (the `agent: build`
+> body with §6 one-at-a-time Q&A, §7 `/bam-tdd-plan` handoff, §8 card refresh)
+> and the `bam-review-task interactive contract` block in
+> `opencode/.config/opencode/commands-validate/commands.test.ts`. Decision
+> history below is preserved as-is for reference.
+
+Status: shipped 2026-06-23 (merged to `m`, PR #12, squash `c8c533d`).
+
 Asana: MASTER-1848 — "/bam-review-task should end by asking me open questions
 one at a time"
 (https://app.asana.com/1/1203819684139908/project/1204506183888935/task/1215963460966978).
@@ -169,7 +180,7 @@ commit so the red→green history stays legible.
 ## Progress
 
 - [x] Phase A — interactive contract red-green-refactor (steps 1–9)
-- [~] Phase B — verify + deploy (steps 10–11)
+- [x] Phase B — verify + deploy (steps 10–11)
   - [x] Step 10 VERIFY — suite green (16/16); direct-execution smoke against
     MASTER-1848 passed (report → one-at-a-time Q&A → declined `/bam-tdd-plan`
     handoff → posted card comment; §8(b) description edit correctly suppressed,
@@ -180,11 +191,17 @@ commit so the red→green history stays legible.
     live re-smoke** (pull main, restart opencode, run `/bam-review-task
     MASTER-1848`) is required to fully close Step 10 — fold it into the tail of
     Step 11.
-  - [~] Step 11 DEPLOY — shipping Phase A as one squashed Conventional-Commits
-    commit; PR opened against `m`, `/bam-copilot-loop` run to "no new comments",
-    CI + Copilot confirmed clean, then merged. The post-merge live re-smoke
-    (pull `m`, restart opencode, run `/bam-review-task MASTER-1848` through the
-    refreshed symlink) closes the Step-10 gate in the same session.
+  - [x] Step 11 DEPLOY — shipped as PR #12, squash-merged to `m` as `c8c533d`
+    (one Conventional-Commits entry; four review-fix commits collapsed in).
+    `/bam-copilot-loop` ran five rounds to "no new comments" (every comment
+    fixed + replied "Fixed in `<sha>`"); the repo has no `.github/workflows/`,
+    so the 16/16 local suite was the merge gate. Post-merge: fast-forwarded the
+    main checkout to `c8c533d` and verified the live
+    `~/.config/opencode/commands` symlink now serves the `agent: build` body
+    (§6–§8 present) with the suite green there. The from-scratch
+    `/bam-review-task MASTER-1848` invocation (requires an opencode restart to
+    reload the command def) is the human's final manual confirmation. This plan
+    was then archived here.
 
 ## References
 
