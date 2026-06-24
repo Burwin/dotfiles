@@ -44,17 +44,31 @@ describe("bam-review-task interactive contract (MASTER-1848)", () => {
   // throw — matching the existence-checked reads in the blocks above. Each test
   // pins one new behavior on a token that was newly-absent before MASTER-1848
   // (so its RED was clean).
-  function readReviewTask(): { content: string; body: string } {
+  function readReviewTask(): {
+    content: string;
+    frontmatter: string;
+    body: string;
+  } {
     const filePath = join(commandsDir, "bam-review-task.md");
     expect(existsSync(filePath)).toBe(true);
     const content = readFileSync(filePath, "utf8");
-    return { content, body: stripFrontmatter(content).toLowerCase() };
+    // Capture the inner text of the leading --- … --- block so frontmatter
+    // assertions can't be satisfied by matching text in the body.
+    const fm = content.match(/^---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(\r?\n|$)/);
+    expect(fm).not.toBeNull();
+    return {
+      content,
+      frontmatter: fm![1],
+      body: stripFrontmatter(content).toLowerCase(),
+    };
   }
 
-  test("frontmatter declares agent: build (raw content)", () => {
-    const { content } = readReviewTask();
-    // RED token: agent: build (frontmatter) — was agent: plan
-    expect(/^agent:\s*build$/m.test(content)).toBe(true);
+  test("frontmatter declares agent: build", () => {
+    const { frontmatter } = readReviewTask();
+    // RED token: agent: build — was agent: plan. Pin it inside the frontmatter
+    // block specifically, so a stray "agent: build" in the body (e.g. a code
+    // fence) can't mask a frontmatter regression.
+    expect(/^agent:\s*build$/m.test(frontmatter)).toBe(true);
   });
 
   test("body drives one-at-a-time Q&A via the `question` tool", () => {
@@ -74,8 +88,14 @@ describe("bam-review-task interactive contract (MASTER-1848)", () => {
 
   test("body offers a confirmed card refresh — a plain-text comment plus a conditional description edit", () => {
     const { body } = readReviewTask();
-    // RED token: confirm (alongside comment + description)
-    expect(/confirm.*(comment|description)/.test(body)).toBe(true);
+    // §8 must offer BOTH writes, each confirm-gated: a plain-text comment AND a
+    // conditional description edit. Require all three tokens independently so
+    // dropping either write (or the confirm gate) fails the test — an
+    // alternation like /confirm.*(comment|description)/ would still pass with
+    // only one of the two writes present.
+    expect(/confirm/.test(body)).toBe(true);
+    expect(/comment/.test(body)).toBe(true);
+    expect(/description/.test(body)).toBe(true);
   });
 });
 
