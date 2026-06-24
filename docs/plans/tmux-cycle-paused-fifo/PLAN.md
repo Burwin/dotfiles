@@ -262,10 +262,18 @@ GREEN obvious.
 | 🛡S5 | only `solo` paused, `#S=solo` | Up | message "already on the only paused…", no switch | same |
 | 🛡S6 | only `solo` paused, `#S=home` | Up / Down | `solo` (both) | `solo` |
 | 🛡S7 | none paused, `#S=home` | Up | message "no opencode sessions waiting" | same |
-| ✅T | tie-break set `mike@:00, alpha2@:10, zulu@:10`, `#S=home` | Up ×3 from cold | `mike, alpha2, zulu` (alpha2 before zulu) | `alpha2, mike, zulu` |
+| ✅T | tie-break set `mike@:00, alpha2@:10, zulu@:10`, `#S=home` | Up ×3 from cold | `mike, alpha2, zulu` (alpha2 before zulu) | `alpha2, zulu, mike` |
 
 S5–S7 share the same RED/GREEN value on purpose: they guard that the existing
 0-paused / single-paused matrix rows are preserved while the ordering changes.
+
+> **T RED corrected in step 1.** The original sketch had T's RED as
+> `alpha2, mike, zulu` — that applied the *GREEN* step direction (`prev` = +1)
+> to the alphabetical list. The real current code maps `prev` to `idx-1`
+> (`tmux-cycle-paused:104`), so cold `alpha2` (idx 0 in `[alpha2, mike, zulu]`)
+> Up-steps to idx 2 (`zulu`), then idx 1 (`mike`) → `alpha2, zulu, mike`, which
+> the hermetic fixture produced. Expected GREEN for T is unaffected. See
+> `MANUAL-VERIFICATION.md` §"T RED correction".
 
 ## TDD implementation order (M = 5)
 
@@ -321,7 +329,7 @@ step authorizes its commit.
 
 ## Progress
 
-- [ ] 1 — RED: verification spec + recorded red
+- [x] 1 — RED: verification spec + recorded red (commit 8c481c2)
 - [ ] 2 — GREEN: mtime-ordered, direction-aware selection
 - [ ] 3 — REFACTOR: invariant comments + stale-path fix
 - [ ] 4 — Dogfood on live tmux (acceptance)
