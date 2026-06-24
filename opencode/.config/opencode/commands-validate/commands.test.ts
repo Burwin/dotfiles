@@ -38,6 +38,35 @@ describe("bam-review-task command", () => {
   });
 });
 
+describe("bam-review-task interactive contract (MASTER-1848)", () => {
+  // Read the command once; every assertion below inspects the same file. Each
+  // test pins one new behavior and hinges on a token that was newly-absent
+  // before MASTER-1848 (so its RED was clean).
+  const content = readFileSync(join(commandsDir, "bam-review-task.md"), "utf8");
+  const body = stripFrontmatter(content).toLowerCase();
+
+  test("frontmatter declares agent: build (raw content)", () => {
+    // RED token: agent: build (frontmatter) — was agent: plan
+    expect(/^agent:\s*build$/m.test(content)).toBe(true);
+  });
+
+  test("body drives one-at-a-time Q&A via the question tool", () => {
+    // RED token: one at a time (plus the question tool)
+    expect(/one at a time/.test(body)).toBe(true);
+    expect(/question/.test(body)).toBe(true);
+  });
+
+  test("body offers a /bam-tdd-plan handoff (token bam-tdd-plan), not an inline plan", () => {
+    // RED token: bam-tdd-plan (hand off, don't author inline)
+    expect(/bam-tdd-plan/.test(body)).toBe(true);
+  });
+
+  test("body offers a confirmed card refresh — a plain-text comment plus a conditional description edit", () => {
+    // RED token: confirm (alongside comment + description)
+    expect(/confirm.*(comment|description)/.test(body)).toBe(true);
+  });
+});
+
 describe("bam-tdd-plan command", () => {
   test("exists, passes validateCommand, and body references separate test + trigger + Step N of M + model", () => {
     const fileName = "bam-tdd-plan.md";
