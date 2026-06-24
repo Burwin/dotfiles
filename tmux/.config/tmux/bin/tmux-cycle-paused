@@ -50,27 +50,36 @@ case "$direction" in
     ;;
 esac
 
-# Live, paused sessions in tmux's listing order. For each live session apply the
-# SAME slug transform the notify plugin uses, then keep it only if its marker
-# file exists. (Bash bracket replacement collapses every disallowed byte to '_';
-# '-' is last in the class so it is literal, not a range.) A missing marker dir
-# just means no match for every session -> the empty-list path below.
-paused=()
+# Live, paused sessions, each tagged with its marker mtime (epoch seconds) as
+# the sort key. Same forward-slug + marker-exists filter as before. A `stat`
+# race — the marker vanishing between the test and the stat — drops the entry,
+# same as an orphan. A missing marker dir just means no match for every session
+# -> the empty-list path below.
+entries=()
 while IFS= read -r name; do
   [[ -n $name ]] || continue
   slug="${name//[^A-Za-z0-9_-]/_}"
-  [[ -f "$dir/$slug" ]] && paused+=("$name")
+  marker="$dir/$slug"
+  [[ -f $marker ]] || continue
+  mtime=$(stat -c '%Y' "$marker" 2>/dev/null) || continue
+  entries+=("$mtime"$'\t'"$name")
 done < <(tmux list-sessions -F '#{session_name}' 2>/dev/null)
 
-count=${#paused[@]}
-
-if (( count == 0 )); then
+if (( ${#entries[@]} == 0 )); then
   # 0-paused: visible status-line message only. The PLAN deliberately skips the
   # terminal bell here — it is filtered too inconsistently across emulators to
   # rely on. Do not switch.
   tmux display-message "no opencode sessions waiting"
   exit 0
 fi
+
+# Sort by mtime ascending (longest-paused first), tie-break alphabetical by raw
+# name under LC_ALL=C for determinism, then drop the mtime key. `-t<TAB>` keeps
+# names with spaces intact as a single field; `cut -f2-` rebuilds them verbatim.
+mapfile -t paused < <(
+  printf '%s\n' "${entries[@]}" | LC_ALL=C sort -t$'\t' -k1,1n -k2,2 | cut -f2-
+)
+count=${#paused[@]}
 
 # The calling client's current session. Run from a key binding via run-shell,
 # `display-message -p` resolves against that client, so this is the session the
@@ -87,9 +96,15 @@ for i in "${!paused[@]}"; do
 done
 
 if (( idx < 0 )); then
-  # Current session is not itself paused -> enter the ring at its first member.
-  # Covers both "1 paused, current is not it" and "2+ paused, current not in".
-  target=${paused[0]}
+  # Current session is not itself paused -> cold-enter the queue at the end that
+  # matches the pressed direction: Up (prev) at the longest-paused (index 0),
+  # Down (next) at the shortest-paused (last index). Covers both "1 paused,
+  # current is not it" and "2+ paused, current not in".
+  if [[ $direction == prev ]]; then
+    target=${paused[0]}            # Up   -> longest-paused
+  else
+    target=${paused[count - 1]}    # Down -> shortest-paused
+  fi
 elif (( count == 1 )); then
   # The only paused session is the one we are already on. Nothing to switch to;
   # surface a message instead of a silent no-op (an unexplained dead keypress
@@ -97,8 +112,9 @@ elif (( count == 1 )); then
   tmux display-message "already on the only paused opencode session"
   exit 0
 else
-  # In the ring with neighbours -> step one over, wrapping at both ends.
-  if [[ $direction == next ]]; then
+  # In the ring with neighbours -> step one over, wrapping at both ends. Up
+  # (prev) walks toward NEWER (longest -> shortest), Down (next) toward OLDER.
+  if [[ $direction == prev ]]; then
     next_idx=$(( (idx + 1) % count ))
   else
     next_idx=$(( (idx - 1 + count) % count ))

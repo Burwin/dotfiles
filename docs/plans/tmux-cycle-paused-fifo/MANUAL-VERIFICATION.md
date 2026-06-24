@@ -7,7 +7,7 @@ no automated bash harness (plan decision Q4); instead a hermetic `tmux -L
 cyctest` fixture with crafted marker mtimes drives a **red → green** record.
 Step 1 (RED) fills the **Observed RED** column against the *current* script;
 step 2 (GREEN) re-runs the same scenarios against the patched script and fills
-the **Expected GREEN** column. ✅ rows are differentiators (must flip);
+the **Observed GREEN** column. ✅ rows are differentiators (must flip);
 🛡 rows are regression guards (must not change).
 
 ## TL;DR
@@ -122,16 +122,16 @@ fix). **Expected GREEN** is the post-fix target from the plan's Design. Step 2
 fills the **Observed GREEN** column; a row passes when Observed GREEN equals
 Expected GREEN (and, for 🛡 rows, also equals Observed RED).
 
-| ID | Fixture (marker mtimes) | Start `#S` | Key | Expected GREEN | Observed RED (current) |
-| --- | --- | --- | --- | --- | --- |
-| ✅S1 | delta:00 bravo:10 alpha:20 charlie:30 | `home` | Up ×1 | `delta` | `alpha` |
-| ✅S2 | (same as S1) | `home` | Down ×1 | `charlie` | `alpha` |
-| ✅S3 | (same as S1) | `delta` | Up ×4 | `bravo, alpha, charlie, delta` | `charlie, bravo, alpha, delta` |
-| ✅S4 | (same as S1) | `charlie` | Down ×4 | `alpha, bravo, delta, charlie` | `delta, alpha, bravo, charlie` |
-| 🛡S5 | only `solo`:00 | `solo` | Up | message "already on the only paused opencode session", no switch | same — no switch (`rc=0`) |
-| 🛡S6 | only `solo`:00 | `home` | Up / Down | `solo` (both) | `solo` (both) |
-| 🛡S7 | none paused | `home` | Up | message "no opencode sessions waiting" | same — no switch (`rc=0`) |
-| ✅T | mike:00 alpha2:10 zulu:10 | `home` | Up ×3 cold | `mike, alpha2, zulu` | `alpha2, zulu, mike` |
+| ID | Fixture (marker mtimes) | Start `#S` | Key | Expected GREEN | Observed GREEN | Observed RED (current) |
+| --- | --- | --- | --- | --- | --- | --- |
+| ✅S1 | delta:00 bravo:10 alpha:20 charlie:30 | `home` | Up ×1 | `delta` | `delta` | `alpha` |
+| ✅S2 | (same as S1) | `home` | Down ×1 | `charlie` | `charlie` | `alpha` |
+| ✅S3 | (same as S1) | `delta` | Up ×4 | `bravo, alpha, charlie, delta` | `bravo, alpha, charlie, delta` | `charlie, bravo, alpha, delta` |
+| ✅S4 | (same as S1) | `charlie` | Down ×4 | `alpha, bravo, delta, charlie` | `alpha, bravo, delta, charlie` | `delta, alpha, bravo, charlie` |
+| 🛡S5 | only `solo`:00 | `solo` | Up | message "already on the only paused opencode session", no switch | no switch (`rc=0`), session unchanged | same — no switch (`rc=0`) |
+| 🛡S6 | only `solo`:00 | `home` | Up / Down | `solo` (both) | `solo` (both) | `solo` (both) |
+| 🛡S7 | none paused | `home` | Up | message "no opencode sessions waiting" | no switch (`rc=0`), session unchanged | same — no switch (`rc=0`) |
+| ✅T | mike:00 alpha2:10 zulu:10 | `home` | Up ×3 cold | `mike, alpha2, zulu` | `mike, alpha2, zulu` | `alpha2, zulu, mike` |
 
 **Pass criteria**
 
@@ -143,6 +143,13 @@ Expected GREEN (and, for 🛡 rows, also equals Observed RED).
   (the 0-paused / single-paused matrix rows are preserved while ordering
   changes). S5/S7 surface a `tmux display-message` and do **not** switch;
   confirm via "client session unchanged + `rc=0`".
+
+**Step-2 result (GREEN, recorded):** all eight rows pass. ✅S1–S4 + ✅T —
+Observed GREEN equals Expected GREEN and differs from Observed RED (the
+alphabetical-order behaviour is gone). 🛡S5–S7 — Observed GREEN equals
+Observed RED: S5/S7 no switch with `rc=0` and the client session unchanged;
+S6 lands on `solo` for both directions. Produced headlessly via the
+pty+`TMUX` runner (see [Implementation notes / Automated runner](#automated-runner)).
 
 ### Ordering & direction model
 
@@ -198,9 +205,10 @@ user's own client.
 
 ### Automated runner
 
-For headless reproduction (how the step-1 RED column was actually produced),
-attach a pty client in the background and route the script's bare `tmux` calls
-to `cyctest` via the `TMUX` env var, whose format is `<socket>,<server-pid>`:
+For headless reproduction (how both the step-1 RED and step-2 GREEN columns
+were produced), attach a pty client in the background and route the script's
+bare `tmux` calls to `cyctest` via the `TMUX` env var, whose format is
+`<socket>,<server-pid>`:
 
 ```bash
 SOCK=/tmp/tmux-1000/cyctest
