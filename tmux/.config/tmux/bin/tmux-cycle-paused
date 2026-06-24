@@ -3,7 +3,7 @@
 # paused (the Alt+Shift+Up / Alt+Shift+Down bindings).
 #
 # Part of the opencode pause-indicator
-# (docs/plans/tmux-opencode-pause-indicator/PLAN.md). The opencode notify
+# (docs/archive/opencode/PLAN-tmux-pause-indicator.md). The opencode notify
 # plugin drops a marker file
 #   $XDG_STATE_HOME/opencode/paused/<slug>
 # for every tmux session whose opencode has halted for input. <slug> is the
@@ -28,16 +28,27 @@
 #      live sessions, stat the marker), so the set we cycle through is exactly
 #      the set the user sees marked in the status bar.
 #
-# Ordering is tmux's own `list-sessions` order (alphabetical by name), which is
-# the PLAN's chosen v1 sort AND matches the left-to-right order of the
-# status-left glyphs — so cycling visits sessions in the order they appear.
+# ORDERING — pause age, oldest first (MASTER-1858). The cycle list is sorted by
+# each marker file's mtime ascending (mtime == the moment opencode halted, per
+# notify.ts). Index 0 is the session PAUSED LONGEST, the last index the
+# shortest; same-second mtimes tie-break alphabetically (LC_ALL=C). This
+# DELIBERATELY DIVERGES from the status-left glyph order, which stays
+# alphabetical (tmux list-sessions order): the glyphs are a glanceable map, the
+# cycle is a FIFO service queue.
 #
-# Behaviour matrix (from the PLAN):
+# DIRECTION (note the inversion vs. a naive array walk):
+#   Up   (prev): cold-enter the LONGEST-paused, then each press steps toward
+#                NEWER, wrapping newest -> oldest.
+#   Down (next): mirror — cold-enter the SHORTEST-paused, then each press steps
+#                toward OLDER, wrapping oldest -> newest.
+#
+# Behaviour matrix:
 #   0 paused                    -> status-line message, no switch
 #   1 paused, current is it     -> message, stay (no switch)
 #   1 paused, current is not it -> switch to it
 #   2+ paused, current in list  -> step to neighbour, wrapping around the ends
-#   2+ paused, current not in   -> jump to the first in the list
+#   2+ paused, current not in   -> jump to the queue end for the pressed
+#                                  direction (Up -> longest, Down -> shortest)
 
 dir="${XDG_STATE_HOME:-$HOME/.local/state}/opencode/paused"
 
