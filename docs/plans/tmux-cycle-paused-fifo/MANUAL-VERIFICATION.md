@@ -34,7 +34,7 @@ patch took.
 In a shell (this becomes your *driver* shell):
 
 ```bash
-TMPSTATE=$(mktemp -d -p /tmp/opencode); P="$TMPSTATE/opencode/paused"; mkdir -p "$P"
+TMPSTATE=$(mktemp -d); P="$TMPSTATE/opencode/paused"; mkdir -p "$P"
 for s in delta bravo alpha charlie; do printf robot > "$P/$s"; done
 touch -d '2026-01-01 10:00:00' "$P/delta"     # oldest  / longest-paused
 touch -d '2026-01-01 10:00:10' "$P/bravo"
@@ -91,7 +91,7 @@ T needs a fresh marker set — `mike@:00`, `alpha2@:10`, `zulu@:10` (two ties at
 `:10`), plus an unpaused `home`:
 
 ```bash
-TMPSTATE2=$(mktemp -d -p /tmp/opencode); P2="$TMPSTATE2/opencode/paused"; mkdir -p "$P2"
+TMPSTATE2=$(mktemp -d); P2="$TMPSTATE2/opencode/paused"; mkdir -p "$P2"
 printf robot > "$P2/mike";   touch -d '2026-01-01 10:00:00' "$P2/mike"
 printf robot > "$P2/alpha2"; touch -d '2026-01-01 10:00:10' "$P2/alpha2"
 printf robot > "$P2/zulu";   touch -d '2026-01-01 10:00:10' "$P2/zulu"
@@ -211,10 +211,10 @@ bare `tmux` calls to `cyctest` via the `TMUX` env var, whose format is
 `<socket>,<server-pid>`:
 
 ```bash
-SOCK=/tmp/tmux-1000/cyctest
+SOCK=/tmp/tmux-$UID/cyctest
 PID=$(tmux -L cyctest display-message -p '#{pid}')
 # keep a client alive on a pty (no hand-attached terminal needed):
-nohup setsid script -qfc "tmux -L cyctest attach -t home" /tmp/opencode/cyctest_pty.log >/dev/null 2>&1 &
+nohup setsid script -qfc "tmux -L cyctest attach -t home" /tmp/cyctest_pty.log >/dev/null 2>&1 &
 # one press:
 TMUX="$SOCK,$PID" XDG_STATE_HOME="$TMPSTATE" bash "$SCRIPT" prev
 tmux -L cyctest list-clients -F '#{client_session}'   # read landing

@@ -1,7 +1,7 @@
 # tmux-cycle-paused — FIFO (oldest-paused first), not alphabetical
 
 **Asana:** MASTER-1858 (GID `1215984506081651`) — Project MASTER → IN PROGRESS
-**Branch:** `MASTER-1858` (clean, no commits yet)
+**Branch:** `MASTER-1858`
 
 ## TL;DR
 
