@@ -88,14 +88,15 @@ describe("bam-review-task interactive contract (MASTER-1848)", () => {
 
   test("body offers a confirmed card refresh — a plain-text comment plus a conditional description edit", () => {
     const { body } = readReviewTask();
-    // §8 must offer BOTH writes, each confirm-gated: a plain-text comment AND a
-    // conditional description edit. Require all three tokens independently so
-    // dropping either write (or the confirm gate) fails the test — an
-    // alternation like /confirm.*(comment|description)/ would still pass with
-    // only one of the two writes present.
+    // §8 must offer BOTH writes, each confirm-gated. Pin them via the
+    // §8-specific tool tokens — asana_add_comment for the comment,
+    // asana_update_tasks for the description edit — rather than the bare words
+    // "comment"/"description", which also occur in §4 ("last-comment dates",
+    // "the description") and so wouldn't actually pin the §8 offers. Dropping
+    // either write (or the confirm gate) now fails the test.
     expect(/confirm/.test(body)).toBe(true);
-    expect(/comment/.test(body)).toBe(true);
-    expect(/description/.test(body)).toBe(true);
+    expect(/asana_add_comment/.test(body)).toBe(true);
+    expect(/asana_update_tasks/.test(body)).toBe(true);
   });
 });
 
