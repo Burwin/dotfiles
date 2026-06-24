@@ -67,7 +67,11 @@ tmux -L cyctest list-clients -F '#{client_session}'
 ### 3. Run a scenario
 
 Each press = one invocation. To start a scenario, move the client to the start
-session from the driver shell, then fire the script:
+session, then fire the script. The explicit `-L cyctest` lines below run from
+any shell; the bare `tmux-cycle-paused` line must run where `$TMUX` points at
+the cyctest socket — the attached client terminal from step 2, or with `TMUX`
+exported as in the [automated runner](#automated-runner) (see Socket routing
+below):
 
 ```bash
 tmux -L cyctest switch-client -t home       # set start #S

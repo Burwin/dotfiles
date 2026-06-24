@@ -67,10 +67,9 @@ together.
 
 ### Authoritative end-state (`tmux/.config/tmux/bin/tmux-cycle-paused`)
 
-Changed regions vs. current: the candidate-build loop (`:58-63`), the
-zero-guard/sort/count block (`:65-73`), the cold-entry branch (`:89-92`), and
-the step arithmetic (`:101-105`). The header/behavior-matrix comments
-(`:19-40`) land in step 3, not step 2.
+Changed regions vs. the pre-fix script: the candidate-build loop, the
+zero-guard/sort/count block, the cold-entry branch, and the step arithmetic.
+The header/behavior-matrix comments land in step 3, not step 2.
 
 ```bash
 #!/usr/bin/env bash
@@ -293,7 +292,7 @@ step authorizes its commit.
 | **B — implement** | | | |
 | 2 | GREEN | Apply the Design end-state to `tmux-cycle-paused` (mtime-tagged build → zero-guard → `sort`/`mapfile` → direction-aware cold entry → mirrored stepping). Leave header/matrix comments for step 3. Re-run S1–S7 + T; fill the GREEN column = all match Expected. Commit `fix(tmux): cycle paused sessions oldest-paused first (FIFO)`. | GLM 5.2 |
 | **C — document** | | | |
-| 3 | REFACTOR | Rewrite the header **ORDERING/DIRECTION** invariant + behavior-matrix comment (replace the alphabetical paragraph at `:31-40`); fix the stale `docs/plans/tmux-opencode-pause-indicator/PLAN.md` provenance path → `docs/archive/opencode/PLAN-tmux-pause-indicator.md`; optional one-line clarify on `tmux.conf:64-66`. No behavior change; re-smoke S1–S3. Commit `docs(tmux): document mtime cycle-order invariant`. | GLM 5.2 |
+| 3 | REFACTOR | Rewrite the header **ORDERING/DIRECTION** invariant + behavior-matrix comment (replace the alphabetical paragraph in the header); fix the stale `docs/plans/tmux-opencode-pause-indicator/PLAN.md` provenance path → `docs/archive/opencode/PLAN-tmux-pause-indicator.md`; optional one-line clarify on `tmux.conf:64-66`. No behavior change; re-smoke S1–S3. Commit `docs(tmux): document mtime cycle-order invariant`. | GLM 5.2 |
 | **D — ship** | | | |
 | 4 | INTEGRATION | Dogfood on the **real** tmux server: `touch -d` a couple live markers to known mtimes, press `Shift+Alt+Up`/`Down`, confirm longest-first cold entry + walk + Down mirror live. If red, loop back to step 2. | Opus 4.8 |
 | 5 | INTEGRATION | Move Asana **MASTER-1858 → REVIEW**, post a plain-text comment summarizing the change + commit SHA(s), tick this plan's Progress. (Open a PR only if asked.) | GLM 5.2 |
@@ -341,8 +340,8 @@ step authorizes its commit.
 
 ## References
 
-- `tmux/.config/tmux/bin/tmux-cycle-paused` — the file to change (build
-  `:58-63`, select `:89-107`, invariant `:31-33`).
+- `tmux/.config/tmux/bin/tmux-cycle-paused` — the file to change (build,
+  select, and invariant blocks).
 - `tmux/.config/tmux/tmux.conf:64-66` — `M-S-Up`→`prev`, `M-S-Down`→`next`.
 - `tmux/.config/tmux/bin/tmux-status-left`, `tmux-pause-glyph` — siblings;
   glyph order stays alphabetical.
