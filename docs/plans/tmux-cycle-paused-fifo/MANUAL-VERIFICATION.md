@@ -155,10 +155,10 @@ pty+`TMUX` runner (see [Implementation notes / Automated runner](#automated-runn
 
 Pinned by plan decisions Q1, Q2, Q5, Q6; see plan §Design for full rationale.
 
-- **RED (current):** `paused[]` is tmux `list-sessions` order (alphabetical).
+- **RED (pre-fix):** `paused[]` is tmux `list-sessions` order (alphabetical).
   Cold entry always `paused[0]`. `prev` (Up) steps `idx-1`; `next` (Down)
-  steps `idx+1`. Source: `tmux-cycle-paused:58-63` (build), `:89-92` (cold),
-  `:101-105` (step).
+  steps `idx+1`. Source: the build, cold-entry, and step blocks of
+  `tmux-cycle-paused` as it stood before this change.
 - **GREEN (target):** `paused[]` sorted by marker mtime **ascending**
   (oldest/longest-paused first), tie-break alphabetical under `LC_ALL=C`.
   `paused[0]` = longest-paused, `paused[count-1]` = shortest. Cold entry is
@@ -179,7 +179,7 @@ tmux -L cyctest list-clients -F '#{client_session}'
 
 For S5/S7, "no switch" = the client session is unchanged after the call and the
 script exits `0`; the message text is deterministic from the source
-(`tmux-cycle-paused:71` for S7, `:97` for S5).
+(the two `display-message` branches in `tmux-cycle-paused`).
 
 ---
 
@@ -192,13 +192,13 @@ separate from the default server you may be running in. The fixture never
 touches real opencode markers because `XDG_STATE_HOME` is redirected to the
 temp dir. The script resolves its marker dir via
 `dir="${XDG_STATE_HOME:-$HOME/.local/state}/opencode/paused"`
-(`tmux-cycle-paused:42`), so exporting `XDG_STATE_HOME` is sufficient.
+(in `tmux-cycle-paused`), so exporting `XDG_STATE_HOME` is sufficient.
 
 ### Attached-client requirement
 
 `switch-client` errors on a fully-detached server. The script also reads the
 current session with `tmux display-message -p '#S'`
-(`tmux-cycle-paused:78`), which targets the calling client. So a live client
+(in `tmux-cycle-paused`), which targets the calling client. So a live client
 must be attached to `cyctest` for the whole run — that client is both the
 observer and the driven target, exactly as the real key binding drives the
 user's own client.
@@ -228,7 +228,7 @@ bash 5, GNU coreutils.
 ### Slug transform
 
 The script maps a live session name to its marker via
-`slug="${name//[^A-Za-z0-9_-]/_}"` (`tmux-cycle-paused:61`), mirroring
+`slug="${name//[^A-Za-z0-9_-]/_}"` (in `tmux-cycle-paused`), mirroring
 `tmuxSlug()` in `opencode/.config/opencode/plugins/notify/lib.ts`. All fixture
 session names (`alpha`, `bravo`, `charlie`, `delta`, `home`, `solo`, `mike`,
 `alpha2`, `zulu`) are already slug-safe, so marker filenames equal session
@@ -246,8 +246,8 @@ pins (`alpha2` before `zulu` at `:10`).
 
 The plan's scenario table predicted T's RED as `alpha2, mike, zulu`. That
 prediction was **wrong**: it applied the GREEN step direction (`prev` = +1,
-toward newer) to the alphabetical list. The real current code maps `prev` to
-`idx-1` (`tmux-cycle-paused:104`), so from the cold entry `alpha2` (index 0 in
+toward newer) to the alphabetical list. The pre-fix code mapped `prev` to
+`idx-1`, so from the cold entry `alpha2` (index 0 in
 `[alpha2, mike, zulu]`) Up steps to index 2 (`zulu`), then index 1 (`mike`) —
 i.e. `alpha2, zulu, mike`, which is what the fixture produced. The plan's
 T-row RED cell has been corrected to match; **Expected GREEN for T
@@ -258,8 +258,8 @@ exists to catch — empirically pinning current behaviour before changing it.
 ### Why S5–S7 are guards
 
 S5 (single paused, current is it), S6 (single paused, current is not it), and
-S7 (zero paused) exercise the `count == 1` and `count == 0` branches
-(`tmux-cycle-paused:67-73,93-98`) that the ordering change does not touch.
+S7 (zero paused) exercise the `count == 1` and `count == 0` branches of
+`tmux-cycle-paused` that the ordering change does not touch.
 Their RED and GREEN values are identical by design; they exist to prove the
 matrix's non-ordering rows survive the sort-key/cold-entry/step inversion.
 
@@ -279,8 +279,8 @@ matrix's non-ordering rows survive the sort-key/cold-entry/step inversion.
 
 - `docs/plans/tmux-cycle-paused-fifo/PLAN.md` — the plan (Design, scenario
   table, decisions Q1–Q6, TDD order).
-- `tmux/.config/tmux/bin/tmux-cycle-paused` — the file under change (build
-  `:58-63`, cold entry `:89-92`, step `:101-105`, messages `:71,97`).
+- `tmux/.config/tmux/bin/tmux-cycle-paused` — the file under change (build,
+  cold-entry, step, and message blocks).
 - `tmux/.config/tmux/tmux.conf:64-66` — `M-S-Up`→`prev`, `M-S-Down`→`next`.
 - `opencode/.config/opencode/plugins/notify.ts:158,193,213` — marker
   create/unlink/write (mtime source); unchanged.

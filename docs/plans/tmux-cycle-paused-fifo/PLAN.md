@@ -136,11 +136,12 @@ case "$direction" in
     ;;
 esac
 
-# Live, paused sessions, each tagged with its marker mtime (epoch seconds) as
-# the sort key. Same forward-slug + marker-exists filter as before. A `stat`
-# race — the marker vanishing between the test and the stat — drops the entry,
-# same as an orphan. A missing marker dir just means no match for every session
-# -> the empty-list path below.
+# Live, paused sessions, each tagged with its marker mtime (epoch seconds)
+# zero-padded to a fixed 11-digit width, so a plain lexicographic sort orders by
+# pause age without trusting an in-band field separator. Same forward-slug +
+# marker-exists filter as before. A `stat` race — the marker vanishing between
+# the test and the stat — drops the entry, same as an orphan. A missing marker
+# dir just means no match for every session -> the empty-list path below.
 entries=()
 while IFS= read -r name; do
   [[ -n $name ]] || continue
@@ -148,7 +149,8 @@ while IFS= read -r name; do
   marker="$dir/$slug"
   [[ -f $marker ]] || continue
   mtime=$(stat -c '%Y' "$marker" 2>/dev/null) || continue
-  entries+=("$mtime"$'\t'"$name")
+  printf -v key '%011d' "$mtime"
+  entries+=("$key"$'\t'"$name")
 done < <(tmux list-sessions -F '#{session_name}' 2>/dev/null)
 
 if (( ${#entries[@]} == 0 )); then
@@ -159,11 +161,13 @@ if (( ${#entries[@]} == 0 )); then
   exit 0
 fi
 
-# Sort by mtime ascending (longest-paused first), tie-break alphabetical by raw
-# name under LC_ALL=C for determinism, then drop the mtime key. `-t<TAB>` keeps
-# names with spaces intact as a single field; `cut -f2-` rebuilds them verbatim.
+# Sort by the fixed-width mtime key ascending (longest-paused first); equal keys
+# tie-break alphabetically on the raw name — both fall out of one LC_ALL=C
+# lexicographic sort because the key is zero-padded to constant width. Strip the
+# 12-char prefix (11-digit key + TAB) by CHARACTER POSITION (`cut -c`), never by
+# field: a session name may itself contain a TAB, which `cut -f` would corrupt.
 mapfile -t paused < <(
-  printf '%s\n' "${entries[@]}" | LC_ALL=C sort -t$'\t' -k1,1n -k2,2 | cut -f2-
+  printf '%s\n' "${entries[@]}" | LC_ALL=C sort | LC_ALL=C cut -c13-
 )
 count=${#paused[@]}
 
@@ -269,8 +273,8 @@ S5–S7 share the same RED/GREEN value on purpose: they guard that the existing
 
 > **T RED corrected in step 1.** The original sketch had T's RED as
 > `alpha2, mike, zulu` — that applied the *GREEN* step direction (`prev` = +1)
-> to the alphabetical list. The real current code maps `prev` to `idx-1`
-> (`tmux-cycle-paused:104`), so cold `alpha2` (idx 0 in `[alpha2, mike, zulu]`)
+> to the alphabetical list. The pre-fix code mapped `prev` to `idx-1`,
+> so cold `alpha2` (idx 0 in `[alpha2, mike, zulu]`)
 > Up-steps to idx 2 (`zulu`), then idx 1 (`mike`) → `alpha2, zulu, mike`, which
 > the hermetic fixture produced. Expected GREEN for T is unaffected. See
 > `MANUAL-VERIFICATION.md` §"T RED correction".
