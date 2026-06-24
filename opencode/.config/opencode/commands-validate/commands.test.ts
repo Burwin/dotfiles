@@ -39,29 +39,41 @@ describe("bam-review-task command", () => {
 });
 
 describe("bam-review-task interactive contract (MASTER-1848)", () => {
-  // Read the command once; every assertion below inspects the same file. Each
-  // test pins one new behavior and hinges on a token that was newly-absent
-  // before MASTER-1848 (so its RED was clean).
-  const content = readFileSync(join(commandsDir, "bam-review-task.md"), "utf8");
-  const body = stripFrontmatter(content).toLowerCase();
+  // Load the command inside each test (never at describe/module-init) so a
+  // missing file surfaces as a normal assertion failure instead of a load-time
+  // throw — matching the existence-checked reads in the blocks above. Each test
+  // pins one new behavior on a token that was newly-absent before MASTER-1848
+  // (so its RED was clean).
+  function readReviewTask(): { content: string; body: string } {
+    const filePath = join(commandsDir, "bam-review-task.md");
+    expect(existsSync(filePath)).toBe(true);
+    const content = readFileSync(filePath, "utf8");
+    return { content, body: stripFrontmatter(content).toLowerCase() };
+  }
 
   test("frontmatter declares agent: build (raw content)", () => {
+    const { content } = readReviewTask();
     // RED token: agent: build (frontmatter) — was agent: plan
     expect(/^agent:\s*build$/m.test(content)).toBe(true);
   });
 
-  test("body drives one-at-a-time Q&A via the question tool", () => {
-    // RED token: one at a time (plus the question tool)
+  test("body drives one-at-a-time Q&A via the `question` tool", () => {
+    const { body } = readReviewTask();
+    // RED tokens: "one at a time" + the literal `question` tool phrase. A plain
+    // /question/ would also match "questions" in "open questions", so it
+    // wouldn't actually pin use of the backticked tool.
     expect(/one at a time/.test(body)).toBe(true);
-    expect(/question/.test(body)).toBe(true);
+    expect(/`question` tool/.test(body)).toBe(true);
   });
 
   test("body offers a /bam-tdd-plan handoff (token bam-tdd-plan), not an inline plan", () => {
+    const { body } = readReviewTask();
     // RED token: bam-tdd-plan (hand off, don't author inline)
     expect(/bam-tdd-plan/.test(body)).toBe(true);
   });
 
   test("body offers a confirmed card refresh — a plain-text comment plus a conditional description edit", () => {
+    const { body } = readReviewTask();
     // RED token: confirm (alongside comment + description)
     expect(/confirm.*(comment|description)/.test(body)).toBe(true);
   });

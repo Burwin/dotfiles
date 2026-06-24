@@ -1,5 +1,5 @@
 ---
-description: Review an Asana task before starting — resolve it, summarize the ask, surface clarifications/unblockers, and flag whether it has gone stale.
+description: Review an Asana task before starting — resolve it, summarize the ask, surface clarifications/unblockers, and flag whether it has gone stale; then walk the open questions one at a time and offer a /bam-tdd-plan handoff plus an Asana card refresh.
 agent: build
 ---
 
