@@ -332,8 +332,8 @@ step authorizes its commit.
 - [x] 1 — RED: verification spec + recorded red (commit 95dbd01)
 - [x] 2 — GREEN: mtime-ordered, direction-aware selection (commit da45dce)
 - [x] 3 — REFACTOR: invariant comments + stale-path fix (commit 2f36251)
-- [ ] 4 — Dogfood on live tmux (acceptance)
-- [ ] 5 — Asana → REVIEW + bookkeeping
+- [x] 4 — Dogfood on live tmux (acceptance; manual, no commit)
+- [x] 5 — Asana → REVIEW + bookkeeping (this commit)
 
 ## References
 
