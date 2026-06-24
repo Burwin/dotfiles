@@ -3,7 +3,7 @@ description: Review an Asana task before starting — resolve it, summarize the 
 agent: build
 ---
 
-Review a task before any implementation begins. This is a read-and-think pass: the analysis (§1–§5) and the Q&A (§6) are **read-only by instruction**, and they end with a go/no-go plus a list of open questions with recommended defaults. The only writes this command may make are a **gated plan handoff** and a **gated Asana card refresh** — each only on your explicit go-ahead. It **never edits implementation code**.
+Review a task before any implementation begins. This is a read-and-think pass: the analysis (§1–§5) and the Q&A (§6) are **read-only by instruction**. §1–§5 produce the report — a go/no-go plus a list of open questions with recommended defaults — and §6 then walks those questions one at a time and records the answers. The only writes this command may make are a **gated plan handoff** and a **gated Asana card refresh** — each only on your explicit go-ahead. It **never edits implementation code**.
 
 ## 1. Resolve the task
 
@@ -65,6 +65,6 @@ Do **not** author the plan inline — this command never writes a plan file and 
 Whether or not the plan handoff happened, offer — do not assume — to refresh the Asana card with what this review turned up. Two writes are possible and they are **independent**, so treat them as separate decisions:
 
 - **(a) A plain-text comment** summarizing the outcome — the go/no-go plus the open questions and their answers (explicit or defaulted from §6). Post it with `asana_add_comment` using the plain `text` field (not HTML), and only after the user gives the go-ahead for this comment.
-- **(b) A description edit — only when §4 found something concrete.** If, and only if, the staleness check surfaced a concrete fix (a stale assumption, a merged or abandoned reference, a changed decision), offer to correct the task description. If §4 found nothing concrete, do not raise this option at all.
+- **(b) A description edit — only when §4 found something concrete.** If, and only if, the staleness check surfaced a concrete fix (a stale assumption, a merged or abandoned reference, a changed decision), offer to correct the task description with `asana_update_tasks` — editing the task's `notes` (plain text), or `html_notes` when the correction needs formatting — and only after the user gives the go-ahead for this edit. If §4 found nothing concrete, do not raise this option at all.
 
 Confirm each separately before writing: the comment and the description edit are two distinct go-aheads, and either may be declined on its own. Even at this final step the command **never edits implementation code** — the only writes it ever makes are this comment and, when warranted, that one description edit. Once each has been accepted or declined, the review is done; stop there.
