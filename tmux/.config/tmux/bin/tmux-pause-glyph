@@ -2,7 +2,7 @@
 # tmux-pause-glyph — render a paused-indicator glyph for ONE tmux session.
 #
 # Part of the opencode pause-indicator
-# (docs/plans/tmux-opencode-pause-indicator/PLAN.md). The opencode notify
+# (docs/archive/opencode/PLAN-tmux-pause-indicator.md). The opencode notify
 # plugin (opencode/.config/opencode/plugins/notify.ts) drops a marker file
 #   $XDG_STATE_HOME/opencode/paused/<slug>
 # whenever a session halts for input. <slug> is the tmux session name with

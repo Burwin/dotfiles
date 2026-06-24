@@ -3,7 +3,7 @@
 # paused (the Alt+Shift+Up / Alt+Shift+Down bindings).
 #
 # Part of the opencode pause-indicator
-# (docs/plans/tmux-opencode-pause-indicator/PLAN.md). The opencode notify
+# (docs/archive/opencode/PLAN-tmux-pause-indicator.md). The opencode notify
 # plugin drops a marker file
 #   $XDG_STATE_HOME/opencode/paused/<slug>
 # for every tmux session whose opencode has halted for input. <slug> is the
@@ -28,16 +28,27 @@
 #      live sessions, stat the marker), so the set we cycle through is exactly
 #      the set the user sees marked in the status bar.
 #
-# Ordering is tmux's own `list-sessions` order (alphabetical by name), which is
-# the PLAN's chosen v1 sort AND matches the left-to-right order of the
-# status-left glyphs — so cycling visits sessions in the order they appear.
+# ORDERING — pause age, oldest first (MASTER-1858). The cycle list is sorted by
+# each marker file's mtime ascending (mtime == the moment opencode halted, per
+# notify.ts). Index 0 is the session PAUSED LONGEST, the last index the
+# shortest; same-second mtimes tie-break alphabetically (LC_ALL=C). This
+# DELIBERATELY DIVERGES from the status-left glyph order, which stays
+# alphabetical (tmux list-sessions order): the glyphs are a glanceable map, the
+# cycle is a FIFO service queue.
 #
-# Behaviour matrix (from the PLAN):
+# DIRECTION (note the inversion vs. a naive array walk):
+#   Up   (prev): cold-enter the LONGEST-paused, then each press steps toward
+#                NEWER, wrapping newest -> oldest.
+#   Down (next): mirror — cold-enter the SHORTEST-paused, then each press steps
+#                toward OLDER, wrapping oldest -> newest.
+#
+# Behaviour matrix:
 #   0 paused                    -> status-line message, no switch
 #   1 paused, current is it     -> message, stay (no switch)
 #   1 paused, current is not it -> switch to it
 #   2+ paused, current in list  -> step to neighbour, wrapping around the ends
-#   2+ paused, current not in   -> jump to the first in the list
+#   2+ paused, current not in   -> jump to the queue end for the pressed
+#                                  direction (Up -> longest, Down -> shortest)
 
 dir="${XDG_STATE_HOME:-$HOME/.local/state}/opencode/paused"
 
@@ -50,27 +61,44 @@ case "$direction" in
     ;;
 esac
 
-# Live, paused sessions in tmux's listing order. For each live session apply the
-# SAME slug transform the notify plugin uses, then keep it only if its marker
-# file exists. (Bash bracket replacement collapses every disallowed byte to '_';
-# '-' is last in the class so it is literal, not a range.) A missing marker dir
-# just means no match for every session -> the empty-list path below.
-paused=()
+# Live, paused sessions, each tagged with its marker mtime (epoch seconds)
+# ZERO-PADDED to a fixed 11-digit width, so a plain lexicographic sort orders by
+# pause age without a numeric `sort` key — and, crucially, without trusting an
+# in-band field separator. Same forward-slug + marker-exists filter as before. A
+# `stat` race — the marker vanishing between the test and the stat — drops the
+# entry, same as an orphan. A missing marker dir just means no match for every
+# session -> the empty-list path below.
+#   Width note: 11 digits covers epoch seconds through year 5138; today's are 10.
+entries=()
 while IFS= read -r name; do
   [[ -n $name ]] || continue
   slug="${name//[^A-Za-z0-9_-]/_}"
-  [[ -f "$dir/$slug" ]] && paused+=("$name")
+  marker="$dir/$slug"
+  [[ -f $marker ]] || continue
+  mtime=$(stat -c '%Y' "$marker" 2>/dev/null) || continue
+  printf -v key '%011d' "$mtime"
+  entries+=("$key"$'\t'"$name")
 done < <(tmux list-sessions -F '#{session_name}' 2>/dev/null)
 
-count=${#paused[@]}
-
-if (( count == 0 )); then
+if (( ${#entries[@]} == 0 )); then
   # 0-paused: visible status-line message only. The PLAN deliberately skips the
   # terminal bell here — it is filtered too inconsistently across emulators to
   # rely on. Do not switch.
   tmux display-message "no opencode sessions waiting"
   exit 0
 fi
+
+# Sort by the fixed-width mtime key ascending (longest-paused first); equal keys
+# fall through to an alphabetical tie-break on the raw name — both come out of a
+# single LC_ALL=C lexicographic sort precisely because the key is zero-padded to
+# a constant width. Then strip the 12-char prefix (11-digit key + TAB) by
+# CHARACTER POSITION with `cut -c`, never by field: a tmux session name can
+# itself contain a TAB, so a delimiter-based split (`cut -f`) would corrupt it.
+# LC_ALL=C makes both stages byte-oriented so the 12-char offset is exact.
+mapfile -t paused < <(
+  printf '%s\n' "${entries[@]}" | LC_ALL=C sort | LC_ALL=C cut -c13-
+)
+count=${#paused[@]}
 
 # The calling client's current session. Run from a key binding via run-shell,
 # `display-message -p` resolves against that client, so this is the session the
@@ -87,9 +115,15 @@ for i in "${!paused[@]}"; do
 done
 
 if (( idx < 0 )); then
-  # Current session is not itself paused -> enter the ring at its first member.
-  # Covers both "1 paused, current is not it" and "2+ paused, current not in".
-  target=${paused[0]}
+  # Current session is not itself paused -> cold-enter the queue at the end that
+  # matches the pressed direction: Up (prev) at the longest-paused (index 0),
+  # Down (next) at the shortest-paused (last index). Covers both "1 paused,
+  # current is not it" and "2+ paused, current not in".
+  if [[ $direction == prev ]]; then
+    target=${paused[0]}            # Up   -> longest-paused
+  else
+    target=${paused[count - 1]}    # Down -> shortest-paused
+  fi
 elif (( count == 1 )); then
   # The only paused session is the one we are already on. Nothing to switch to;
   # surface a message instead of a silent no-op (an unexplained dead keypress
@@ -97,8 +131,9 @@ elif (( count == 1 )); then
   tmux display-message "already on the only paused opencode session"
   exit 0
 else
-  # In the ring with neighbours -> step one over, wrapping at both ends.
-  if [[ $direction == next ]]; then
+  # In the ring with neighbours -> step one over, wrapping at both ends. Up
+  # (prev) walks toward NEWER (longest -> shortest), Down (next) toward OLDER.
+  if [[ $direction == prev ]]; then
     next_idx=$(( (idx + 1) % count ))
   else
     next_idx=$(( (idx - 1 + count) % count ))
