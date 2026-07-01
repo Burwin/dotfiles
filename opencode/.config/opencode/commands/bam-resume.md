@@ -35,7 +35,10 @@ Find the active plan file, in this order:
 The step to run is the one named by the **last trigger the previous session posted** — follow that trigger, don't infer the step from which checkboxes are ticked. If `$ARGUMENTS` already carries a pasted `▶️ Step N of M …` trigger, use it directly and skip the transcript scan below; otherwise read it from the prior session's transcript:
 
 1. **List the sessions for this directory** — `opencode session list` (it is per-directory and recency-sorted). **Skip the current session** (match it by id, or take the most recent session that actually contains a trigger).
-2. **Export that session's transcript** — `opencode export <id>` — and scan its last assistant message for the canonical trigger line `▶️ Step N of M — <label> — model: <tier> — plan: <path>`.
+2. **Export that session's transcript** — `opencode export <id>` — and scan its last assistant message for the canonical **trigger sentence** defined in `@rules/plans.md` (backticked fields; one logical line that may wrap onto two; the `— plan:` path never dropped):
+
+   > ▶️ Step `N` of `M` — `<label>` — model: `<tier>` — plan:
+   > `docs/plans/<topic>/PLAN.md`
 3. **Cross-check it against the plan's step table** (from §2): the trigger's `plan:` path should match the resolved plan, and its `N of M` should line up with a row in that table. If they diverge (a hand-edited plan, an out-of-order run), surface the discrepancy for the human rather than silently trusting one source.
 4. **Fresh-plan fallback** — if there is no prior session, or its transcript holds no trigger (a brand-new plan, or a session that errored before posting), fall back to the plan's **kickoff trigger** (step 1, at the bottom of the plan file), and say so.
 
@@ -69,4 +72,9 @@ Only after the §5 confirm, execute **exactly one step** — the step resolved i
 
 ## 7. Post the next trigger
 
-With the step done, **emit the next step's trigger verbatim** — the canonical `▶️ Step N of M — <label> — model: <tier> — plan: <path>` line for the following row of the plan's step table (per `@rules/plans.md`), ready to paste into a fresh session — then **stop**. Do not begin that next step here; resuming it is the next invocation's job.
+With the step done, **emit the next step's trigger verbatim** for the following row of the plan's step table — in the exact canonical shape from `@rules/plans.md` (backticked fields; one logical line that may wrap onto two; the `— plan:` path never dropped):
+
+> ▶️ Step `N` of `M` — `<label>` — model: `<tier>` — plan:
+> `docs/plans/<topic>/PLAN.md`
+
+Then **stop** — ready to paste into a fresh session. Do not begin that next step here; resuming it is the next invocation's job.
