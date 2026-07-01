@@ -16,8 +16,8 @@ Current directory: !`pwd`
 Identify the Asana card this plan belongs to from the current directory name (shown above), per `AGENTS.md` → "Resolving task references":
 
 1. If the directory name ends in a task id like `MASTER-1870` / `SH-264` / `ENG-123`, that is the card — just resolve its GID.
-2. Otherwise use `asana_search_tasks` with the id as the `text` param (it searches the per-project task-number field, not only name/description).
-3. If still ambiguous, narrow with `projects_any` filtered to the relevant project.
+2. If the directory name has **no** task id, **ask the human** for the id or permalink rather than guessing — this command's `$ARGUMENTS` is reserved for the plan/trigger override, not the card.
+3. Given an id, confirm it with `asana_search_tasks` (the id as the `text` param — it searches the per-project task-number field, not only name/description); if still ambiguous, narrow with `projects_any` filtered to the relevant project.
 
 Verify the match by `permalink_url` or project membership, **not** by name — the card name usually looks unrelated to the id.
 
@@ -35,7 +35,7 @@ Find the active plan file, in this order:
 The step to run is the one named by the **last trigger the previous session posted** — follow that trigger, don't infer the step from which checkboxes are ticked. If `$ARGUMENTS` already carries a pasted `▶️ Step N of M …` trigger, use it directly and skip the transcript scan below; otherwise read it from the prior session's transcript:
 
 1. **List the sessions for this directory** — `opencode session list` (it is per-directory and recency-sorted). **Skip the current session** (match it by id, or take the most recent session that actually contains a trigger).
-2. **Export that session's transcript** — `opencode export <id>` — and scan its last assistant message for the canonical **trigger sentence** defined in `@rules/plans.md` (backticked fields; one logical line that may wrap onto two; the `— plan:` path never dropped):
+2. **Export that session's transcript** — `opencode export <id>` — and scan it **from the end for the last occurrence** of the canonical **trigger sentence** (don't assume it's in the final assistant message — a session may have continued past the trigger with follow-up Q&A). The shape is defined in `@rules/plans.md` (backticked fields; one logical line that may wrap onto two; the `— plan:` path never dropped):
 
    > ▶️ Step `N` of `M` — `<label>` — model: `<tier>` — plan:
    > `docs/plans/<topic>/PLAN.md`

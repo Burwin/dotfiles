@@ -1,6 +1,6 @@
 # `/bam-resume` — resume a plan's next step without copy-pasting the trigger (MASTER-1870)
 
-Status: complete 2026-07-01 (MASTER-1870) — command + tests shipped; archived on merge.
+Status: complete 2026-07-01 (MASTER-1870) — command + tests shipped; ready to archive on merge.
 
 Asana: MASTER-1870 — "/bam-resume"
 (https://app.asana.com/1/1203819684139908/project/1204506183888935/task/1216177690944546).
@@ -211,8 +211,8 @@ commit so the red→green history stays legible.
 
 ## Progress
 
-- [ ] Phase A — command contract red-green-refactor (steps 1–11)
-- [ ] Phase B — verify + deploy (steps 12–13)
+- [x] Phase A — command contract red-green-refactor (steps 1–11)
+- [x] Phase B — verify + deploy (steps 12–13)
 
 ## References
 
