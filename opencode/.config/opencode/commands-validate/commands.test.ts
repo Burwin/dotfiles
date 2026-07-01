@@ -209,10 +209,13 @@ describe("bam-resume command", () => {
 
   test("body encodes card + plan resolution (§1–§2)", () => {
     const { body } = readResume();
-    // /resolv/ = resolution, /docs\/plans/ = plan file, /ask/ = "else list + ask".
+    // /resolv/ = resolution, /docs\/plans/ = plan file, /\bask\b/ = the
+    // "else list + ask" fallback. Word-boundary the "ask" so it pins a real
+    // ask (e.g. "ask the human", "else ask") rather than matching "task",
+    // which pervades the body and would make this assertion a false positive.
     expect(/resolv/.test(body)).toBe(true);
     expect(/docs\/plans/.test(body)).toBe(true);
-    expect(/ask/.test(body)).toBe(true);
+    expect(/\bask\b/.test(body)).toBe(true);
   });
 
   test("body finds the next step via the prior session's last-posted trigger (§3)", () => {
