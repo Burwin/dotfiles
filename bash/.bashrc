@@ -60,6 +60,9 @@ alias catholic='mpv http://traditionalcatholicradio.org:8000/main'
 # toggl
 alias toggl-projects='sqlite3 -header -column ~/src/bamboo/tools/src/toggl/toggl.db "SELECT id, name, client_name FROM toggl_projects WHERE active=1 ORDER BY client_name, name"'
 alias toggl-pull='(cd ~/src/bamboo/tools/src/toggl && npm run --silent get-projects)'
+alias tp=toggl-push
+alias tpa='toggl-push --all'
+alias arf=accrued-revenue-fresh
 
 # opencode
 export PATH=/home/mbh/.opencode/bin:$PATH
