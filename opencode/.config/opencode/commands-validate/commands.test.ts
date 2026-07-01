@@ -174,6 +174,70 @@ describe("bam-copilot-loop command", () => {
   });
 });
 
+describe("bam-resume command", () => {
+  // Load the command inside each test (never at describe/module-init) so a
+  // missing file surfaces as a normal assertion failure, and re-assert the
+  // validator is clean on every read — mirroring the readReviewTask() helper
+  // above. Each test then pins one behavior via a token that was newly-absent
+  // before its authoring GREEN, so the red→green history stayed incremental.
+  function readResume(): { content: string; frontmatter: string; body: string } {
+    const fileName = "bam-resume.md";
+    const filePath = join(commandsDir, fileName);
+    expect(existsSync(filePath)).toBe(true);
+    const content = readFileSync(filePath, "utf8");
+    // Must satisfy the convention validator (zero issues) on every read.
+    expect(validateCommand(fileName, content)).toEqual([]);
+    // Capture the inner text of the leading --- … --- block so frontmatter
+    // assertions can't be satisfied by matching text in the body.
+    const fm = content.match(/^---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(\r?\n|$)/);
+    expect(fm).not.toBeNull();
+    return {
+      content,
+      frontmatter: fm![1],
+      body: stripFrontmatter(content).toLowerCase(),
+    };
+  }
+
+  test("exists, validates, and frontmatter is `agent: build` with no `model:` line", () => {
+    const { frontmatter } = readResume();
+    // agent: build with no model: line (the tier is chosen per session, per step).
+    expect(/^agent:\s*build$/m.test(frontmatter)).toBe(true);
+    expect(/^model:/m.test(frontmatter)).toBe(false);
+  });
+
+  test("body encodes card + plan resolution (§1–§2)", () => {
+    const { body } = readResume();
+    // /resolv/ = resolution, /docs\/plans/ = plan file, /ask/ = "else list + ask".
+    expect(/resolv/.test(body)).toBe(true);
+    expect(/docs\/plans/.test(body)).toBe(true);
+    expect(/ask/.test(body)).toBe(true);
+  });
+
+  test("body finds the next step via the prior session's last-posted trigger (§3)", () => {
+    const { body } = readResume();
+    // /trigger/ + the opencode session/export|session list read + /transcript/.
+    expect(/trigger/.test(body)).toBe(true);
+    expect(/opencode (session|export)/.test(body) || /session list/.test(body)).toBe(true);
+    expect(/transcript/.test(body)).toBe(true);
+  });
+
+  test("body model-tier-checks, then confirms before executing (§4–§5)", () => {
+    const { body } = readResume();
+    // /tier/ + /mismatch/ warn-ask + /confirm/ gate before running the step.
+    expect(/tier/.test(body)).toBe(true);
+    expect(/mismatch/.test(body)).toBe(true);
+    expect(/confirm/.test(body)).toBe(true);
+  });
+
+  test("body runs exactly one step, then posts the next trigger and stops (§6–§7)", () => {
+    const { body } = readResume();
+    // /one step/ boundary + /next …trigger/ handoff + /stop/.
+    expect(/one step/.test(body)).toBe(true);
+    expect(/next .*trigger|next step's trigger/.test(body)).toBe(true);
+    expect(/stop/.test(body)).toBe(true);
+  });
+});
+
 describe("install wiring (Phase C)", () => {
   test("read opencode/install.sh; assert its FILES array contains commands", () => {
     const installPath = join(import.meta.dir, "..", "..", "..", "install.sh");
