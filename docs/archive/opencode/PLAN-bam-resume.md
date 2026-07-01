@@ -1,6 +1,16 @@
 # `/bam-resume` — resume a plan's next step without copy-pasting the trigger (MASTER-1870)
 
-Status: complete 2026-07-01 (MASTER-1870) — command + tests shipped; ready to archive on merge.
+> **Status:** shipped; archived 2026-07-01. Merged to `m` as
+> `feat(opencode): add /bam-resume command to resume plans (MASTER-1870)`
+> (PR #15, squash `8709761`); nothing supersedes it. Shipped artifacts:
+> `opencode/.config/opencode/commands/bam-resume.md` (the `agent: build`
+> body with §1–§7: resolve the card + plan, find the next step from the
+> last-posted trigger, tier-check the model, confirm, run exactly one
+> step, then post the next trigger) and the `bam-resume command` block in
+> `opencode/.config/opencode/commands-validate/commands.test.ts`. Decision
+> history below is preserved as-is for reference.
+
+Status: shipped 2026-07-01 (merged to `m`, PR #15, squash `8709761`).
 
 Asana: MASTER-1870 — "/bam-resume"
 (https://app.asana.com/1/1203819684139908/project/1204506183888935/task/1216177690944546).
