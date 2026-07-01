@@ -26,7 +26,7 @@ Verify the match by `permalink_url` or project membership, **not** by name — t
 Find the active plan file, in this order:
 
 1. **Explicit override** — if `$ARGUMENTS` names a plan path or topic, use it (a `docs/plans/<topic>/PLAN.md` path, or a topic that resolves to one).
-2. **By card** — otherwise pick the `docs/plans/<topic>/PLAN.md` whose contents reference the resolved card id (e.g. `MASTER-1870`).
+2. **By card** — otherwise pick the `docs/plans/<topic>/PLAN.md` whose contents reference the resolved **task id** (the human id like `MASTER-1870`, which is what the plan cites — not the Asana GID from §1).
 3. **Sole active plan** — if exactly one active plan dir exists under `docs/plans/`, use it.
 4. **Else ask** — if none or several match, list the candidate plans under `docs/plans/` and ask which one to resume.
 

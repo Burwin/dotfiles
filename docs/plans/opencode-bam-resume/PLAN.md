@@ -114,9 +114,11 @@ Current directory: !`pwd`
 - List sessions for this directory: `opencode session list --format json`
   (per-directory; sorted by recency). Skip the **current** session (match by id,
   or take the most recent that actually contains a trigger).
-- Export that session (`opencode export <id>`) and scan its last assistant
-  message for the canonical trigger `▶️ Step N of M — <label> — model: <tier> —
-  plan: <path>`.
+- Export that session (`opencode export <id>`) and scan it **from the end for the
+  last occurrence** of the canonical trigger sentence (a session may continue past
+  the trigger with follow-up Q&A). Its shape is defined in `@rules/plans.md`
+  (backticked fields; one logical line that may wrap, with `— plan:` never
+  dropped).
 - **Cross-check**: the trigger's `<path>` should match the resolved plan (§2) and
   `N of M` should line up with the plan's step table; if they diverge, surface it
   in the echo (§5) and let the human decide.
