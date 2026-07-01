@@ -220,9 +220,14 @@ describe("bam-resume command", () => {
 
   test("body finds the next step via the prior session's last-posted trigger (§3)", () => {
     const { body } = readResume();
-    // /trigger/ + the opencode session/export|session list read + /transcript/.
+    // /trigger/ + BOTH halves of the §3 read (list the sessions, then export
+    // the chosen transcript) + /transcript/. Assert each step separately so a
+    // regression that drops one — leaving only `session list` or only
+    // `opencode export` — is caught, rather than an either-or that passes on
+    // half the flow.
     expect(/trigger/.test(body)).toBe(true);
-    expect(/opencode (session|export)/.test(body) || /session list/.test(body)).toBe(true);
+    expect(/session list/.test(body)).toBe(true); // step 1: list sessions
+    expect(/opencode export/.test(body)).toBe(true); // step 2: export transcript
     expect(/transcript/.test(body)).toBe(true);
   });
 
