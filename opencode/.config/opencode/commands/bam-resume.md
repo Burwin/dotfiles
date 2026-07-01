@@ -7,7 +7,7 @@ Resume the active plan from a fresh session, so picking up a step-by-step plan n
 
 This command is `agent: build`, so unlike the read-only reviews it **executes a step** and writes code. Keep the guard tight: the one **gated step-run** (§6) is the only place it writes code or commits, it always **confirms before executing** (§5), it runs **exactly one step** and **never runs ahead**, and once the step is done it only **posts the next trigger** (§7) and stops.
 
-Optional override: $ARGUMENTS   (a plan path or topic)
+Optional override: $ARGUMENTS   (a plan path or topic, or a pasted trigger to use directly)
 
 Current directory: !`pwd`
 
@@ -32,10 +32,10 @@ Find the active plan file, in this order:
 
 ## 3. Find the next step
 
-The step to run is the one named by the **last trigger the previous session posted** — follow that trigger, don't infer the step from which checkboxes are ticked. Read it from that session's transcript:
+The step to run is the one named by the **last trigger the previous session posted** — follow that trigger, don't infer the step from which checkboxes are ticked. If `$ARGUMENTS` already carries a pasted `▶️ Step N of M …` trigger, use it directly and skip the transcript scan below; otherwise read it from the prior session's transcript:
 
 1. **List the sessions for this directory** — `opencode session list` (it is per-directory and recency-sorted). **Skip the current session** (match it by id, or take the most recent session that actually contains a trigger).
-2. **Export that session's transcript** — `opencode export <id>` — and scan its last assistant message for the canonical trigger line `▶️ Step N of M — <label> — model: <model> — plan: <path>`.
+2. **Export that session's transcript** — `opencode export <id>` — and scan its last assistant message for the canonical trigger line `▶️ Step N of M — <label> — model: <tier> — plan: <path>`.
 3. **Cross-check it against the plan's step table** (from §2): the trigger's `plan:` path should match the resolved plan, and its `N of M` should line up with a row in that table. If they diverge (a hand-edited plan, an out-of-order run), surface the discrepancy for the human rather than silently trusting one source.
 4. **Fresh-plan fallback** — if there is no prior session, or its transcript holds no trigger (a brand-new plan, or a session that errored before posting), fall back to the plan's **kickoff trigger** (step 1, at the bottom of the plan file), and say so.
 

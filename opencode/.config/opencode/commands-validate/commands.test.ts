@@ -176,10 +176,12 @@ describe("bam-copilot-loop command", () => {
 
 describe("bam-resume command", () => {
   // Load the command inside each test (never at describe/module-init) so a
-  // missing file surfaces as a normal assertion failure, and re-assert the
-  // validator is clean on every read — mirroring the readReviewTask() helper
-  // above. Each test then pins one behavior via a token that was newly-absent
-  // before its authoring GREEN, so the red→green history stayed incremental.
+  // missing file surfaces as a normal assertion failure — following the
+  // per-test-load pattern of readReviewTask() above — and additionally
+  // re-assert the validator is clean on every read (a check readReviewTask()
+  // does not make). Each test then pins one behavior via a token that was
+  // newly-absent before its authoring GREEN, so the red→green history stayed
+  // incremental.
   function readResume(): { content: string; frontmatter: string; body: string } {
     const fileName = "bam-resume.md";
     const filePath = join(commandsDir, fileName);

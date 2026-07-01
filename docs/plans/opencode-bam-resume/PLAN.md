@@ -1,6 +1,6 @@
 # `/bam-resume` — resume a plan's next step without copy-pasting the trigger (MASTER-1870)
 
-Status: planned 2026-07-01. Not started.
+Status: complete 2026-07-01 (MASTER-1870) — command + tests shipped; archived on merge.
 
 Asana: MASTER-1870 — "/bam-resume"
 (https://app.asana.com/1/1203819684139908/project/1204506183888935/task/1216177690944546).
