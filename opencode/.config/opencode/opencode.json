@@ -4,7 +4,7 @@
   "instructions": ["rules/safety.md", "rules/communication.md"],
   "permission": {
     "external_directory": {
-      "~/.config/opencode/**": "allow",
+      "*": "allow",
       "~/.config/opencode/secrets/**": "ask"
     }
   },
