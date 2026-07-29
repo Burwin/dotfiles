@@ -53,31 +53,21 @@ recordings, scraping — it **must run headless**, no exceptions.
   work streams. e2e and video-recording runs default to CI — see Testing in
   `@rules/workflow.md`.
 
-## Never launch detached background services from an agent session
+## Long-lived local services (Firebase emulator, etc.)
 
-**Hard, non-negotiable. Do not violate it. Do not "just this once" it.**
+Agents **may** start the Firebase auth emulator (and similar local services)
+when a stack or suite needs them. The hazard is *orphans*, not the service:
 
-- **NEVER start the Firebase emulator (or any long-lived test service)
-  detached / in the background** — no `setsid`, no `nohup`, no `disown`, no
-  trailing `&`, no `firebase emulators:start ... &`. Detached processes
-  outlive the agent shell, cannot be reliably torn down (`pkill` hangs on
-  them), leak their port (e.g. 9099), and silently steal memory from every
-  parallel work stream on the machine.
-- **Integration tests that need the emulator run on GitHub CI, not locally.**
-  Trigger the repo's emulator-backed CI workflow via
-  `gh workflow run <wf> --ref <branch>` (workflow_dispatch), then poll with
-  `gh run watch` / `gh run view --log`. This is the same offload rule as
-  Testing in `@rules/workflow.md`.
-- **If a local run is truly unavoidable,** the *human* starts the service in
-  their own terminal and tells the agent the port is up. The agent never
-  starts it. (Repo-level concrete commands live in that repo's `AGENTS.md`.)
-- **Unit tests are fine locally** — they don't touch Firebase / long-lived
-  services.
-- **Real-world miss from this codebase:** an agent ran
-  `setsid bash -c 'firebase emulators:start --only auth ...' &` to run CLI
-  integration tests locally; `pkill -f "firebase emulators"` then hung
-  indefinitely, the port stayed leaked, and the session had to be
-  interrupted. Don't repeat it.
+- Prefer a dedicated terminal/tmux pane or lifecycle-owned runners
+  (`firebase emulators:exec --only auth -- '<cmd>'`) over `setsid` /
+  `nohup` / `disown` / bare trailing `&` that outlive the agent shell,
+  leak ports (e.g. 9099), and steal memory from parallel work streams.
+- If you start a long-lived process, note the PID and tear it down when
+  done. Don't leave orphaned emulators.
+- Heavy integration suites can still go to GitHub CI when preferred:
+  `gh workflow run <wf> --ref <branch>` then `gh run watch`.
+- Unit tests stay local — they don't need Firebase.
+- Repo-level concrete commands live in that repo's `AGENTS.md`.
 
 ## Don't invent CLI flags — check `--help` first
 

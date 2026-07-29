@@ -40,3 +40,5 @@
 [credential "https://gist.github.com"]
 	helper =
 	helper = !gh auth git-credential
+[includeIf "gitdir:/home/mbh/src/northbuilt/iss/"]
+	path = /home/mbh/src/northbuilt/iss/.gitconfig-aaron

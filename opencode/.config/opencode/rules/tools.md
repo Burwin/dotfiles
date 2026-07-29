@@ -76,6 +76,32 @@ Read / triage (all accept `--format json|table|ndjson`):
     gmail-labels         list labels
     gmail-filters        list filters
 
+### Thread truth before outreach claims (2026-07-10 incident)
+
+A single `gmail-get <messageId>` returns **one** message. A `gmail-list`
+search can miss SENT replies (query shape, pagination, label filters).
+Both were used in NS-1044 review to assert "Mike was never asked" and
+later "nothing was sent yesterday" — wrong twice: the Reporting thread
+already had two SENT replies (hold-off + date-range ask).
+
+**Hard rule — before claiming anything about outreach state** (never
+asked / already asked / never sent / should draft / should re-ask /
+Mike hasn't been contacted):
+
+1. **Load the full thread**, not a single message:
+   `gmail-get --thread <threadId|anyMessageIdInThread> --format=json`
+2. **Walk every message**: from, date, labels (`SENT` vs `DRAFT` vs
+   `INBOX`), and body. Count real SENT outbound separately from drafts.
+3. **Only then** state whether outreach happened, what was asked, and
+   whether a new draft/send is warranted.
+4. **Never draft or send a "first ask"** until step 1–2 show no prior
+   equivalent SENT ask (or the human explicitly wants a nudge/follow-up).
+5. Asana/card notes that say "BLOCKED: ask Mike" are **not** evidence
+   that email was or wasn't sent — verify Gmail.
+
+If you only have a message id from a card/link, still use `--thread` on
+that id; `gmail-get` without `--thread` is insufficient for thread state.
+
 ### Stdin gotcha on mutations (2026-06-11 incident)
 
 `gmail-modify` accepts message IDs from BOTH positional args AND stdin.

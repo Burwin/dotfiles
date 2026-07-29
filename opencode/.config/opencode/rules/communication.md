@@ -43,6 +43,15 @@ plan docs, or review outputs the user requested in a specific format.
 - Prefer asking one consolidated question with concrete options over a chain of
   one-at-a-time questions.
 
+## Drafts and the question tool
+
+When asking for approval of a draft, revision, or any content the user must
+read to answer (via the `question` tool), embed the content in the question
+text itself. The question UI can take over the screen, so message text that
+precedes the tool call may never be seen — "as shown above" is not reliable.
+If the content is too long to embed, ask a plain-text (non-tool) question in
+the message body instead and wait for the reply.
+
 ## Implementing plans
 
 When asked to "implement the plan" or similar phrasing referencing a plan:

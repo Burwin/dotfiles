@@ -60,6 +60,11 @@ customer-facing mail); auth via `gmail-auth status|login` (a `gmail-*`
 command that prints nothing and exits 3 = re-login). Full flags and the
 read/triage subcommands live in `@rules/tools.md`.
 
+**Before claiming outreach state** (never asked / already sent / should
+draft): always `gmail-get --thread <id>` and read every message —
+single-message get and list searches are not enough (NS-1044 incident;
+details in `@rules/tools.md` → "Thread truth before outreach claims").
+
 ## Asana MCP
 
 The official Asana MCP server is configured at the OpenCode level (always-on,
