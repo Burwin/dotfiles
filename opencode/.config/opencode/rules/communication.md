@@ -18,6 +18,16 @@ messages, and other outbound human-facing writing, follow the compression
 procedure in `@rules/brevity.md`. Does not apply to code explanations,
 plan docs, or review outputs the user requested in a specific format.
 
+## Layman's terms for outbound comms
+
+For the same outbound human-facing surface (emails, Asana/Zendesk/GitHub
+comments, PR descriptions, commit messages — including Asana comments,
+descriptions, and status updates), use layman's terms.
+
+Does not apply when the user explicitly asks for technical, precise, or
+engineer-oriented wording, or when quoting code, logs, or API names
+verbatim. Independent of the brevity procedure above.
+
 ## Reasoning out loud
 
 - Surface assumptions briefly before acting on them when ambiguity exists. One
