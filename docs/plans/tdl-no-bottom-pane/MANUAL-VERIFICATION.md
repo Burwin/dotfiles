@@ -102,17 +102,17 @@ tmux -L tdltest kill-server
 **Observed RED** recorded 2026-08-05 against unmodified worktree
 `bash/.bashrc` wrapper (lines 70–78) + Omarchy
 `~/.local/share/omarchy/default/bash/fns/tmux` `tdl`, fixture geometry
-`120×40`. **Expected GREEN** is the plan Design target. Step 2 fills
-**Observed GREEN**.
+`120×40`. **Observed GREEN** recorded 2026-08-05 against the full
+2-pane override in `bash/.bashrc` (Design end-state), same geometry.
 
 | ID | Setup | Expected GREEN | Observed GREEN | Observed RED (current) |
 | --- | --- | --- | --- | --- |
-| ✅S1 | `tdl true` | pane count **2** | _(step 2)_ | pane count **3** |
-| ✅S2 | `tdl true` | widths ≈ equal (±2 cols); one row only (no full-width bottom strip) | _(step 2)_ | widths **83 / 36** (not equal); bottom strip **120×6 @ top=34** present |
-| ✅S3 | `tdl true false` | pane count **3** (editor + AI + AI2); AI column split vertically; no full-width bottom shell | _(step 2)_ | pane count **4**; AI col split (36×16 + 36×16); bottom strip **120×6** still present |
-| 🛡S4 | outside tmux | prints `You must start tmux to use tdl.` · non-zero rc · no layout | _(step 2)_ | prints `You must start tmux to use tdl.` · then wrapper `can't find pane: 0` · **RC=1** |
-| 🛡S5 | no args (in tmux) | prints Usage · non-zero rc · still 1 pane | _(step 2)_ | prints Usage · then wrapper `can't find pane: 0` · **RC=1** · pane count **1** |
-| 🛡T | teardown | `tmux -L tdltest kill-server` clean | _(step 2)_ | clean — `no server running on /tmp/tmux-1000/tdltest` |
+| ✅S1 | `tdl true` | pane count **2** | pane count **2** | pane count **3** |
+| ✅S2 | `tdl true` | widths ≈ equal (±2 cols); one row only (no full-width bottom strip) | widths **59 / 60** (Δ1); both **h=40 top=0** — one row, no bottom strip | widths **83 / 36** (not equal); bottom strip **120×6 @ top=34** present |
+| ✅S3 | `tdl true false` | pane count **3** (editor + AI + AI2); AI column split vertically; no full-width bottom shell | pane count **3**; editor **59×40**; AI col **60×20 + 60×19** stacked; no full-width bottom | pane count **4**; AI col split (36×16 + 36×16); bottom strip **120×6** still present |
+| 🛡S4 | outside tmux | prints `You must start tmux to use tdl.` · non-zero rc · no layout | prints `You must start tmux to use tdl.` · **RC=1** · no stray resize error | prints `You must start tmux to use tdl.` · then wrapper `can't find pane: 0` · **RC=1** |
+| 🛡S5 | no args (in tmux) | prints Usage · non-zero rc · still 1 pane | prints Usage · **RC=1** · pane count **1** · no stray resize error | prints Usage · then wrapper `can't find pane: 0` · **RC=1** · pane count **1** |
+| 🛡T | teardown | `tmux -L tdltest kill-server` clean | clean — `no server running on /tmp/tmux-1000/tdltest` | clean — `no server running on /tmp/tmux-1000/tdltest` |
 
 **Pass criteria**
 
@@ -134,6 +134,14 @@ idx=3 id=%1 w=120 h=6 top=34 left=0    # bottom shell (full width)
 window name=tdltest_cwd
 ```
 
+**GREEN pane dump (S1/S2, geometry 120×40)**
+
+```
+idx=1 id=%0 w=59 h=40 top=0 left=0     # editor (full height)
+idx=2 id=%1 w=60 h=40 top=0 left=60    # AI     (full height)
+window name=tdltest_cwd
+```
+
 **RED pane dump (S3)**
 
 ```
@@ -141,6 +149,15 @@ idx=1 id=%0 w=83 h=33 top=0  left=0    # editor
 idx=2 id=%2 w=36 h=16 top=0  left=84   # AI
 idx=3 id=%3 w=36 h=16 top=17 left=84   # AI2
 idx=4 id=%1 w=120 h=6 top=34 left=0    # bottom shell
+window name=tdltest_cwd
+```
+
+**GREEN pane dump (S3)**
+
+```
+idx=1 id=%0 w=59 h=40 top=0  left=0    # editor (full height)
+idx=2 id=%1 w=60 h=20 top=0  left=60   # AI
+idx=3 id=%2 w=60 h=19 top=21 left=60   # AI2
 window name=tdltest_cwd
 ```
 
@@ -223,8 +240,11 @@ layout differentiator; S1–S3 are.
 
 - `docs/plans/tdl-no-bottom-pane/PLAN.md` — Design end-state, decisions
   Q1–Q5, TDD order.
-- `bash/.bashrc` — current `original_tdl` + resize wrapper (~L70–78).
-- `~/.local/share/omarchy/default/bash/fns/tmux` — upstream 3-pane `tdl`.
+- `bash/.bashrc` — full 2-pane `tdl` override (MASTER-1972); RED was the
+  prior `original_tdl` + resize wrapper.
+- `~/.local/share/omarchy/default/bash/fns/tmux` — upstream 3-pane `tdl`
+  (overridden; not called).
 - Sibling pattern: `docs/plans/tmux-cycle-paused-fifo/MANUAL-VERIFICATION.md`.
 - Asana MASTER-1972 —
   https://app.asana.com/1/1203819684139908/project/1204506183888935/task/1217187690537803
+

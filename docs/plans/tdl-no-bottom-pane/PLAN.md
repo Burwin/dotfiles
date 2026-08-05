@@ -192,10 +192,11 @@ S1 fails (count=3), S2 fails (bottom strip present).
 ## Progress
 
 - [x] 1 — RED: pin 2-pane expectations (MANUAL-VERIFICATION)
-- [ ] 2 — GREEN: full tdl override in bashrc
+- [x] 2 — GREEN: full tdl override in bashrc
 - [ ] 3 — REFACTOR: comment / residue cleanup
 - [ ] 4 — Dogfood on live tmux (acceptance; manual, no commit)
 - [ ] 5 — Asana → REVIEW + bookkeeping
+
 
 ## References
 
