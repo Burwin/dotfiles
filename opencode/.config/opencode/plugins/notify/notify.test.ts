@@ -13,7 +13,7 @@
 //
 // What's covered here:
 //   - dispatchEvent: pure mapping correctness for every documented event
-//     branch + the dismiss-default + noop fall-through cases.
+//     branch + the resume-allowlist dismiss + sticky-noop (no dismiss) cases.
 //   - pingNtfy: the no-op-when-topic-unset contract, error swallowing, URL
 //     encoding, header construction (Title/Tags/Authorization).
 //   - makeDismissTracker: add → dismissAll calls the injected dismiss once
@@ -125,20 +125,35 @@ describe("dispatchEvent", () => {
     expect(a).toEqual({ kind: "noop" })
   })
 
-  test("unknown event with sessionID → dismiss", () => {
-    // Mirrors the "agent / user is moving again" semantics — any non-halting
-    // event for a known session should clear that session's outstanding toasts.
+  test("resume allowlist events with sessionID → dismiss", () => {
+    // Only these explicit resume signals may clear a sticky halt (toast+marker).
     const cases = [
-      "permission.replied",
       "question.replied",
+      "question.rejected",
+      "permission.replied",
       "message.updated",
-      "tool.execute.before",
-      "tool.execute.after",
-      "file.watcher.updated", // even infrastructure events with a sessionID
     ]
     for (const t of cases) {
       const a = dispatchEvent(t, { sessionID: "SX" }, titleBase)
       expect(a).toEqual({ kind: "dismiss", sessionID: "SX" })
+    }
+  })
+
+  test("sticky-noop events with sessionID → noop (halt stays armed)", () => {
+    // Mid-wait bus noise (incl. the previous default culprits) must be noop
+    // so Question/permission waits do not self-clear.
+    const cases = [
+      "message.part.updated",
+      "tool.execute.before",
+      "tool.execute.after",
+      "todo.updated",
+      "tui.prompt.append",
+      "session.updated",
+      "file.watcher.updated",
+    ]
+    for (const t of cases) {
+      const a = dispatchEvent(t, { sessionID: "SX" }, titleBase)
+      expect(a).toEqual({ kind: "noop" })
     }
   })
 

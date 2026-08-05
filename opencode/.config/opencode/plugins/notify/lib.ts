@@ -17,7 +17,8 @@
 //     one of three discriminated unions: a "notify" action carrying the
 //     fields the entrypoint feeds to notify-send + ntfy; a "dismiss"
 //     action (plain sessionID payload); or a "noop" for the explicit
-//     skip cases (`session.status`, events without a sessionID, etc.).
+//     skip cases (sticky-noop for non-resume events, `session.status`,
+//     events without a sessionID, etc.).
 //
 //   pingNtfy(config, title, body, tags?) — best-effort POST to ntfy.
 //     Silently no-ops when the topic is empty (matching the
@@ -57,20 +58,20 @@ export type NoopAction = { kind: "noop" }
 
 export type Action = NotifyAction | DismissAction | NoopAction
 
-// dispatchEvent — pure event-type → action mapping. Mirrors the switch in
-// the previous monolithic ../notify.ts:
+// dispatchEvent — pure event-type → action mapping (sticky-halt semantics).
 //
-//   session.idle/error/permission.asked/question.asked → notify
-//   session.status                                      → noop (overloaded
-//                                                         event; would race
-//                                                         with session.idle
-//                                                         end-of-turn)
-//   anything else with a sessionID                       → dismiss
-//   anything else without a sessionID                    → noop
+//   session.idle / session.error / permission.asked / question.asked → notify
+//   session.status                                                   → noop
+//     (overloaded; would race with session.idle end-of-turn)
+//   question.replied / question.rejected / permission.replied / message.updated
+//                                                                    → dismiss
+//     (explicit resume allowlist; the ONLY events that clear a halt)
+//   everything else (message.part.updated, tool.*, tui.*, session.updated, ...)
+//                                                                    → noop
+//     (sticky: mid-wait noise must not disarm Question/permission waits)
 //
-// The default arm intentionally uses a free-form string match so events
-// not in the v1 SDK union (permission.replied, message.updated, etc.) are
-// still routed correctly at runtime.
+// Free-form string match on `type` keeps routing resilient to events
+// outside the v1 SDK union. No "any sessionID → dismiss" default.
 export function dispatchEvent(
   type: string,
   props: Record<string, unknown>,
@@ -137,14 +138,14 @@ export function dispatchEvent(
       }
     }
     case "session.status":
-      // Overloaded event (fires for status=idle/busy/retry); explicit no-op
-      // so it doesn't dismiss the toast we just raised on session.idle.
+      return { kind: "noop" }
+    case "question.replied":
+    case "question.rejected":
+    case "permission.replied":
+    case "message.updated":
+      if (sessionID) return { kind: "dismiss", sessionID }
       return { kind: "noop" }
     default:
-      // Halting events handled explicitly above; anything else for a known
-      // session means the agent / user is moving again ⇒ clear toasts.
-      // Events without a sessionID fall through to noop.
-      if (sessionID) return { kind: "dismiss", sessionID }
       return { kind: "noop" }
   }
 }
