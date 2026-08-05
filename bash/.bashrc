@@ -67,8 +67,10 @@ alias arf=accrued-revenue-fresh
 # opencode
 export PATH=/home/mbh/.opencode/bin:$PATH
 
-# tmux — override Omarchy tdl: editor + AI only (no bottom shell).
-# Escape hatch for a terminal: M-Enter (vertical split). See MASTER-1972.
+# tmux — full override of Omarchy `tdl` (MASTER-1972): editor+AI only (50/50),
+# no bottom shell. M-Enter (vert split) is the escape hatch for a terminal.
+# Full override (never calls original_tdl) so Omarchy updates cannot reintroduce
+# the 3-pane layout. See docs/plans/tdl-no-bottom-pane/.
 tdl() {
   [[ -z $1 ]] && { echo "Usage: tdl <c|cx|codex|other_ai> [<second_ai>]"; return 1; }
   [[ -z $TMUX ]] && { echo "You must start tmux to use tdl."; return 1; }
@@ -81,7 +83,7 @@ tdl() {
   editor_pane="$TMUX_PANE"
   tmux rename-window -t "$editor_pane" "$(basename "$current_dir")"
 
-  # AI on the right, equal width (no bottom terminal pane)
+  # AI on the right (50%), full height; no bottom shell (MASTER-1972)
   ai_pane=$(tmux split-window -h -p 50 -t "$editor_pane" -c "$current_dir" -P -F '#{pane_id}')
 
   if [[ -n $ai2 ]]; then
