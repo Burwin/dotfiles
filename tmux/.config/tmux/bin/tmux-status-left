@@ -26,7 +26,11 @@
 # Output: the full status-left string on stdout, no trailing newline.
 
 active=$1
-glyph_bin="$(dirname "$0")/tmux-pause-glyph"
+bin_dir="$(dirname "$0")"
+glyph_bin="$bin_dir/tmux-pause-glyph"
+
+# Best-effort orphan prune (MASTER-1976). Silent; never fails the status bar.
+"$bin_dir/tmux-prune-paused-orphans" >/dev/null 2>&1 || true
 
 out=""
 while IFS= read -r name; do

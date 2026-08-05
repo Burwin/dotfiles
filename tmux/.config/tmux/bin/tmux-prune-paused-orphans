@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# tmux-prune-paused-orphans — remove opencode paused-marker files whose slug
+# is not a live tmux session.
+#
+# The notify plugin drops markers at
+#   $XDG_STATE_HOME/opencode/paused/<slug>
+# on halt. Hard-killed / renamed sessions never fire dismiss, so orphans
+# accumulate. Cycle/status already ignore them for switching (they iterate
+# live sessions and forward-slug), but the dir pollutes ops and disk.
+#
+# MASTER-1976: lightweight hygiene, best-effort. Called from tmux-status-left
+# every status-interval. Never fails the caller (always exit 0).
+#
+# Slug transform matches tmux-pause-glyph / lib.ts tmuxSlug():
+#   name.replace(/[^A-Za-z0-9_-]/g, "_")
+
+set +e
+
+dir="${XDG_STATE_HOME:-$HOME/.local/state}/opencode/paused"
+[[ -d $dir ]] || exit 0
+
+# Build associative set of live session slugs.
+declare -A live=()
+while IFS= read -r name; do
+  [[ -n $name ]] || continue
+  slug="${name//[^A-Za-z0-9_-]/_}"
+  live["$slug"]=1
+done < <(tmux list-sessions -F '#{session_name}' 2>/dev/null)
+
+shopt -s nullglob
+for marker in "$dir"/*; do
+  [[ -f $marker ]] || continue
+  base="${marker##*/}"
+  [[ -n ${live[$base]+x} ]] && continue
+  rm -f "$marker"
+done
+
+exit 0
