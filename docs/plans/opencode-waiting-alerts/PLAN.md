@@ -182,11 +182,11 @@ step (Conventional Commits; body cites MASTER-1976). Phases ship independently.
 ## Progress
 
 - [x] 1 — RED: sticky-halt test contract
-- [ ] 2 — GREEN: `dispatchEvent` sticky mapping
-- [ ] 3 — REFACTOR: notify docs/comments
+- [x] 2 — GREEN: `dispatchEvent` sticky mapping
+- [x] 3 — REFACTOR: notify docs/comments
 - [x] 4 — RED: orphan prune hermetic check
 - [x] 5 — GREEN: prune bin + status-left wire
-- [ ] 6 — INTEGRATION: deploy to live opencode config path
+- [x] 6 — INTEGRATION: deploy to live opencode config path
 - [ ] 7 — INTEGRATION: manual acceptance (Question / permission / idle / clear / orphans)
 - [ ] 8 — REFACTOR: strip temp trace if any
 - [ ] 9 — INTEGRATION: Asana → REVIEW + bookkeeping
