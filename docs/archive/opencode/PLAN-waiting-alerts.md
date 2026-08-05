@@ -1,6 +1,17 @@
 # opencode waiting-for-input alerts — sticky halt + orphan prune
 
-**Asana:** MASTER-1976 (GID `1217192468165875`) — Project MASTER → IN PROGRESS  
+> **Status:** shipped; archived 2026-08-05. Nothing supersedes it.
+> Branch `MASTER-1976` (not yet merged to `m` / no PR — not requested).
+> Shipped artifacts:
+> - `opencode/.config/opencode/plugins/notify/lib.ts` — sticky-halt `dispatchEvent`
+> - `opencode/.config/opencode/plugins/notify/notify.test.ts` — resume-allowlist contract
+> - `opencode/.config/opencode/plugins/notify.ts` — docs only
+> - `tmux/.config/tmux/bin/tmux-prune-paused-orphans` + wire in `tmux-status-left`
+> - Hermetic check: `docs/archive/opencode/check-prune-orphans-waiting-alerts.sh`
+> Asana MASTER-1976 moved to REVIEW with ship comment (SHAs + acceptance).
+> Decision history below preserved as-is.
+
+**Asana:** MASTER-1976 (GID `1217192468165875`) — Project MASTER → REVIEW  
 **Branch / worktree:** `MASTER-1976`
 
 ## TL;DR
@@ -188,8 +199,8 @@ step (Conventional Commits; body cites MASTER-1976). Phases ship independently.
 - [x] 5 — GREEN: prune bin + status-left wire
 - [x] 6 — INTEGRATION: deploy to live opencode config path
 - [x] 7 — INTEGRATION: manual acceptance (Question / permission / idle / clear / orphans)
-- [ ] 8 — REFACTOR: strip temp trace if any
-- [ ] 9 — INTEGRATION: Asana → REVIEW + bookkeeping
+- [x] 8 — REFACTOR: strip temp trace if any (no-op — no temp trace added)
+- [x] 9 — INTEGRATION: Asana → REVIEW + bookkeeping
 
 ## References
 
