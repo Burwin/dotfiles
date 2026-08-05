@@ -42,31 +42,23 @@ import {
  *
  * Auto-dismiss (mako only): every toast we raise has its mako notification
  * id captured via `notify-send -p` and stored in a per-session list (see
- * `makeDismissTracker` in ./notify/lib.ts). The default dispatch arm runs
- * `makoctl dismiss -n <id>` for each tracked id whenever any non-halting
- * event arrives for that session — i.e. as soon as the agent / user
- * demonstrably resumes work, the residual alert is cleared. `session.status`
- * is explicitly skipped because it is overloaded (fires for idle, busy, and
- * retry) and would otherwise race with `session.idle` and dismiss the toast
- * we just raised. Tracking is intentionally session-level, not per-toast:
- * two outstanding alerts for one session both clear on the first response —
- * by then you're engaged with that session anyway. `makoctl dismiss` is
- * best-effort (stale or expired ids are harmless no-ops, errors swallowed).
- * ntfy phone alerts are NOT dismissed — phones don't reliably know you've
- * returned to the laptop.
+ * `makeDismissTracker` in ./notify/lib.ts). Dispatch is *sticky*: only the
+ * explicit resume-allowlist events (`question.replied`, `question.rejected`,
+ * `permission.replied`, `message.updated`) produce a "dismiss" action that
+ * clears tracked mako ids via `makoctl dismiss -n <id>`. All other events
+ * (incl. `message.part.updated` and tool/stream noise) are `noop` so a
+ * Question or permission wait stays armed until the human actually replies.
+ * `session.status` is still skipped (overloaded; races `session.idle`).
+ * Tracking is session-level, not per-toast. `makoctl dismiss` is best-effort;
+ * ntfy alerts are never auto-dismissed (phones don't know when you return).
  *
  * Paused-state markers (tmux only): alongside the toast/push, every halting
- * event touches `~/.local/state/opencode/paused/<tmux-session>` and every
- * subsequent non-halting (dismiss) event removes it. This gives tmux a
- * filesystem signal for which sessions are waiting on the user, consumed by
- * the status-left / choose-tree indicator scripts (see
- * docs/archive/opencode/PLAN-tmux-pause-indicator.md). The marker is keyed by
- * tmux session name — so it's a silent no-op when opencode runs outside tmux
- * — and its content is the event `tag` (robot/lock/question/warning) so the
- * indicator can color idle vs urgent states differently. Every fs op is
- * best-effort (`.catch(() => {})`), preserving the plugin's never-crash
- * invariant; it is deliberately decoupled from mako, whose `normal`-urgency
- * idle toast auto-expires in 5s and so cannot be the source of truth.
+ * event (idle/error/permission.asked/question.asked) writes a marker under
+ * `~/.local/state/opencode/paused/<slug>` whose content is the tag. Only the
+ * resume-allowlist events trigger removal (via the "dismiss" path). This
+ * gives tmux a signal for waiting sessions (consumed by status-left etc;
+ * see docs/archive/opencode/PLAN-tmux-pause-indicator.md). Keyed by tmux
+ * name (no-op outside tmux); best-effort fs ops; decoupled from mako.
  *
  * ntfy: best-effort, never crashes the plugin runtime. Configured via env:
  *
