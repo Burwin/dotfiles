@@ -239,7 +239,7 @@ layout differentiator; S1–S3 are.
 ## Cross-references
 
 - `docs/plans/tdl-no-bottom-pane/PLAN.md` — Design end-state, decisions
-  Q1–Q5, TDD order.
+  Q1–Q5, TDD order, deploy steps 6–8.
 - `bash/.bashrc` — full 2-pane `tdl` override (MASTER-1972); RED was the
   prior `original_tdl` + resize wrapper.
 - `~/.local/share/omarchy/default/bash/fns/tmux` — upstream 3-pane `tdl`
