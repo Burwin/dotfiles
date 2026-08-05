@@ -67,14 +67,33 @@ alias arf=accrued-revenue-fresh
 # opencode
 export PATH=/home/mbh/.opencode/bin:$PATH
 
-# tmux
-# Rename original Omarchy function so we can call it safely
-eval "$(declare -f tdl | sed 's/^tdl/original_tdl/')"
-
+# tmux — full override of Omarchy `tdl` (MASTER-1972): editor+AI only (50/50),
+# no bottom shell. M-Enter (vert split) is the escape hatch for a terminal.
+# Full override (never calls original_tdl) so Omarchy updates cannot reintroduce
+# the 3-pane layout. See docs/plans/tdl-no-bottom-pane/.
 tdl() {
-    original_tdl "$@"
-    sleep 0.7
-    tmux resize-pane -t 0 -x 62%     # ← Change this number to adjust width
+  [[ -z $1 ]] && { echo "Usage: tdl <c|cx|codex|other_ai> [<second_ai>]"; return 1; }
+  [[ -z $TMUX ]] && { echo "You must start tmux to use tdl."; return 1; }
+
+  local current_dir="${PWD}"
+  local editor_pane ai_pane ai2_pane
+  local ai="$1"
+  local ai2="$2"
+
+  editor_pane="$TMUX_PANE"
+  tmux rename-window -t "$editor_pane" "$(basename "$current_dir")"
+
+  # AI on the right (50%), full height; no bottom shell (MASTER-1972)
+  ai_pane=$(tmux split-window -h -p 50 -t "$editor_pane" -c "$current_dir" -P -F '#{pane_id}')
+
+  if [[ -n $ai2 ]]; then
+    ai2_pane=$(tmux split-window -v -t "$ai_pane" -c "$current_dir" -P -F '#{pane_id}')
+    tmux send-keys -t "$ai2_pane" "$ai2" C-m
+  fi
+
+  tmux send-keys -t "$ai_pane" "$ai" C-m
+  tmux send-keys -t "$editor_pane" "${EDITOR:-nvim} ." C-m
+  tmux select-pane -t "$editor_pane"
 }
 
 # Machine-local, non-dotfiled exports (e.g. OPENCODE_IDLE_NTFY_TOPIC).
