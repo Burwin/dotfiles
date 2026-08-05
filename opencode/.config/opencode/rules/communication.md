@@ -28,6 +28,13 @@ Does not apply when the user explicitly asks for technical, precise, or
 engineer-oriented wording, or when quoting code, logs, or API names
 verbatim. Independent of the brevity procedure above.
 
+## No AI tells
+
+All agent-written prose (chat replies and outbound) follows
+`@rules/no-ai-tells.md`: no em/en dashes or prose `--`, and avoid the
+listed AI vocab, significance inflation, negative parallelism, rule of
+three, and chatbot closers. Exempt: code, logs, quotes, user samples.
+
 ## Reasoning out loud
 
 - Surface assumptions briefly before acting on them when ambiguity exists. One
