@@ -1,8 +1,8 @@
-# MASTER-1980 — no-ai-tells / no emdash
+# MASTER-1980: no-ai-tells / no emdash
 
 Status: ready to execute (plan only; no implementation yet).
 
-Asana: MASTER-1980 — "no emdash in anything written"
+Asana: MASTER-1980: "no emdash in anything written"
 (https://app.asana.com/1/1203819684139908/project/1204506183888935/task/1217187690537816,
 GID `1217187690537816`).
 
@@ -89,8 +89,7 @@ Distill humanizer process, not all 33 patterns:
   (no-fabrication)
 - Modes: pasted text / file / embedded (match humanizer)
 - Fuller pattern checklist than the always-loaded rule; still short
-- Same exemptions; voice-sample override noted (sample outranks dash ban
-  only when user supplies one)
+- Same exemptions; voice-sample style match noted (dash ban still wins)
 - Attribution: based on Wikipedia + blader/humanizer MIT
 
 ### Test seam

@@ -123,10 +123,11 @@ describe("no-ai-tells skill", () => {
     // at least one pattern not in the always-loaded rule (rule: vocab/significance/negative/rule-of-3/chatbot)
     expect(/filler|hedg|passive|copula|signpost|emoji|curly quote|boldface/.test(body)).toBe(true);
 
-    // exemptions (same as rule) + voice-sample override note
+    // exemptions (same as rule) + voice-sample style (dash ban still wins)
     expect(/exempt|exemption/.test(body)).toBe(true);
     expect(/code|logs?|quotes?|user samples?|voice sample/.test(body)).toBe(true);
-    expect(/voice sample|sample outrank|outrank.*dash/.test(body)).toBe(true);
+    expect(/voice sample/.test(body)).toBe(true);
+    expect(/outrank.*dash|dash ban.*still|does not outrank/.test(body)).toBe(true);
 
     // no-fabrication rule
     expect(/no.?fabricat|fabrication|never add|do not (add|invent)|no facts|source only/.test(body)).toBe(true);

@@ -26,10 +26,11 @@ distill, not a wholesale copy.
 the rule), plus frontmatter, data, and link targets when rewriting a file.
 "User samples" means material under discussion, not the rewrite target.
 
-**Voice-sample override:** if the user supplies their own writing as a style
-model, match its habits (sentence length, punctuation, recurring phrases).
-That sample outranks the dash ban only when the sample itself uses those
-dashes; match frequency, do not invent more. Override applies only inside
+**Voice-sample style:** if the user supplies their own writing as a style
+model, match its habits (sentence length, allowed punctuation, recurring
+phrases). A voice sample does not outrank the dash ban: never reintroduce
+em/en dash or prose `--`, even when the sample uses them (rewrite those as
+periods, commas, colons, or parentheses). Style match applies only inside
 this skill's rewrite; it does not relax the always-loaded rule elsewhere.
 
 ## Hard ban (dashes)
@@ -46,7 +47,7 @@ word -- more
 
 Replace with a period, comma, colon, parentheses, or a restructure. Before
 hand-off, scan the final text for the banned characters above; any hit means
-revise again (unless voice-sample override applies).
+revise again.
 
 ## Process
 
@@ -55,15 +56,15 @@ surface; they do not skip steps.
 
 1. **Identify:** scan source for dash abuse and patterns below. For style
    patterns (vocab, inflation, tics), clusters beat isolated hits. The hard
-   ban still applies to every dash in the final rewrite unless voice-sample
-   override applies.
+   dash ban applies to every dash in the final rewrite (voice sample does
+   not outrank it).
 2. **Draft rewrite:** preserve every claim, name, number, date, quote, and
    citation from the source. Compress dull parts; keep specifics. Prefer
    is/are/has over ornate stand-ins. Vary sentence length.
 3. **Audit ("still AI?"):** ask briefly: what still reads as obviously AI
    generated? Does the draft state any fact not in the source?
-4. **Final:** fix audit hits; confirm no banned dashes (unless sample
-   override); deliver per mode below.
+4. **Final:** fix audit hits; confirm no banned dashes; deliver per mode
+   below.
 
 ### No fabrication
 

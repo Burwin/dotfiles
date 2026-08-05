@@ -9,7 +9,7 @@ and take precedence on project-specific concerns.
 - **Always loaded** (via `opencode.json` `instructions`):
   - `rules/safety.md` — non-negotiable guardrails
   - `rules/communication.md` — response style and task management
-  - `rules/no-ai-tells.md` — no em dashes / AI prose tells
+  - `rules/no-ai-tells.md`: no em dashes / AI prose tells
 - **Loaded on demand** (lazy `@references` below):
   - `@rules/code-style.md` — formatting, naming, language conventions
   - `@rules/workflow.md` — commits, branches, PRs, testing
