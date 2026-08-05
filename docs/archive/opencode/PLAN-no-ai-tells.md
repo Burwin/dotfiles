@@ -1,6 +1,15 @@
 # MASTER-1980: no-ai-tells / no emdash
 
-Status: ready to execute (plan only; no implementation yet).
+> **Status:** shipped; archived 2026-08-05. Nothing supersedes it.
+> Merged to `m` via PR #19 (merge `e51d932`). Asana MASTER-1980 → DONE.
+> Shipped artifacts:
+> - `opencode/.config/opencode/rules/no-ai-tells.md` (always-loaded)
+> - `opencode/.config/opencode/skills/no-ai-tells/SKILL.md` (on-demand humanize)
+> - `opencode/.config/opencode/rules-validate/no-ai-tells.test.ts`
+> - wiring: `opencode.json` instructions, `communication.md`, `AGENTS.md`
+> Decision history below preserved as-is.
+
+Status: shipped (was: ready to execute).
 
 Asana: MASTER-1980: "no emdash in anything written"
 (https://app.asana.com/1/1203819684139908/project/1204506183888935/task/1217187690537816,
