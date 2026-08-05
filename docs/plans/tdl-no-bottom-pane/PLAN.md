@@ -243,7 +243,7 @@ S1 fails (count=3), S2 fails (bottom strip present).
 - [x] 3 — REFACTOR: comment / residue cleanup
 - [x] 4 — Dogfood on live tmux (worktree; acceptance; no commit)
 - [x] 5 — Asana → REVIEW + comment (plan left active for deploy)
-- [ ] 6 — Push / PR / merge to `m`
+- [x] 6 — Push / PR / merge to `m` (PR #17 → `0cd775b`; `80b396e` on `origin/m`)
 - [ ] 7 — FF main worktree + reload shells + D1–D5 smoke
 - [ ] 8 — Asana → DONE + archive plan
 
