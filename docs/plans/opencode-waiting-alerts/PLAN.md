@@ -187,7 +187,7 @@ step (Conventional Commits; body cites MASTER-1976). Phases ship independently.
 - [x] 4 — RED: orphan prune hermetic check
 - [x] 5 — GREEN: prune bin + status-left wire
 - [x] 6 — INTEGRATION: deploy to live opencode config path
-- [ ] 7 — INTEGRATION: manual acceptance (Question / permission / idle / clear / orphans)
+- [x] 7 — INTEGRATION: manual acceptance (Question / permission / idle / clear / orphans)
 - [ ] 8 — REFACTOR: strip temp trace if any
 - [ ] 9 — INTEGRATION: Asana → REVIEW + bookkeeping
 
