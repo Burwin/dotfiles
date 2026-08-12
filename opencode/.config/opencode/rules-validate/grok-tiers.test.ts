@@ -21,9 +21,7 @@ describe("plans.md grok tiers (MASTER-1989)", () => {
   test("contains Grok 4.6 + xai/grok-4.6; does not contain opencode/claude-opus-4-8 or opencode/glm-5.2", () => {
     const content = readText("rules/plans.md");
 
-    // RED tokens (step 1): assert the target two-tier shape.
-    // "Grok 4.6" + "xai/grok-4.6" are newly absent; the opus/glm ids must be gone.
-    // Avoid tokens that already appear today ("Grok Build 0.1", "tier", "model", etc).
+    // Pin the two-tier table: Grok 4.6 + xai/grok-4.6 present; old zen ids gone.
     expect(content).toContain("Grok 4.6");
     expect(content).toContain("xai/grok-4.6");
     expect(content).not.toContain("opencode/claude-opus-4-8");
@@ -35,10 +33,7 @@ describe("AGENTS.md Plans section grok tiers (MASTER-1989)", () => {
   test("Plans section contains Grok 4.6 and does not contain Opus 4.8 or GLM 5.2", () => {
     const content = readText("AGENTS.md");
 
-    // RED token (step 7): assert the Plans section now names only the two Grok tiers.
-    // "Grok 4.6" is newly absent; Opus/GLM strings must be gone.
-    // Target specifically the model tier list in the Plans intro para.
-    // Avoid tokens that already appear ("Grok Build 0.1", "model tier", "tiers").
+    // Pin the Plans intro to Grok 4.6; Opus/GLM must stay gone.
     const plansSection = (content.match(/## Plans([\s\S]*?)(?=\n## |$)/) || ["", content])[1];
     expect(plansSection).toContain("Grok 4.6");
     expect(plansSection).not.toContain("Opus 4.8");
@@ -50,10 +45,7 @@ describe("opencode.json grok tiers (MASTER-1989)", () => {
   test("provider.opencode.blacklist is an array that includes every opus and glm id listed in Design", () => {
     const config = readJson("opencode.json");
 
-    // RED token (step 9): assert provider.opencode.blacklist is array containing all listed ids.
-    // blacklist + the specific opus/glm ids are newly absent (no key today).
-    // Load inside the test so absence is clean assertion failure.
-    // Avoid tokens that already appear ("Grok Build 0.1", "model", "tier").
+    // Pin provider.opencode.blacklist to the opus + glm ids in Design.
     const bl = config?.provider?.opencode?.blacklist;
     expect(Array.isArray(bl)).toBe(true);
     expect(bl).toContain("claude-opus-4-1");
@@ -74,9 +66,7 @@ describe("opencode.json grok tiers (MASTER-1989)", () => {
   test("provider.xai.models[\"grok-4.6\"] and provider.opencode.models[\"grok-4.6\"] have effort=high and xhigh.disabled=true", () => {
     const config = readJson("opencode.json");
 
-    // RED token (step 11): assert grok-4.6 options.effort==="high" + variants.xhigh.disabled===true under xai and opencode.
-    // xai block, grok-4.6, effort, disabled (for xhigh) newly absent.
-    // Avoid tokens already present ("Grok Build 0.1", "blacklist").
+    // Pin grok-4.6 default effort=high and xhigh disabled on both providers.
     const xaiG = config?.provider?.xai?.models?.["grok-4.6"];
     const opG = config?.provider?.opencode?.models?.["grok-4.6"];
     expect(xaiG?.options?.effort).toBe("high");

@@ -49,7 +49,7 @@ frontmatter (where `model:` must be a full `provider/model-id`).
 | Tier (use in triggers) | Model id (picker / frontmatter) | Use for |
 | --- | --- | --- |
 | **Grok Build 0.1** | `opencode/grok-build-0.1` | Mechanical: scaffolding, wiring, renames, boilerplate, tests written to a precise spec, running commands. |
-| **Grok 4.6** | `xai/grok-4.6` (variant **high**) | Hard + mid: judgment, prose/prompts/docs, bounded implementation, risky live-config, deploy + review. |
+| **Grok 4.6** | `xai/grok-4.6` (default effort **high**) | Hard + mid: judgment, prose/prompts/docs, bounded implementation, risky live-config, deploy + review. |
 
 Pick only a tier you're confident can do the step. When torn between two,
 choose the stronger one and note why in the step row.
