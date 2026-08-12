@@ -44,7 +44,7 @@ The step to run is the one named by the **last trigger the previous session post
 
 ## 4. Tier check
 
-The trigger from §3 names a **model tier** (e.g. `Opus 4.8` / `GLM 5.2` / `Grok Build 0.1`, per `@rules/plans.md`). Compare that named tier against the model **this** session is actually running on:
+The trigger from §3 names a **model tier** (e.g. `Grok 4.6` / `Grok Build 0.1`, per `@rules/plans.md`). Compare that named tier against the model **this** session is actually running on:
 
 1. **Match** — the current model already is the step's tier: carry on to the echo below.
 2. **Mismatch** — the tiers differ: **warn** and **ask** which way to go — **proceed** on the current model anyway, or **switch** (start a fresh session on the step's tier and resume there rather than running now). Never silently run a step on the wrong tier.

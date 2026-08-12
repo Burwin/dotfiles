@@ -39,13 +39,12 @@ Rules for the decomposition:
 
 ## 4. Name a model tier for every step
 
-**Every step names a model tier** capable of executing it with confidence — don't leave it implicit. Use the three tiers and routing in `@rules/plans.md`:
+**Every step names a model tier** capable of executing it with confidence; don't leave it implicit. Use the two tiers and routing in `@rules/plans.md`:
 
-- **Grok Build 0.1** — mechanical / well-specified steps (scaffolding, wiring, writing a test to a precise spec, renames).
-- **GLM 5.2** — mid: moderate but bounded logic, straightforward well-specified implementation.
-- **Opus 4.8** — judgment-heavy steps (designing the decomposition, authoring prose/prompts, the deploy + review loop, anything needing taste).
+- **Grok Build 0.1**: mechanical / well-specified steps (scaffolding, wiring, writing a test to a precise spec, renames).
+- **Grok 4.6**: hard + mid (judgment, prose/prompts/docs, bounded implementation, risky live-config, deploy + review).
 
-Record the tier in a **Model** column in the step table and echo it in each trigger sentence — the friendly name in the trigger; the full `provider/model-id` lives in the `@rules/plans.md` table. Pick only a tier you're confident can do the step; if unsure, choose the stronger one and say why.
+Record the tier in a **Model** column in the step table and echo it in each trigger sentence. The friendly name goes in the trigger; the full `provider/model-id` lives in the `@rules/plans.md` table. Pick only a tier you're confident can do the step; if unsure, choose the stronger one (Grok 4.6) and say why.
 
 ## 5. Write the plan file
 

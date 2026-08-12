@@ -10,43 +10,22 @@
   },
   "provider": {
     "opencode": {
+      "blacklist": [
+        "claude-opus-4-1",
+        "claude-opus-4-5",
+        "claude-opus-4-6",
+        "claude-opus-4-7",
+        "claude-opus-4-8",
+        "claude-opus-5",
+        "glm-4.6",
+        "glm-4.7",
+        "glm-4.7-free",
+        "glm-5",
+        "glm-5-free",
+        "glm-5.1",
+        "glm-5.2"
+      ],
       "models": {
-        "claude-opus-4-7": {
-          "options": {
-            "thinking": { "type": "adaptive" },
-            "effort": "max"
-          },
-          "variants": {
-            "high": {
-              "thinking": { "type": "adaptive" },
-              "effort": "high"
-            },
-            "max": {
-              "thinking": { "type": "adaptive" },
-              "effort": "max"
-            }
-          }
-        },
-        "claude-opus-4-8": {
-          "options": {
-            "thinking": { "type": "adaptive" },
-            "effort": "max"
-          },
-          "variants": {
-            "high": {
-              "thinking": { "type": "adaptive" },
-              "effort": "high"
-            },
-            "xhigh": {
-              "thinking": { "type": "adaptive" },
-              "effort": "xhigh"
-            },
-            "max": {
-              "thinking": { "type": "adaptive" },
-              "effort": "max"
-            }
-          }
-        },
         "claude-fable-5": {
           "options": {
             "thinking": { "type": "adaptive" },
@@ -64,6 +43,30 @@
             "max": {
               "thinking": { "type": "adaptive" },
               "effort": "max"
+            }
+          }
+        },
+        "grok-4.6": {
+          "options": {
+            "effort": "high"
+          },
+          "variants": {
+            "xhigh": {
+              "disabled": true
+            }
+          }
+        }
+      }
+    },
+    "xai": {
+      "models": {
+        "grok-4.6": {
+          "options": {
+            "effort": "high"
+          },
+          "variants": {
+            "xhigh": {
+              "disabled": true
             }
           }
         }
