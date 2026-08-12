@@ -124,6 +124,32 @@ describe("bam-tdd-plan command", () => {
   });
 });
 
+describe("bam-tdd-plan grok tiers (MASTER-1989)", () => {
+  test("body contains Grok 4.6; does not contain three tiers", () => {
+    const filePath = join(commandsDir, "bam-tdd-plan.md");
+    expect(existsSync(filePath)).toBe(true);
+    const content = readFileSync(filePath, "utf8");
+    const body = stripFrontmatter(content).toLowerCase();
+    expect(body).toContain("grok 4.6");
+    expect(body).not.toContain("three tiers");
+  });
+});
+
+describe("bam-resume grok tiers (MASTER-1989)", () => {
+  test("§4's example list contains Grok 4.6 + Grok Build 0.1; does not contain Opus 4.8 or GLM 5.2", () => {
+    const filePath = join(commandsDir, "bam-resume.md");
+    expect(existsSync(filePath)).toBe(true);
+    const content = readFileSync(filePath, "utf8");
+    const body = stripFrontmatter(content);
+    // pin specifically §4's list (newly-absent "grok 4.6" + "grok build 0.1"; old tiers must be gone)
+    const s4 = (body.match(/## 4\. .*?([\s\S]*?)(?=\n## \d\. |$)/) || ["", body])[1].toLowerCase();
+    expect(s4).toContain("grok 4.6");
+    expect(s4).toContain("grok build 0.1");
+    expect(s4).not.toContain("opus 4.8");
+    expect(s4).not.toContain("glm 5.2");
+  });
+});
+
 describe("bam-deploy-dev command", () => {
   test("exists, passes validateCommand, and body references commit + push + PR + base branch + Copilot + merge", () => {
     const fileName = "bam-deploy-dev.md";
