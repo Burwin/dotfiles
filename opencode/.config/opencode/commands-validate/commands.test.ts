@@ -316,7 +316,7 @@ describe("bam-specs-init command", () => {
     expect(/prefix/.test(body)).toBe(true);
     expect(/scope/.test(body)).toBe(true);
     expect(/constitution\.md/.test(body)).toBe(true);
-    expect(/git/.test(body)).toBe(true);
+    expect(/git rev-parse --show-toplevel/.test(body)).toBe(true);
   });
 
   test("body encodes ID scheme (§2)", () => {
@@ -367,12 +367,13 @@ describe("bam-specs-init command", () => {
   test("body posts kickoff, stops, defers resume, excludes amend (§4)", () => {
     const { body } = readBamSpecsInit();
     // kickoff trigger; stop; later via /bam-resume; amend only as
-    // out-of-scope (the token must appear, named as something this
-    // command does not do).
+    // out-of-scope (name /bam-specs-amend, not as something this
+    // command does).
     expect(/trigger/.test(body)).toBe(true);
     expect(/bam-resume/.test(body)).toBe(true);
     expect(/stop/.test(body)).toBe(true);
-    expect(/amend/.test(body)).toBe(true);
+    expect(/bam-specs-amend/.test(body)).toBe(true);
+    expect(/out of scope/.test(body)).toBe(true);
   });
 });
 

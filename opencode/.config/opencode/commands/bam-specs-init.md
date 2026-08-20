@@ -15,7 +15,7 @@ Current directory: !`pwd`
 
 Parse `$ARGUMENTS` for **scope**, **prefix**, and **path**. For any piece that is missing or ambiguous, ask with the `question` tool, **one at a time**, recommended default first.
 
-- **Path** — default: the current directory (`!pwd` above). It must be a git repo: run `git rev-parse --show-toplevel` and use that toplevel. If `$ARGUMENTS` names a path, use that path instead (then resolve its git toplevel the same way).
+- **Path** — default: the current directory (the `Current directory:` line above, from `pwd`). It must be a git repo: run `git rev-parse --show-toplevel` and use that toplevel. If `$ARGUMENTS` names a path, use that path instead (then resolve its git toplevel the same way).
 - **Scope** — default: cwd basename, or an obvious package dir the human named.
 - **Prefix** — default: a short uppercase 3-5 char token derived from the scope (e.g. `gmail` → `GMAIL`). Confirm it is unused in the target's existing prefix registry.
 - **Existing law** — look for `constitution.md` at the target root. **Absent** = first-constitution branch. **Present** = append branch (do not change existing rule text).
