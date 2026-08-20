@@ -274,6 +274,108 @@ describe("bam-resume command", () => {
   });
 });
 
+describe("bam-specs-init command", () => {
+  // Load the command inside each test (never at describe/module-init) so a
+  // missing file surfaces as a normal assertion failure — same pattern as
+  // readResume() above — and re-assert the validator is clean on every read.
+  // Each test pins one behavior via a token that was newly-absent before its
+  // authoring GREEN, so the red→green history stayed incremental.
+  function readBamSpecsInit(): { content: string; frontmatter: string; body: string } {
+    const fileName = "bam-specs-init.md";
+    const filePath = join(commandsDir, fileName);
+    expect(existsSync(filePath)).toBe(true);
+    const content = readFileSync(filePath, "utf8");
+    // Must satisfy the convention validator (zero issues) on every read.
+    expect(validateCommand(fileName, content)).toEqual([]);
+    // Capture the inner text of the leading --- … --- block so frontmatter
+    // assertions can't be satisfied by matching text in the body.
+    const fm = content.match(/^---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(\r?\n|$)/);
+    expect(fm).not.toBeNull();
+    return {
+      content,
+      frontmatter: fm![1],
+      body: stripFrontmatter(content).toLowerCase(),
+    };
+  }
+
+  test("exists, validates, and frontmatter is `agent: plan` with no `model:` line", () => {
+    const { frontmatter } = readBamSpecsInit();
+    // agent: plan with no model: line (the user picks the session model;
+    // recommend Grok 4.6, but do not pin it).
+    expect(/^agent:\s*plan$/m.test(frontmatter)).toBe(true);
+    expect(/^model:/m.test(frontmatter)).toBe(false);
+  });
+
+  test("body encodes target resolution (§1)", () => {
+    const { body } = readBamSpecsInit();
+    // path / prefix / scope from $ARGUMENTS; git toplevel; constitution.md
+    // first-vs-append branch. Bare /path/ is noisy but the conjunction of all
+    // five is what pins §1; dropping any one (e.g. no git toplevel check)
+    // fails the test.
+    expect(/path/.test(body)).toBe(true);
+    expect(/prefix/.test(body)).toBe(true);
+    expect(/scope/.test(body)).toBe(true);
+    expect(/constitution\.md/.test(body)).toBe(true);
+    expect(/git/.test(body)).toBe(true);
+  });
+
+  test("body encodes ID scheme (§2)", () => {
+    const { body } = readBamSpecsInit();
+    // flat default; multi-section as opt-in (not the default). All three
+    // tokens required so a body that only names "flat" without the opt-in
+    // escape hatch fails.
+    expect(/flat/.test(body)).toBe(true);
+    expect(/multi-section/.test(body)).toBe(true);
+    expect(/opt-in/.test(body)).toBe(true);
+  });
+
+  test("body points at PLAN output + templates (§3)", () => {
+    const { body } = readBamSpecsInit();
+    // docs/plans output path; 1945 primary + 1943 precedent; PLAN.md as the
+    // file to write. plan.md is lowercased by stripFrontmatter.
+    expect(/docs\/plans/.test(body)).toBe(true);
+    expect(/1945/.test(body)).toBe(true);
+    expect(/1943/.test(body)).toBe(true);
+    expect(/plan\.md/.test(body)).toBe(true);
+  });
+
+  test("body encodes the init loop (§3)", () => {
+    const { body } = readBamSpecsInit();
+    // harvest → refine → sweep → ratify → fan-out. Assert each step
+    // separately so dropping one from the authored-PLAN table fails.
+    expect(/harvest/.test(body)).toBe(true);
+    expect(/refine/.test(body)).toBe(true);
+    expect(/sweep/.test(body)).toBe(true);
+    expect(/ratify/.test(body)).toBe(true);
+    expect(/fan-out/.test(body)).toBe(true);
+  });
+
+  test("body encodes first-vs-append + review contract (§3)", () => {
+    const { body } = readBamSpecsInit();
+    // conventions header + AGENTS.md policy; the four verdicts; ≤5/gate.
+    // Pin accept/edit/drop/unsure each so a body that only says "accept"
+    // does not satisfy the review contract.
+    expect(/conventions/.test(body)).toBe(true);
+    expect(/agents\.md/.test(body)).toBe(true);
+    expect(/accept/.test(body)).toBe(true);
+    expect(/edit/.test(body)).toBe(true);
+    expect(/drop/.test(body)).toBe(true);
+    expect(/unsure/.test(body)).toBe(true);
+    expect(/≤5|<=5|at most 5/.test(body)).toBe(true);
+  });
+
+  test("body posts kickoff, stops, defers resume, excludes amend (§4)", () => {
+    const { body } = readBamSpecsInit();
+    // kickoff trigger; stop; later via /bam-resume; amend only as
+    // out-of-scope (the token must appear, named as something this
+    // command does not do).
+    expect(/trigger/.test(body)).toBe(true);
+    expect(/bam-resume/.test(body)).toBe(true);
+    expect(/stop/.test(body)).toBe(true);
+    expect(/amend/.test(body)).toBe(true);
+  });
+});
+
 describe("install wiring (Phase C)", () => {
   test("read opencode/install.sh; assert its FILES array contains commands", () => {
     const installPath = join(import.meta.dir, "..", "..", "..", "install.sh");
