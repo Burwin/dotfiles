@@ -430,10 +430,12 @@ describe("bam-specs-amend command", () => {
 
   test("body aborts to init (§2b)", () => {
     const { body } = readBamSpecsAmend();
-    // missing constitution.md or new prefix/section → abort and point the
-    // human at /bam-specs-init. Name init only as the abort target.
+    // missing constitution.md or new prefix/section → abort, write nothing,
+    // point at /bam-specs-init. Pin the abort-only phrase so "never init"
+    // in the intro does not satisfy §2b.
     expect(/bam-specs-init/.test(body)).toBe(true);
-    expect(/abort|never init|do not re-init/.test(body)).toBe(true);
+    expect(/do not write anything/.test(body)).toBe(true);
+    expect(/never init/.test(body)).toBe(true);
   });
 
   test("body drives stakeholder Q&A (§3)", () => {
@@ -458,7 +460,9 @@ describe("bam-specs-amend command", () => {
 
   test("body iterates until accepted (§5)", () => {
     const { body } = readBamSpecsAmend();
-    // keep / modify / drop rows; loop until the human accepts the table.
+    // keep / modify / drop is §5-specific; iterate/accept also appear in
+    // the intro, so they would stay green if §5 itself disappeared.
+    expect(/keep \/ modify \/ drop/.test(body)).toBe(true);
     expect(/iterate/.test(body)).toBe(true);
     expect(/accept/.test(body)).toBe(true);
   });
