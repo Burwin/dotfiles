@@ -7,7 +7,7 @@ Amend `constitution.md` from an Asana ticket. The flow: resolve the **ticket** (
 
 This command is `agent: build`. It amends existing law only. Name `/bam-specs-init` only as the abort target.
 
-$ARGUMENTS   (Asana task id or freeform feature ask)
+$ARGUMENTS   (Asana task id: MASTER-NNNN, GID, or URL; optional path)
 
 Current directory: !`pwd`
 

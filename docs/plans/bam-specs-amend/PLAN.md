@@ -69,7 +69,7 @@ agent: build
 
 <intro: live session, ticket → Q&A → table → iterate → commit. Not init.>
 
-$ARGUMENTS   (Asana task id or freeform feature ask)
+$ARGUMENTS   (Asana task id: MASTER-NNNN, GID, or URL; optional path)
 Current directory: !`pwd`
 
 ## 1. Resolve the ticket
