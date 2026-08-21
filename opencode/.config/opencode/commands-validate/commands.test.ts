@@ -411,11 +411,12 @@ describe("bam-specs-amend command", () => {
 
   test("body encodes ticket resolution (§1)", () => {
     const { body } = readBamSpecsAmend();
-    // asana / task / resolv: parse $ARGUMENTS or worktree for Asana id; confirm
-    // via permalink_url or project membership (not name). All three required.
-    expect(/asana/.test(body)).toBe(true);
-    expect(/task/.test(body)).toBe(true);
-    expect(/resolv/.test(body)).toBe(true);
+    // §1-specific: asana_search_tasks plus permalink_url / project membership
+    // confirmation. Bare asana/task/resolv also appear in the intro and
+    // $ARGUMENTS line, so they would stay green if §1 itself regressed.
+    expect(/asana_search_tasks/.test(body)).toBe(true);
+    expect(/permalink_url/.test(body)).toBe(true);
+    expect(/project membership/.test(body)).toBe(true);
   });
 
   test("body encodes target resolution (§2)", () => {
