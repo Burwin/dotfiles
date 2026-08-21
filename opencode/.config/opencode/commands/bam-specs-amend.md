@@ -60,4 +60,4 @@ Offer keep / modify / drop options for the rows. Apply the human's changes and s
 
 ## 6. Commit constitution.md and stop
 
-Stage **only** `constitution.md` in the target repo: `git add constitution.md`. Commit with Conventional Commits, e.g. `docs(constitution): amend from MASTER-NNNN`. Do not push. Do not open a PR. Tests and cards are out of scope: do not write tests, do not file cards. **Stop.**
+From the git toplevel resolved in §2 (`git rev-parse --show-toplevel`), stage **only** `constitution.md`: `git add constitution.md`. Run the add from that toplevel so a subdirectory cwd cannot miss or mis-stage the file. Commit with Conventional Commits, e.g. `docs(constitution): amend from MASTER-NNNN`. Do not push. Do not open a PR. Tests and cards are out of scope: do not write tests, do not file cards. **Stop.**

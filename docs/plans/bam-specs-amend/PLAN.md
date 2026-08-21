@@ -253,5 +253,5 @@ the next RED will not fail.
 
 ---
 
-▶️ Step `15` of `19` — `RED: Test: body commits constitution.md and excludes tests/cards — tokens /git add/, /commit/, /tests/ (out of scope), /cards/ (out of scope).` — model: `Grok Build 0.1` — plan:
+▶️ Step `19` of `19` — `DEPLOY: squash, PR → m, copilot-loop, merge on confirm, ff + live re-smoke` — model: `Grok 4.6` — plan:
 `docs/plans/bam-specs-amend/PLAN.md`

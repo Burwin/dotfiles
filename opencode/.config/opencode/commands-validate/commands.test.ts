@@ -437,22 +437,22 @@ describe("bam-specs-amend command", () => {
 
   test("body drives stakeholder Q&A (§3)", () => {
     const { body } = readBamSpecsAmend();
-    // one at a time + the literal `question` tool phrase + stakeholder|user
-    // perspective. Pin the backticked tool form (per review-task precedent)
-    // so plain "question" elsewhere does not satisfy.
+    // one at a time + the literal `question` tool phrase + stakeholder AND
+    // user perspective. Pin both so "stakeholder" alone does not satisfy.
     expect(/one at a time/.test(body)).toBe(true);
     expect(/`question` tool/.test(body)).toBe(true);
-    expect(/stakeholder|user perspective/.test(body)).toBe(true);
+    expect(/stakeholder/.test(body)).toBe(true);
+    expect(/user perspective/.test(body)).toBe(true);
   });
 
   test("body encodes the amendment table (§4)", () => {
     const { body } = readBamSpecsAmend();
-    // columns ID | description | action; replace-pairs. Conjunction of all
-    // four so a body that only names "id" without action/replace fails.
-    expect(/id/.test(body)).toBe(true);
-    expect(/description/.test(body)).toBe(true);
-    expect(/action/.test(body)).toBe(true);
-    expect(/replace/.test(body)).toBe(true);
+    // table header row plus both replace-pair action keywords. Header so
+    // "task id" elsewhere does not satisfy; both keywords so "replace"
+    // alone does not.
+    expect(/\| id \| description \| action \|/.test(body)).toBe(true);
+    expect(/replace with/.test(body)).toBe(true);
+    expect(/replaces/.test(body)).toBe(true);
   });
 
   test("body iterates until accepted (§5)", () => {
