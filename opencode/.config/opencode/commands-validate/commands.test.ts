@@ -377,6 +377,103 @@ describe("bam-specs-init command", () => {
   });
 });
 
+describe("bam-specs-amend command", () => {
+  // Load the command inside each test (never at describe/module-init) so a
+  // missing file surfaces as a normal assertion failure — same pattern as
+  // readBamSpecsInit() above — and re-assert the validator is clean on every read.
+  // Each test pins one behavior via a token that was newly-absent before its
+  // authoring GREEN, so the red→green history stayed incremental.
+  function readBamSpecsAmend(): { content: string; frontmatter: string; body: string } {
+    const fileName = "bam-specs-amend.md";
+    const filePath = join(commandsDir, fileName);
+    expect(existsSync(filePath)).toBe(true);
+    const content = readFileSync(filePath, "utf8");
+    // Must satisfy the convention validator (zero issues) on every read.
+    expect(validateCommand(fileName, content)).toEqual([]);
+    // Capture the inner text of the leading --- … --- block so frontmatter
+    // assertions can't be satisfied by matching text in the body.
+    const fm = content.match(/^---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(\r?\n|$)/);
+    expect(fm).not.toBeNull();
+    return {
+      content,
+      frontmatter: fm![1],
+      body: stripFrontmatter(content).toLowerCase(),
+    };
+  }
+
+  test("exists, validates, and frontmatter is `agent: build` with no `model:` line", () => {
+    const { frontmatter } = readBamSpecsAmend();
+    // agent: build with no model: line (the user picks the session model;
+    // recommend Grok 4.6, but do not pin it).
+    expect(/^agent:\s*build$/m.test(frontmatter)).toBe(true);
+    expect(/^model:/m.test(frontmatter)).toBe(false);
+  });
+
+  test("body encodes ticket resolution (§1)", () => {
+    const { body } = readBamSpecsAmend();
+    // asana / task / resolv: parse $ARGUMENTS or worktree for Asana id; confirm
+    // via permalink_url or project membership (not name). All three required.
+    expect(/asana/.test(body)).toBe(true);
+    expect(/task/.test(body)).toBe(true);
+    expect(/resolv/.test(body)).toBe(true);
+  });
+
+  test("body encodes target resolution (§2)", () => {
+    const { body } = readBamSpecsAmend();
+    // constitution.md must already exist; git toplevel for the cwd default.
+    // Conjunction of both so a body that names the law file without checking
+    // git toplevel fails.
+    expect(/constitution\.md/.test(body)).toBe(true);
+    expect(/git rev-parse --show-toplevel/.test(body)).toBe(true);
+  });
+
+  test("body aborts to init (§2b)", () => {
+    const { body } = readBamSpecsAmend();
+    // missing constitution.md or new prefix/section → abort and point the
+    // human at /bam-specs-init. Name init only as the abort target.
+    expect(/bam-specs-init/.test(body)).toBe(true);
+    expect(/abort|never init|do not re-init/.test(body)).toBe(true);
+  });
+
+  test("body drives stakeholder Q&A (§3)", () => {
+    const { body } = readBamSpecsAmend();
+    // one at a time + the literal `question` tool phrase + stakeholder|user
+    // perspective. Pin the backticked tool form (per review-task precedent)
+    // so plain "question" elsewhere does not satisfy.
+    expect(/one at a time/.test(body)).toBe(true);
+    expect(/`question` tool/.test(body)).toBe(true);
+    expect(/stakeholder|user perspective/.test(body)).toBe(true);
+  });
+
+  test("body encodes the amendment table (§4)", () => {
+    const { body } = readBamSpecsAmend();
+    // columns ID | description | action; replace-pairs. Conjunction of all
+    // four so a body that only names "id" without action/replace fails.
+    expect(/id/.test(body)).toBe(true);
+    expect(/description/.test(body)).toBe(true);
+    expect(/action/.test(body)).toBe(true);
+    expect(/replace/.test(body)).toBe(true);
+  });
+
+  test("body iterates until accepted (§5)", () => {
+    const { body } = readBamSpecsAmend();
+    // keep / modify / drop rows; loop until the human accepts the table.
+    expect(/iterate/.test(body)).toBe(true);
+    expect(/accept/.test(body)).toBe(true);
+  });
+
+  test("body commits constitution.md and excludes tests/cards (§6)", () => {
+    const { body } = readBamSpecsAmend();
+    // stage only constitution.md; tests and cards out of scope. Pin each
+    // so a body that commits without excluding tests/cards fails.
+    expect(/git add/.test(body)).toBe(true);
+    expect(/commit/.test(body)).toBe(true);
+    expect(/tests/.test(body)).toBe(true);
+    expect(/cards/.test(body)).toBe(true);
+    expect(/out of scope/.test(body)).toBe(true);
+  });
+});
+
 describe("install wiring (Phase C)", () => {
   test("read opencode/install.sh; assert its FILES array contains commands", () => {
     const installPath = join(import.meta.dir, "..", "..", "..", "install.sh");
