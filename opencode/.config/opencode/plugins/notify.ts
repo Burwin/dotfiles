@@ -5,6 +5,8 @@ import { join } from "node:path"
 import {
   dispatchEvent,
   makeDismissTracker,
+  muteNotifyAction,
+  notifyMuted,
   pingNtfy,
   tmuxSlug,
 } from "./notify/lib.ts"
@@ -175,7 +177,10 @@ export const NotifyPlugin: Plugin = async ({ $ }) => {
         type: string
         properties?: Record<string, unknown>
       }
-      const action = dispatchEvent(e.type, e.properties ?? {}, titleBase)
+      const action = muteNotifyAction(
+        dispatchEvent(e.type, e.properties ?? {}, titleBase),
+        notifyMuted(process.env.OPENCODE_NOTIFY),
+      )
       switch (action.kind) {
         case "noop":
           return

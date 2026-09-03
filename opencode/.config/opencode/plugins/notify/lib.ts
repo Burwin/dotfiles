@@ -251,3 +251,21 @@ export function makeDismissTracker(
 export function tmuxSlug(name: string): string {
   return name.replace(/[^A-Za-z0-9_-]/g, "_")
 }
+
+// notifyMuted — returns true when OPENCODE_NOTIFY (or similar) is a "mute"
+// value. Child plan-runner sessions set OPENCODE_NOTIFY=0 to silence per-step
+// idle toasts; the runner itself still fires its own pause/error/done notif.
+export function notifyMuted(value: string | undefined): boolean {
+  if (typeof value !== "string") return false
+  const v = value.trim().toLowerCase()
+  return v === "0" || v === "false" || v === "off"
+}
+
+// muteNotifyAction — turns a "notify" action into a silent "noop" when muted.
+// Used so child `bamboo plans run` sessions (with OPENCODE_NOTIFY=0) do not
+// emit per-step idle toasts; the runner still does its own top-level notify.
+// `dismiss` actions (resume signals) and non-muted notifies pass through.
+export function muteNotifyAction(action: Action, muted: boolean): Action {
+  if (muted && action.kind === "notify") return { kind: "noop" }
+  return action
+}

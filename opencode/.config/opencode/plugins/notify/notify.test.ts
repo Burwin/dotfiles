@@ -35,8 +35,11 @@ import { fileURLToPath } from "node:url"
 import {
   dispatchEvent,
   makeDismissTracker,
+  muteNotifyAction,
+  notifyMuted,
   pingNtfy,
   tmuxSlug,
+  type Action,
   type NtfyConfig,
 } from "./lib.ts"
 
@@ -206,6 +209,47 @@ describe("tmuxSlug", () => {
   })
 })
 
+describe("notifyMuted", () => {
+  test(`"0" / "false" / "off" / "FALSE" → true`, () => {
+    expect(notifyMuted("0")).toBe(true)
+    expect(notifyMuted("false")).toBe(true)
+    expect(notifyMuted("off")).toBe(true)
+    expect(notifyMuted("FALSE")).toBe(true)
+  })
+  test(`undefined / "" / "1" / "yes" → false`, () => {
+    expect(notifyMuted(undefined)).toBe(false)
+    expect(notifyMuted("")).toBe(false)
+    expect(notifyMuted("1")).toBe(false)
+    expect(notifyMuted("yes")).toBe(false)
+  })
+})
+
+describe("muteNotifyAction", () => {
+  const notifyAction: Action = {
+    kind: "notify",
+    urgency: "normal",
+    title: "T",
+    body: "B",
+    tag: "robot",
+  }
+  const dismissAction: Action = { kind: "dismiss", sessionID: "S1" }
+
+  test("a `notify` action becomes `{ kind: \"noop\" }` when muted", () => {
+    const result = muteNotifyAction(notifyAction, true)
+    expect(result).toEqual({ kind: "noop" })
+  })
+
+  test("notify action unchanged when not muted", () => {
+    const result = muteNotifyAction(notifyAction, false)
+    expect(result).toEqual(notifyAction)
+  })
+
+  test("a `dismiss` action is unchanged even when muted", () => {
+    const result = muteNotifyAction(dismissAction, true)
+    expect(result).toEqual(dismissAction)
+  })
+})
+
 describe("pingNtfy", () => {
   // Restore the real `fetch` between tests so a leak from one test can't
   // poison another.
@@ -222,7 +266,7 @@ describe("pingNtfy", () => {
       fetchCalls.push({ url, init })
       return Promise.resolve(new Response("", { status: 200 }))
     })
-    globalThis.fetch = fetchMock as unknown as typeof fetch
+    globalThis.fetch = fetchMock
   })
 
   afterEach(() => {
