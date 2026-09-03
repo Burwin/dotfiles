@@ -71,6 +71,22 @@
           }
         }
       }
+    },
+    "openrouter": {
+      "models": {
+        "cheap": {
+          "id": "@preset/cheap",
+          "name": "cheap",
+          "tool_call": true,
+          "limit": { "context": 128000, "output": 8192 }
+        },
+        "premium": {
+          "id": "@preset/premium",
+          "name": "premium",
+          "tool_call": true,
+          "limit": { "context": 128000, "output": 8192 }
+        }
+      }
     }
   },
   "mcp": {
