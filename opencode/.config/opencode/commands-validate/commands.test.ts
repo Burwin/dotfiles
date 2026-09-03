@@ -124,7 +124,7 @@ describe("bam-tdd-plan command", () => {
   });
 });
 
-describe("bam-tdd-plan grok tiers (MASTER-2033)", () => {
+describe("bam-tdd-plan cheap/premium tiers (MASTER-2033)", () => {
   test("body contains **cheap** and **premium**; does not contain Grok 4.6; still does not contain three tiers", () => {
     const filePath = join(commandsDir, "bam-tdd-plan.md");
     expect(existsSync(filePath)).toBe(true);
@@ -137,7 +137,7 @@ describe("bam-tdd-plan grok tiers (MASTER-2033)", () => {
   });
 });
 
-describe("bam-resume grok tiers (MASTER-2033)", () => {
+describe("bam-resume cheap/premium tiers (MASTER-2033)", () => {
   test("§4 contains `cheap` and `premium` and does not contain `Grok 4.6`; keep Opus 4.8 / GLM 5.2 absent", () => {
     const filePath = join(commandsDir, "bam-resume.md");
     expect(existsSync(filePath)).toBe(true);

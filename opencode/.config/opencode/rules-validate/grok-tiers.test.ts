@@ -17,7 +17,7 @@ function readJson(rel: string): any {
   return JSON.parse(readText(rel));
 }
 
-describe("plans.md grok tiers (MASTER-2033)", () => {
+describe("plans.md cheap/premium tiers (MASTER-2033)", () => {
   test("contains openrouter/cheap + openrouter/premium + Grok 4.6; does not contain xai/grok-4.6 or opencode/grok-build-0.1; still does not contain opus/glm", () => {
     const content = readText("rules/plans.md");
 
@@ -32,7 +32,7 @@ describe("plans.md grok tiers (MASTER-2033)", () => {
   });
 });
 
-describe("AGENTS.md Plans section grok tiers (MASTER-2033)", () => {
+describe("AGENTS.md Plans section cheap/premium tiers (MASTER-2033)", () => {
   test("Plans section contains `cheap` and `premium` and does not contain `Grok 4.6`; keep Opus 4.8 / GLM 5.2 absent", () => {
     const content = readText("AGENTS.md");
 
