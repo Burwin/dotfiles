@@ -479,6 +479,122 @@ describe("bam-specs-amend command", () => {
   });
 });
 
+describe("bam-specs-gaps command", () => {
+  // Load the command inside each test (never at describe/module-init) so a
+  // missing file surfaces as a normal assertion failure — same pattern as
+  // readBamSpecsAmend() above — and re-assert the validator is clean on every read.
+  // Each test pins one behavior via a token that was newly-absent before its
+  // authoring GREEN, so the red→green history stayed incremental.
+  function readBamSpecsGaps(): { content: string; frontmatter: string; body: string } {
+    const fileName = "bam-specs-gaps.md";
+    const filePath = join(commandsDir, fileName);
+    expect(existsSync(filePath)).toBe(true);
+    const content = readFileSync(filePath, "utf8");
+    // Must satisfy the convention validator (zero issues) on every read.
+    expect(validateCommand(fileName, content)).toEqual([]);
+    // Capture the inner text of the leading --- … --- block so frontmatter
+    // assertions can't be satisfied by matching text in the body.
+    const fm = content.match(/^---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(\r?\n|$)/);
+    expect(fm).not.toBeNull();
+    return {
+      content,
+      frontmatter: fm![1],
+      body: stripFrontmatter(content).toLowerCase(),
+    };
+  }
+
+  test("exists, validates, and frontmatter is `agent: build` with no `model:` line", () => {
+    const { frontmatter } = readBamSpecsGaps();
+    // agent: build with no model: line (the user picks the session model;
+    // recommend Grok 4.6, but do not pin it).
+    expect(/^agent:\s*build$/m.test(frontmatter)).toBe(true);
+    expect(/^model:/m.test(frontmatter)).toBe(false);
+  });
+
+  test("body encodes target resolution (§1)", () => {
+    const { body } = readBamSpecsGaps();
+    // §1-specific: the law file at the target root, git toplevel for the
+    // cwd default, and the abort target when the law is absent. All three
+    // required so a body that names the law file without the init abort
+    // fails.
+    expect(/constitution\.md/.test(body)).toBe(true);
+    expect(/git rev-parse --show-toplevel/.test(body)).toBe(true);
+    expect(/bam-specs-init/.test(body)).toBe(true);
+  });
+
+  test("body encodes scope (§2)", () => {
+    const { body } = readBamSpecsGaps();
+    // §2-specific: whole-law default plus the optional prefix/section
+    // filter for large repos. All four required so a body that states the
+    // whole-law default without the filter escape hatch fails.
+    expect(/whole/.test(body)).toBe(true);
+    expect(/prefix/.test(body)).toBe(true);
+    expect(/section/.test(body)).toBe(true);
+    expect(/filter/.test(body)).toBe(true);
+  });
+
+  test("body defines proper test (§3a)", () => {
+    const { body } = readBamSpecsGaps();
+    // §3a-specific: proper test = an automated test that asserts the rule
+    // holds; docs/process notes count only in the rare case where a test
+    // does not make sense. All three required so a body that names test
+    // kinds without the automated-first rule and the rare docs escape
+    // fails.
+    expect(/automated/.test(body)).toBe(true);
+    expect(/assert/.test(body)).toBe(true);
+    expect(/rare/.test(body)).toBe(true);
+  });
+
+  test("body diffs each rule and lists the gaps (§3b/§4)", () => {
+    const { body } = readBamSpecsGaps();
+    // §3b/§4-specific: per-rule diff against tests/suites/CI, then a gap
+    // list with searched locations. All three required so a body that
+    // defines a proper test without diffing each rule and listing the
+    // misses with where it looked fails.
+    expect(/gap/.test(body)).toBe(true);
+    expect(/list/.test(body)).toBe(true);
+    expect(/searched|locations searched/.test(body)).toBe(true);
+  });
+
+  test("body asks filing mode without silent auto-create (§5a)", () => {
+    const { body } = readBamSpecsGaps();
+    // §5a-specific: ask filing mode every run via the `question` tool one
+    // at a time, never filing silently. All four required so a body that
+    // only asks a `question` elsewhere (e.g. the §2 filter clarify) without
+    // the filing-mode ask and the no-silent rule fails.
+    expect(/`question` tool/.test(body)).toBe(true);
+    expect(/one at a time/.test(body)).toBe(true);
+    expect(/filing/.test(body)).toBe(true);
+    expect(/silently|do not auto-create/.test(body)).toBe(true);
+  });
+
+  test("body files the default card covering test+code (§5b)", () => {
+    const { body } = readBamSpecsGaps();
+    // Default card shape: one plan on the current card, filed via
+    // asana_create_tasks. "code" also appears in the intro; current card /
+    // one plan / asana_create_tasks are what pin §5b vs a body that only
+    // asks the filing mode.
+    expect(/current card/.test(body)).toBe(true);
+    expect(/one plan/.test(body)).toBe(true);
+    expect(/asana_create_tasks/.test(body)).toBe(true);
+    expect(/code/.test(body)).toBe(true);
+  });
+
+  test("body states relations + stop (§6)", () => {
+    const { body } = readBamSpecsGaps();
+    // Relations + stop: runnable after init/amend (names both), does not
+    // itself init/amend/implement (cards only), stops after filing or
+    // list-only. Several of these tokens also appear in the intro, so they
+    // would stay green if §6 itself disappeared; the conjunction still
+    // requires both sibling command names.
+    expect(/bam-specs-init/.test(body)).toBe(true);
+    expect(/bam-specs-amend/.test(body)).toBe(true);
+    expect(/runnable after/.test(body)).toBe(true);
+    expect(/stop/.test(body)).toBe(true);
+    expect(/do not implement|cards only/.test(body)).toBe(true);
+  });
+});
+
 describe("install wiring (Phase C)", () => {
   test("read opencode/install.sh; assert its FILES array contains commands", () => {
     const installPath = join(import.meta.dir, "..", "..", "..", "install.sh");
