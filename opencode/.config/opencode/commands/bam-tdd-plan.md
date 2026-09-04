@@ -41,10 +41,10 @@ Rules for the decomposition:
 
 **Every step names a model tier** capable of executing it with confidence; don't leave it implicit. Use the two tiers and routing in `@rules/plans.md`:
 
-- **Grok Build 0.1**: mechanical / well-specified steps (scaffolding, wiring, writing a test to a precise spec, renames).
-- **Grok 4.6**: hard + mid (judgment, prose/prompts/docs, bounded implementation, risky live-config, deploy + review).
+- **cheap**: Mechanical: scaffolding, wiring, renames, boilerplate, tests written to a precise spec, running commands.
+- **premium**: Hard + mid: judgment, prose/prompts/docs, bounded implementation, risky live-config, deploy + review.
 
-Record the tier in a **Model** column in the step table and echo it in each trigger sentence. The friendly name goes in the trigger; the full `provider/model-id` lives in the `@rules/plans.md` table. Pick only a tier you're confident can do the step; if unsure, choose the stronger one (Grok 4.6) and say why.
+Record the tier in a **Model** column in the step table and echo it in each trigger sentence. The friendly name goes in the trigger; the full `provider/model-id` lives in the `@rules/plans.md` table. Pick only a tier you're confident can do the step; if unsure, choose the stronger one (premium) and say why.
 
 ## 5. Write the plan file
 

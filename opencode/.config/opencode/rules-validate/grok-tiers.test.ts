@@ -17,27 +17,32 @@ function readJson(rel: string): any {
   return JSON.parse(readText(rel));
 }
 
-describe("plans.md grok tiers (MASTER-1989)", () => {
-  test("contains Grok 4.6 + xai/grok-4.6; does not contain opencode/claude-opus-4-8 or opencode/glm-5.2", () => {
+describe("plans.md cheap/premium tiers (MASTER-2033)", () => {
+  test("contains openrouter/cheap + openrouter/premium + Grok 4.6; does not contain xai/grok-4.6 or opencode/grok-build-0.1; still does not contain opus/glm", () => {
     const content = readText("rules/plans.md");
 
-    // Pin the two-tier table: Grok 4.6 + xai/grok-4.6 present; old zen ids gone.
+    // Pin the two-tier table: openrouter/cheap + openrouter/premium + legacy Grok 4.6 note; old ids gone. Opus/GLM still absent.
+    expect(content).toContain("openrouter/cheap");
+    expect(content).toContain("openrouter/premium");
     expect(content).toContain("Grok 4.6");
-    expect(content).toContain("xai/grok-4.6");
+    expect(content).not.toContain("xai/grok-4.6");
+    expect(content).not.toContain("opencode/grok-build-0.1");
     expect(content).not.toContain("opencode/claude-opus-4-8");
     expect(content).not.toContain("opencode/glm-5.2");
   });
 });
 
-describe("AGENTS.md Plans section grok tiers (MASTER-1989)", () => {
-  test("Plans section contains Grok 4.6 and does not contain Opus 4.8 or GLM 5.2", () => {
+describe("AGENTS.md Plans section cheap/premium tiers (MASTER-2033)", () => {
+  test("Plans section contains `cheap` and `premium` and does not contain `Grok 4.6`; keep Opus 4.8 / GLM 5.2 absent", () => {
     const content = readText("AGENTS.md");
 
-    // Pin the Plans intro to Grok 4.6; Opus/GLM must stay gone.
-    const plansSection = (content.match(/## Plans([\s\S]*?)(?=\n## |$)/) || ["", content])[1];
-    expect(plansSection).toContain("Grok 4.6");
-    expect(plansSection).not.toContain("Opus 4.8");
-    expect(plansSection).not.toContain("GLM 5.2");
+    // Pin the Plans intro to cheap/premium; Grok 4.6 gone; Opus/GLM stay absent.
+    const plansSection = (content.match(/## Plans([\s\S]*?)(?=\n## |$)/) || ["", content])[1].toLowerCase();
+    expect(plansSection).toContain("cheap");
+    expect(plansSection).toContain("premium");
+    expect(plansSection).not.toContain("grok 4.6");
+    expect(plansSection).not.toContain("opus 4.8");
+    expect(plansSection).not.toContain("glm 5.2");
   });
 });
 
