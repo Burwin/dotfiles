@@ -1,5 +1,16 @@
 # TDD plan routing: cheap / premium OpenRouter presets (MASTER-2033)
 
+> **Status:** shipped; archived 2026-09-04. Nothing supersedes it.
+> Merged to `m` via PR #25 (squash `34eb25c`). Asana MASTER-2033 → DONE.
+> Shipped artifacts:
+> - `opencode/.config/opencode/rules/plans.md` (cheap / premium table + legacy Grok one-liner)
+> - `opencode/.config/opencode/commands/bam-tdd-plan.md` §4
+> - `opencode/.config/opencode/commands/bam-resume.md` §4 example
+> - `opencode/.config/opencode/AGENTS.md` Plans bullet
+> - `opencode/.config/opencode/rules-validate/grok-tiers.test.ts`
+> - `opencode/.config/opencode/commands-validate/commands.test.ts` (tier pins)
+> Decision history below preserved as-is.
+
 **Asana:** MASTER-2033 (GID `1218154115086110`) — `/bam-tdd-plan` needs to use new openrouter presets
 **Permalink:** https://app.asana.com/1/1203819684139908/project/1204506183888935/task/1218154115086110
 **Project:** MASTER / IN PROGRESS
@@ -139,7 +150,7 @@ Adjacent trivial steps (e.g. 5→6) may run back-to-back, but each keeps its own
 - [x] Step 7 — RED: pin AGENTS.md Plans cheap/premium
 - [x] Step 8 — GREEN: rewrite AGENTS.md Plans bullet
 - [x] Step 9 — VERIFY: suite + restart + /bam-tdd-plan smoke (suite 57/57. CLI smoke with `OPENCODE_CONFIG` + `OPENCODE_CONFIG_DIR` pointed at this worktree (fresh process, same as a restart): resolved `/bam-tdd-plan` template names only cheap / premium, no Grok 4.6 / Grok Build. Remaining gate: live `~/.config/opencode` still points at the main checkout, so a post-merge TUI re-smoke (ff main, restart, throwaway `/bam-tdd-plan`) folds into Step 10.)
-- [ ] Step 10 — DEPLOY: PR → m + archive
+- [x] Step 10 — DEPLOY: PR → m + archive
 
 ## References
 
