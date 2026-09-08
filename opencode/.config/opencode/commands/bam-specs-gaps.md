@@ -1,9 +1,9 @@
 ---
-description: Diff a repo against constitution.md, list rules with no proper test, then file cards for the missing tests + the code that makes them pass. Runnable after init or amend.
+description: Diff a repo against constitution.md, list rules with no proper test, then emit a /bam-tdd-plan handoff snippet (default) or list-only / per-gap cards. Runnable after init or amend.
 agent: build
 ---
 
-Diff a repo against `constitution.md`, list rules with no proper test, then file cards for the missing tests plus the code that makes them pass. The flow: resolve the **target** (§1), set the **scope** (§2), define a **proper test** and **diff each rule** (§3), **list the gaps** (§4), **ask filing mode** then **file** (§5), then **stop** (§6). Cards only. Do not implement.
+Diff a repo against `constitution.md`, list rules with no proper test, then emit a `/bam-tdd-plan` handoff snippet for the missing tests plus the code that makes them pass (or list-only / per-gap cards). The flow: resolve the **target** (§1), set the **scope** (§2), define a **proper test** and **diff each rule** (§3), **list the gaps** (§4), **ask filing mode** then hand off or file per the pick (§5), then **stop** (§6). Do not implement.
 
 This command is `agent: build`. Runnable after `/bam-specs-init` or `/bam-specs-amend`. It does not init and does not amend.
 
@@ -48,27 +48,32 @@ Emit a gap list: one row per rule with no proper test. Each row carries:
 
 Then stop for §5. Do not file anything before the human picks a mode.
 
-## 5. File cards
+## 5. Filing mode
 
 ### 5a. Ask the filing mode
 
 - **Ask every run.** The filing mode is never carried over from a previous run and never assumed. After the gap list, ask the human which mode this run uses.
-- **How to ask:** with the `question` tool, **one at a time**, recommended default first. §5b names the default and what gets filed under it.
+- **How to ask:** with the `question` tool, **one at a time**, recommended default first. The three options are **handoff** (default, §5b), **list-only**, and **per-gap** cards (§5c).
 - **Never file silently.** Do not auto-create anything without an explicit answer. No mode is chosen on the human's behalf, and no filing happens until they pick one.
 
-### 5b. File the default card
+### 5b. Default: one-plan /bam-tdd-plan handoff
 
 - **Default:** one plan on the current card. That plan covers the missing tests plus the code that makes them pass.
 - **Resolve the current card** the same way as `/bam-specs-amend` §1:
-  1. If the worktree directory name ends in a task id (`MASTER-NNNN` or similar), that is the card. Confirm the GID.
+  1. If the worktree directory name ends in a task id (`MASTER-NNNN` or similar), that is the card.
   2. Otherwise use `asana_search_tasks` with the id as the `text` param (it searches the per-project task-number field, not only name).
   3. If still ambiguous, narrow with `projects_any` filtered to the relevant project.
-  Confirm the match by `permalink_url` or project membership, not by name. The card name usually looks unrelated to the id.
-- **How to file:** `asana_create_tasks`. Filing happens only after the human picks a mode in §5a. There is no silent path.
-- **List-only alternative:** offer list-only (no filing) alongside the default. Other modes (for example per-gap cards) may be offered at runtime; they are not the default.
+   Confirm the match by `permalink_url` or project membership, not by name. The card name usually looks unrelated to the id.
+- **Handoff:** when the human picks handoff in §5a, emit a copy-paste `/bam-tdd-plan` prompt for a **fresh** session. Do **not** author the plan inline. This command never writes a `PLAN.md` and never creates a plan subtask. Do not invoke `/bam-tdd-plan` in this session.
+- **Snippet payload:** `/bam-tdd-plan {TASK-ID} (GID {gid}): {summary}`, plus the gap list from §4.
+
+### 5c. Alternatives
+
+- **list-only:** stop after the gap list. No snippet, no cards.
+- **per-gap cards:** file one card per gap via `asana_create_tasks` (test + code per gap). This is the only create path.
 
 ## 6. Relations + stop
 
-Runnable after `/bam-specs-init` or `/bam-specs-amend`. This command does not init (no new law, no new prefix or section) and does not amend (no `constitution.md` edit). Do not implement the missing tests or the missing code; cards only.
+Runnable after `/bam-specs-init` or `/bam-specs-amend`. This command does not init (no new law, no new prefix or section) and does not amend (no `constitution.md` edit). Do not implement the missing tests or the missing code. This command never writes a plan file.
 
-**Stop** after filing, or after the gap list if the human chose list-only.
+Stop after the handoff snippet, or after list-only, or after per-gap filing.
