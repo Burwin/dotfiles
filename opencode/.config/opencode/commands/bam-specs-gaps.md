@@ -60,10 +60,10 @@ Then stop for §5. Do not file anything before the human picks a mode.
 
 - **Default:** one plan on the current card. That plan covers the missing tests plus the code that makes them pass.
 - **Resolve the current card** the same way as `/bam-specs-amend` §1:
-  1. If the worktree directory name ends in a task id (`MASTER-NNNN` or similar), that is the card.
+  1. If the worktree directory name ends in a task id (`MASTER-NNNN` or similar), that is the card. Confirm the GID and summary.
   2. Otherwise use `asana_search_tasks` with the id as the `text` param (it searches the per-project task-number field, not only name).
   3. If still ambiguous, narrow with `projects_any` filtered to the relevant project.
-   Confirm the match by `permalink_url` or project membership, not by name. The card name usually looks unrelated to the id.
+  Confirm the match by `permalink_url` or project membership, not by name. The card name usually looks unrelated to the id. Fetch GID and summary either way so the snippet can be formed.
 - **Handoff:** when the human picks handoff in §5a, emit a copy-paste `/bam-tdd-plan` prompt for a **fresh** session. Do **not** author the plan inline. This command never writes a `PLAN.md` and never creates a plan subtask. Do not invoke `/bam-tdd-plan` in this session.
 - **Snippet payload:** `/bam-tdd-plan {TASK-ID} (GID {gid}): {summary}`, plus the gap list from §4.
 

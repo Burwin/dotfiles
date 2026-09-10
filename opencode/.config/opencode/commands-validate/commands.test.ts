@@ -506,7 +506,9 @@ describe("bam-specs-gaps command", () => {
   }
 
   function slice5b(body: string): string {
-    return (body.match(/### 5b\. .*?([\s\S]*?)(?=\n### 5c\. |\n## \d\. |$)/) || ["", body])[1];
+    const match = body.match(/### 5b\. .*?([\s\S]*?)(?=\n### 5c\. |\n## \d\. |$)/);
+    expect(match).not.toBeNull();
+    return match![1];
   }
 
   test("exists, validates, and frontmatter is `agent: build` with no `model:` line", () => {
