@@ -27,6 +27,7 @@ Rules for the decomposition:
 - Order steps so each builds on the last — setup/scaffold first, then the core behaviors, then edge cases, then refactors, then wiring/integration, then deploy.
 - Group steps into phases; every phase should be independently shippable.
 - Only mark a step as already done if that work genuinely exists.
+- Any step that needs sudo, a TTY, or a human must include `human-gated` in the label (or model tier). `sudo` in the step body (not `sudo-free`) also gates even if unmarked. The runner advances only when that step's Progress box is `[x]` on disk.
 
 ## 3. Trigger sentence per step
 

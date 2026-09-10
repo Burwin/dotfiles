@@ -55,3 +55,10 @@ frontmatter (where `model:` must be a full `provider/model-id`).
 
 Pick only a tier you're confident can do the step. When torn between two,
 choose the stronger one (**premium**) and note why in the step row.
+
+## Human-gated steps
+
+Any step that needs sudo, a TTY, or a human must include `human-gated` in
+the label (or model tier). `sudo` in the step body (not `sudo-free`) also
+gates even if unmarked. The runner advances only when that step's Progress
+box is `[x]` on disk.
