@@ -174,4 +174,4 @@ After each step completes, post the next trigger verbatim.
 - After 9 → ▶️ Step 10 of 11 — VERIFY: suite + smoke — model: premium — plan: `docs/plans/bam-specs-gaps-handoff/PLAN.md`
 - After 10 → ▶️ Step 11 of 11 — DEPLOY: squash, PR, merge — model: premium — plan: `docs/plans/bam-specs-gaps-handoff/PLAN.md`
 
-▶️ Step 2 of 11 — GREEN: rewrite §5b default to `/bam-tdd-plan` handoff — model: premium — plan: `docs/plans/bam-specs-gaps-handoff/PLAN.md`
+▶️ Step 11 of 11 — DEPLOY: squash, PR, merge — model: premium — plan: `docs/plans/bam-specs-gaps-handoff/PLAN.md`

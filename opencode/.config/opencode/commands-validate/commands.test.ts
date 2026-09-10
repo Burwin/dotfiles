@@ -628,6 +628,8 @@ describe("bam-specs-gaps command", () => {
     expect(/gid/.test(s5b)).toBe(true);
     expect(/summary/.test(s5b)).toBe(true);
     expect(/gap list/.test(s5b)).toBe(true);
+    expect(/do not guess/.test(s5b)).toBe(true);
+    expect(/permalink/.test(s5b)).toBe(true);
     expect(/handoff/.test(s5a)).toBe(true);
     expect(/list-only/.test(s5a)).toBe(true);
     expect(/per-gap/.test(s5a)).toBe(true);
