@@ -147,7 +147,7 @@ Token discipline: each GREEN must not introduce a later test's tokens.
 - [x] Step 8 — GREEN: rewrite intro + §6
 - [x] Step 9 — REFACTOR: coherence pass
 - [x] Step 10 — VERIFY: suite + smoke
-- [x] Step 11 — DEPLOY: squash, PR, merge
+- [ ] Step 11 — DEPLOY: squash, PR, merge
 
 ## References
 

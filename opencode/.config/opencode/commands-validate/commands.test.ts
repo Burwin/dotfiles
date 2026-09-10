@@ -505,10 +505,26 @@ describe("bam-specs-gaps command", () => {
     };
   }
 
-  function slice5b(body: string): string {
-    const match = body.match(/### 5b\. .*?([\s\S]*?)(?=\n### 5c\. |\n## \d\. |$)/);
+  function sliceSection(body: string, re: RegExp): string {
+    const match = body.match(re);
     expect(match).not.toBeNull();
     return match![1];
+  }
+
+  function slice5(body: string): string {
+    return sliceSection(body, /## 5\. .*?([\s\S]*?)(?=\n## \d\. |$)/);
+  }
+
+  function slice5a(body: string): string {
+    return sliceSection(body, /### 5a\. .*?([\s\S]*?)(?=\n### 5b\. |$)/);
+  }
+
+  function slice5b(body: string): string {
+    return sliceSection(body, /### 5b\. .*?([\s\S]*?)(?=\n### 5c\. |\n## \d\. |$)/);
+  }
+
+  function slice6(body: string): string {
+    return sliceSection(body, /## 6\. .*?([\s\S]*?)(?=\n## \d\. |$)/);
   }
 
   test("exists, validates, and frontmatter is `agent: build` with no `model:` line", () => {
@@ -596,19 +612,21 @@ describe("bam-specs-gaps command", () => {
     // plan.md; never files a plan subtask. Scope to ### 5b.
     const s5b = slice5b(body);
     expect(/paste/.test(s5b)).toBe(true);
-    expect(/fresh/.test(s5b)).toBe(true);
-    expect(/plan\.md/.test(s5b)).toBe(true);
-    expect(/subtask/.test(s5b)).toBe(true);
+    expect(/fresh session/.test(s5b)).toBe(true);
+    expect(/never writes a [`']?plan\.md/.test(s5b)).toBe(true);
+    expect(/never creates a plan subtask/.test(s5b)).toBe(true);
   });
 
   test("snippet includes resolved card GID + the gap list; question options are handoff (default), list-only, per-gap cards; per-gap is the `asana_create_tasks` path (§5)", () => {
     const { body } = readBamSpecsGaps();
     // Default snippet: resolved card GID + the gap list. 5a names the three
     // modes (handoff default). per-gap is the only asana_create_tasks path.
-    const s5 = (body.match(/## 5\. .*?([\s\S]*?)(?=\n## \d\. |$)/) || ["", body])[1];
-    const s5a = (body.match(/### 5a\. .*?([\s\S]*?)(?=\n### 5b\. |$)/) || ["", body])[1];
+    const s5 = slice5(body);
+    const s5a = slice5a(body);
     const s5b = slice5b(body);
+    expect(/task-id/.test(s5b)).toBe(true);
     expect(/gid/.test(s5b)).toBe(true);
+    expect(/summary/.test(s5b)).toBe(true);
     expect(/gap list/.test(s5b)).toBe(true);
     expect(/handoff/.test(s5a)).toBe(true);
     expect(/list-only/.test(s5a)).toBe(true);
@@ -625,7 +643,7 @@ describe("bam-specs-gaps command", () => {
     expect(/bam-specs-init/.test(body)).toBe(true);
     expect(/bam-specs-amend/.test(body)).toBe(true);
     expect(/runnable after/.test(body)).toBe(true);
-    const s6 = (body.match(/## 6\. .*?([\s\S]*?)(?=\n## \d\. |$)/) || ["", body])[1];
+    const s6 = slice6(body);
     expect(/stop/.test(s6)).toBe(true);
     expect(/stop after.*(handoff|snippet|list-only|per-gap)/.test(s6)).toBe(true);
     expect(/do not implement/.test(body)).toBe(true);
