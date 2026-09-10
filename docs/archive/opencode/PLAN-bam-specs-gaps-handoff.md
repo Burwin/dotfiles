@@ -1,5 +1,12 @@
 # `/bam-specs-gaps` §5: hand off to `/bam-tdd-plan` (MASTER-2034)
 
+> **Status:** shipped; archived 2026-09-10. Nothing supersedes it.
+> Merged to `m` via PR #26 (squash `76ef17c`). Asana MASTER-2034 → DONE.
+> Shipped artifacts:
+> - `opencode/.config/opencode/commands/bam-specs-gaps.md` §5/§6/intro
+> - `opencode/.config/opencode/commands-validate/commands.test.ts` (handoff pins)
+> Decision history below preserved as-is.
+
 **Asana:** MASTER-2034 (GID `1218176378652847`) — bam-specs-gaps: hand off to /bam-tdd-plan, do not file a plan
 **Permalink:** https://app.asana.com/1/1203819684139908/project/1204506183888935/task/1218176378652847
 **Plan path:** `docs/plans/bam-specs-gaps-handoff/PLAN.md`
@@ -147,7 +154,7 @@ Token discipline: each GREEN must not introduce a later test's tokens.
 - [x] Step 8 — GREEN: rewrite intro + §6
 - [x] Step 9 — REFACTOR: coherence pass
 - [x] Step 10 — VERIFY: suite + smoke
-- [ ] Step 11 — DEPLOY: squash, PR, merge
+- [x] Step 11 — DEPLOY: squash, PR, merge
 
 ## References
 
