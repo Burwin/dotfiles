@@ -505,6 +505,28 @@ describe("bam-specs-gaps command", () => {
     };
   }
 
+  function sliceSection(body: string, re: RegExp): string {
+    const match = body.match(re);
+    expect(match).not.toBeNull();
+    return match![1];
+  }
+
+  function slice5(body: string): string {
+    return sliceSection(body, /## 5\. .*?([\s\S]*?)(?=\n## \d\. |$)/);
+  }
+
+  function slice5a(body: string): string {
+    return sliceSection(body, /### 5a\. .*?([\s\S]*?)(?=\n### 5b\. |$)/);
+  }
+
+  function slice5b(body: string): string {
+    return sliceSection(body, /### 5b\. .*?([\s\S]*?)(?=\n### 5c\. |\n## \d\. |$)/);
+  }
+
+  function slice6(body: string): string {
+    return sliceSection(body, /## 6\. .*?([\s\S]*?)(?=\n## \d\. |$)/);
+  }
+
   test("exists, validates, and frontmatter is `agent: build` with no `model:` line", () => {
     const { frontmatter } = readBamSpecsGaps();
     // agent: build with no model: line (the user picks the session model;
@@ -570,30 +592,66 @@ describe("bam-specs-gaps command", () => {
     expect(/silently|do not auto-create/.test(body)).toBe(true);
   });
 
-  test("body files the default card covering test+code (§5b)", () => {
+  test("body defaults §5b to one-plan /bam-tdd-plan handoff (§5b)", () => {
     const { body } = readBamSpecsGaps();
-    // Default card shape: one plan on the current card, filed via
-    // asana_create_tasks. "code" also appears in the intro; current card /
-    // one plan / asana_create_tasks are what pin §5b vs a body that only
-    // asks the filing mode.
-    expect(/current card/.test(body)).toBe(true);
-    expect(/one plan/.test(body)).toBe(true);
-    expect(/asana_create_tasks/.test(body)).toBe(true);
-    expect(/code/.test(body)).toBe(true);
+    // §5b default: handoff via /bam-tdd-plan (one plan on current card + code).
+    // Scope to ### 5b so asana_create_tasks negative stays scoped (per-gap
+    // brings the token back under §5c).
+    const s5b = slice5b(body);
+    expect(/bam-tdd-plan/.test(s5b)).toBe(true);
+    expect(/handoff/.test(s5b)).toBe(true);
+    expect(/one plan/.test(s5b)).toBe(true);
+    expect(/current card/.test(s5b)).toBe(true);
+    expect(/code/.test(s5b)).toBe(true);
+    expect(s5b).not.toContain("asana_create_tasks");
+  });
+
+  test("default handoff is copy-paste into a fresh session, never a plan file, never a plan subtask (§5b)", () => {
+    const { body } = readBamSpecsGaps();
+    // Mirror review-task §7: paste snippet for a fresh session; never writes
+    // plan.md; never files a plan subtask. Scope to ### 5b.
+    const s5b = slice5b(body);
+    expect(/paste/.test(s5b)).toBe(true);
+    expect(/fresh session/.test(s5b)).toBe(true);
+    expect(/never writes a [`']?plan\.md/.test(s5b)).toBe(true);
+    expect(/never creates a plan subtask/.test(s5b)).toBe(true);
+    expect(/do not invoke/.test(s5b)).toBe(true);
+  });
+
+  test("snippet includes resolved card GID + the gap list; question options are handoff (default), list-only, per-gap cards; per-gap is the `asana_create_tasks` path (§5)", () => {
+    const { body } = readBamSpecsGaps();
+    // Default snippet: resolved card GID + the gap list. 5a names the three
+    // modes (handoff default). per-gap is the only asana_create_tasks path.
+    const s5 = slice5(body);
+    const s5a = slice5a(body);
+    const s5b = slice5b(body);
+    expect(/task-id/.test(s5b)).toBe(true);
+    expect(/gid/.test(s5b)).toBe(true);
+    expect(/summary/.test(s5b)).toBe(true);
+    expect(/gap list/.test(s5b)).toBe(true);
+    expect(/do not guess/.test(s5b)).toBe(true);
+    expect(/permalink/.test(s5b)).toBe(true);
+    expect(/handoff/.test(s5a)).toBe(true);
+    expect(/list-only/.test(s5a)).toBe(true);
+    expect(/per-gap/.test(s5a)).toBe(true);
+    expect(/asana_create_tasks/.test(s5)).toBe(true);
+    expect(/per-gap.*asana_create_tasks|asana_create_tasks.*per-gap/.test(s5)).toBe(true);
   });
 
   test("body states relations + stop (§6)", () => {
     const { body } = readBamSpecsGaps();
-    // Relations + stop: runnable after init/amend (names both), does not
-    // itself init/amend/implement (cards only), stops after filing or
-    // list-only. Several of these tokens also appear in the intro, so they
-    // would stay green if §6 itself disappeared; the conjunction still
-    // requires both sibling command names.
+    // Stop after handoff snippet, list-only, or per-gap filing. Keep
+    // /do not implement/. Intro must not sell "file cards" as the default.
+    // Several tokens also appear in intro, so conjunction requires §6.
     expect(/bam-specs-init/.test(body)).toBe(true);
     expect(/bam-specs-amend/.test(body)).toBe(true);
     expect(/runnable after/.test(body)).toBe(true);
-    expect(/stop/.test(body)).toBe(true);
-    expect(/do not implement|cards only/.test(body)).toBe(true);
+    const s6 = slice6(body);
+    expect(/stop/.test(s6)).toBe(true);
+    expect(/stop after.*(handoff|snippet|list-only|per-gap)/.test(s6)).toBe(true);
+    expect(/do not implement/.test(body)).toBe(true);
+    const intro = body.split(/\n## /)[0];
+    expect(/file cards/.test(intro)).toBe(false);
   });
 });
 
