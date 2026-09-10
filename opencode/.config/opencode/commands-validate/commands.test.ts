@@ -615,6 +615,7 @@ describe("bam-specs-gaps command", () => {
     expect(/fresh session/.test(s5b)).toBe(true);
     expect(/never writes a [`']?plan\.md/.test(s5b)).toBe(true);
     expect(/never creates a plan subtask/.test(s5b)).toBe(true);
+    expect(/do not invoke/.test(s5b)).toBe(true);
   });
 
   test("snippet includes resolved card GID + the gap list; question options are handoff (default), list-only, per-gap cards; per-gap is the `asana_create_tasks` path (§5)", () => {

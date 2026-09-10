@@ -62,8 +62,9 @@ Then stop for §5. Do not file anything before the human picks a mode.
 - **Resolve the current card** the same way as `/bam-specs-amend` §1:
   1. If the worktree directory name ends in a task id (`MASTER-NNNN` or similar), that is the card. Confirm the GID and summary.
   2. If the worktree name has no task id, ask for a task id or permalink via the `question` tool before searching. Do not guess. `$ARGUMENTS` is path/filter only, not a task id.
-  3. Then use `asana_search_tasks` with that id as the `text` param (it searches the per-project task-number field, not only name).
-  4. If still ambiguous, narrow with `projects_any` filtered to the relevant project.
+  3. If given a permalink, extract the GID from the URL and fetch the task (`asana-task-get` / `asana_get_task`). Do not pass the URL to `asana_search_tasks`. Read the task-number field for `{TASK-ID}`.
+  4. If given a task id, use `asana_search_tasks` with that id as the `text` param (it searches the per-project task-number field, not only name).
+  5. If still ambiguous, narrow with `projects_any` filtered to the relevant project.
   Confirm the match by `permalink_url` or project membership, not by name. The card name usually looks unrelated to the id. Fetch GID and summary either way so the snippet can be formed.
 - **Handoff:** when the human picks handoff in §5a, emit a copy-paste `/bam-tdd-plan` prompt for a **fresh session**. Do **not** author the plan inline. This command never writes a `PLAN.md` and never creates a plan subtask. Do not invoke `/bam-tdd-plan` in this session.
 - **Snippet payload:** `/bam-tdd-plan {TASK-ID} (GID {gid}): {summary}`, plus the gap list from §4.
@@ -71,7 +72,7 @@ Then stop for §5. Do not file anything before the human picks a mode.
 ### 5c. Alternatives
 
 - **list-only:** stop after the gap list. No snippet, no cards.
-- **per-gap cards:** file one card per gap via `asana_create_tasks` (test + code per gap). This is the only create path.
+- **per-gap cards:** resolve the current card first (same as §5b) so creates land in that project. Then file one card per gap via `asana_create_tasks` (test + code per gap). This is the only create path.
 
 ## 6. Relations + stop
 
