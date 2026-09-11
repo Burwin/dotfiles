@@ -53,6 +53,9 @@ Action values: `add` / `replace with <id>` / `drop` / `replaces <id>`.
 - On disk, never edit existing rule text. Tags only. Old line gets `[REPLACED_BY: <new>]` or `[CANCELLED]`. New line gets `[REPLACES: <old>]` when it replaces.
 - IDs: short uppercase prefix + sequential number. Never reused. New IDs are the next unused number in that prefix.
 - No cap. Any existing section. A new section is already an abort (see §2).
+- Description is the actual constitution line that will land on disk, not a shorthand paraphrase.
+- Put the tags that will be written in that cell: `add` is the new sentence(s); `replace with <id>` is the complete existing line (including any tags already on it) plus `[REPLACED_BY: <new>]`; `replaces <id>` is the new sentence(s) plus `[REPLACES: <old>]`; `drop` is the complete existing line (including any tags already on it) plus `[CANCELLED]`.
+- If the line contains `|`, write it as `\|` in the table only so the markdown table holds. Unescape to `|` before writing `constitution.md`.
 
 ## 5. Iterate until accepted
 
