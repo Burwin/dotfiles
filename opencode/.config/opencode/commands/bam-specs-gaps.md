@@ -36,7 +36,7 @@ Scan `constitution.md` for live IDs. Skip `[CANCELLED]` and `[REPLACED_BY]`.
 
 A live rule is covered only if a test mentions that exact ID in the name, fact title, comment, or assert message. Inferred behavior without that ID token does not count.
 
-If a test already pins the rule (it asserts the rule) but does not mention the ID, add the mention to that test after one confirm per run. Ask with the `question` tool, recommended default first. One ask per run, not per ID. Mentions go only onto tests that already assert the rule. Do not put that rule on the gap list.
+If a test already pins the rule (it asserts the rule) but does not mention the ID, add the mention to that test after one confirm per run. Ask with the `question` tool, recommended default first. One mention-write ask per run, not per ID. That ask does not replace the §2 scope question or the §5 filing-mode question. Mentions go only onto tests that already assert the rule. Do not put that rule on the gap list. If the confirm is declined, leave the tests unlabeled: they are not covered and still not a gap; the next run asks again.
 
 With the definition set, diff the law against the repo, one live rule at a time:
 

@@ -588,6 +588,9 @@ describe("bam-specs-gaps command", () => {
     const s3 = slice3(body);
     expect(/cancelled/.test(s3)).toBe(true);
     expect(/replaced_by/.test(s3)).toBe(true);
+    expect(/skip/.test(s3)).toBe(true);
+    expect(/\[cancelled\]/.test(s3)).toBe(true);
+    expect(/\[replaced_by\]/.test(s3)).toBe(true);
   });
 
   test("if a test already pins the rule but does not mention the ID, add the mention; do not put that rule on the gap list (§3/§4)", () => {
@@ -596,6 +599,7 @@ describe("bam-specs-gaps command", () => {
     // test; it is not a gap. Scope the write token to §3.
     const s3 = slice3(body);
     expect(/add the mention/.test(s3)).toBe(true);
+    expect(/not a gap/.test(s3)).toBe(true);
   });
 
   test("adding mentions waits for one confirm per run (question tool, recommended default first) (§3)", () => {
@@ -605,6 +609,8 @@ describe("bam-specs-gaps command", () => {
     // path `confirm` cannot satisfy this.
     const s3 = slice3(body);
     expect(/one confirm/.test(s3)).toBe(true);
+    expect(/`question` tool/.test(s3)).toBe(true);
+    expect(/recommended default first/.test(s3)).toBe(true);
   });
 
   test("body diffs each rule and lists the gaps (§3b/§4)", () => {
