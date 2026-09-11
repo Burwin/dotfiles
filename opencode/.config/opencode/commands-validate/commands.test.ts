@@ -636,7 +636,7 @@ describe("bam-specs-gaps command", () => {
     // Dead ID with no mention in tests is omitted from the gap list.
     // Token /omit/. Scope to slice3. Do not pin /silent/.
     const s3 = slice3(body);
-    expect(/omit/.test(s3)).toBe(true);
+    expect(/omit a dead id with no leftover mention/.test(s3)).toBe(true);
   });
 
   test("if a test already pins the rule but does not mention the ID, add the mention; do not put that rule on the gap list (§3/§4)", () => {

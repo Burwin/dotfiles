@@ -33,9 +33,9 @@ A `[CANCELLED]` / `[REPLACED_BY: ...]` ID is not a silent skip when a test still
 | --- | --- | --- |
 | 1 | Leftover pin | Dead-ID mention only (name, fact title, comment, assert message). Not unlabeled leftover behavior. |
 | 2 | List / handoff | Same gap list, tagged cleanup. Same §5 (handoff / list-only / per-gap). |
-| 3 | Who deletes | List only. tdd-plan deletes. Mentions stay the only write this command makes. |
+| 3 | Who deletes | List only. tdd-plan specifies deletes; running that plan executes them. Mentions stay the only write this command makes. |
 | 4 | No leftover mention | Omit (silent skip). |
-| 5 | Production code | On a cleanup row only if orphaned (not needed by a live successor). |
+| 5 | Production code | On a cleanup row only if orphaned (no remaining callers or consumers: live successor, other live rule, or unrelated path). |
 | 6 | Card scope | Command only (`bam-specs-gaps.md` + `commands.test.ts`). |
 
 ## Design
