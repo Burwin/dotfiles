@@ -54,7 +54,7 @@ Run: `bun test ./opencode/.config/opencode/commands-validate/`
 
 ```
 ## 3. Define a proper test, then diff each live rule
-      - Scan constitution.md for live IDs. Skip [CANCELLED] / [REPLACED_BY].
+      - Scan constitution.md for live IDs. Skip [CANCELLED] / [REPLACED_BY: ...].
       - Proper test (unchanged): automated test that asserts the rule.
       - Covered: only if a test explicitly mentions that exact ID
         (name, fact title, comment, or assert message).
@@ -63,7 +63,7 @@ Run: `bun test ./opencode/.config/opencode/commands-validate/`
       - No pin: miss. Record searched locations.
 
 ## 4. List the gaps
-      - One row per live ID with no proper test (true miss only).
+      - One row per live ID with no ID-token hit and no proper test (true miss only).
       - Unlabeled-but-pinning never appears here.
 
 ## 5. Filing mode
