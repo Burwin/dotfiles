@@ -1,5 +1,11 @@
 # `/bam-specs-gaps`: leftover cancelled pins (MASTER-2041)
 
+> **Status:** shipped; archived 2026-09-11. Nothing supersedes it.
+> Merged to `m` via PR #29 (squash `25914a3`). Asana MASTER-2041 → DONE.
+> Shipped artifact: `opencode/.config/opencode/commands/bam-specs-gaps.md`
+> (leftover cancelled/replaced ID mentions are tagged cleanup rows).
+> Decision history below preserved as-is.
+
 **Asana:** MASTER-2041 (GID `1218398413494347`)
 **Permalink:** https://app.asana.com/1/1203819684139908/project/1204506183888935/task/1218398413494347
 **Plan path:** `docs/plans/bam-specs-gaps-cancelled-cleanup/PLAN.md`
@@ -165,7 +171,7 @@ Token discipline: each GREEN must not introduce a later test's tokens.
 - [x] Step 10 — GREEN: rewrite intro + §6
 - [x] Step 11 — REFACTOR: coherence pass
 - [x] Step 12 — VERIFY: suite + smoke (suite 56/56; worktree `OPENCODE_CONFIG_DIR` loads `/bam-specs-gaps` `agent: build` with leftover/cleanup/omit/orphaned/successor/deletes; smoke on `/tmp/opencode/bam-specs-gaps-cancelled-cleanup-smoke`: skip SMOKE-3/SMOKE-4 for live coverage, SMOKE-3 leftover cleanup `tests/widget.test.ts:9`, SMOKE-4 omit, SMOKE-1 covered `tests/widget.test.ts:1`, SMOKE-2 unlabeled-but-pinning not a gap, SMOKE-5 live miss unchanged; stopped before mention write, deletes, or Asana. Remaining gate: live `~/.config/opencode/commands` still points at main, so TUI re-smoke folds into step 13.)
-- [x] Step 13 — DEPLOY (human-gated): squash, PR, merge
+- [x] Step 13 — DEPLOY: squash, PR, merge (PR #29 squash `25914a3`)
 
 ## Session exit (MANDATORY)
 
