@@ -41,7 +41,7 @@ If a test already pins the rule (it asserts the rule) but does not mention the I
 With the definition set, diff the law against the repo, one live rule at a time:
 
 - **Search** — for each live rule, read its ID and text, then search the target repo for an automated test that asserts it and for that exact ID in a test name, fact title, comment, or assert message. Search test directories, files matching `*test*`, validator suites, and CI config.
-- **Record** — ID token hit: covered (`file:line`). Pin without the ID: unlabeled-but-pinning (not a gap; add the mention after the one confirm above). Miss (no pin): record the locations searched. One live rule, one verdict. No batching. Do not skip live IDs.
+- **Record** — ID token hit: covered (`file:line`). Pin without the ID: unlabeled-but-pinning (not a gap; add the mention after the one confirm above). Miss (no pin): record the locations searched. One live rule, one verdict. No batching of verdicts. The mention confirm is still one ask over the full candidate set. Do not skip live IDs.
 
 ## 4. List the gaps
 

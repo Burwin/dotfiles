@@ -199,6 +199,8 @@ Progress line is still `[ ]` on disk.
 
 After each step completes, post the next trigger verbatim.
 
+Kickoff trigger (use only to start this plan from step 1):
+
 - After 1 → ▶️ Step 2 of 13 — GREEN: rewrite §3 coverage sentence — model: premium — plan: `docs/plans/bam-specs-gaps-id-mentions/PLAN.md`
 - After 2 → ▶️ Step 3 of 13 — RED: skip cancelled / replaced_by — model: cheap — plan: `docs/plans/bam-specs-gaps-id-mentions/PLAN.md`
 - After 3 → ▶️ Step 4 of 13 — GREEN: live IDs only — model: premium — plan: `docs/plans/bam-specs-gaps-id-mentions/PLAN.md`
