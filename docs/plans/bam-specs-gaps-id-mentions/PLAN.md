@@ -7,7 +7,7 @@
 
 ## TL;DR
 
-Change `/bam-specs-gaps` so a live constitution ID is covered only when a test names that ID (name, fact title, comment, or assert message), not by inferred behavior. Unlabeled tests that already pin a rule get the ID added after one confirm per run; they are not gap cards. True misses stay gaps and still use existing §5 (handoff / list-only / per-gap). Skip `[CANCELLED]` / `[REPLACED_BY]` for live coverage; leftover-cancelled cleanup is MASTER-2041.
+Change `/bam-specs-gaps` so a live constitution ID is covered only when a test names that ID (name, fact title, comment, or assert message), not by inferred behavior. Unlabeled tests that already pin a rule get the ID added after one confirm per run; they are not gap cards. True misses stay gaps and still use existing §5 (handoff / list-only / per-gap). Skip `[CANCELLED]` / `[REPLACED_BY: ...]` for live coverage; leftover-cancelled cleanup is MASTER-2041.
 
 **Done** = `bam-specs-gaps.md` §3/§4/§6/intro + content tests in `commands.test.ts`. No validator or installer change.
 
@@ -35,7 +35,7 @@ From the 2026-09-11 MASTER-2040 review:
 | --- | --- | --- |
 | 1 | Unlabeled-but-pinning | This command adds the ID after one confirm per run. Those are not gap cards. |
 | 2 | Covered | Exact live ID token in a test (name, title, comment, or assert) is enough. Mentions are added only onto tests that already pin the rule. Already-labeled IDs are not re-judged. Stray mentions still count as covered. |
-| 3 | Dead IDs | Live IDs only. Add the `[CANCELLED]` / `[REPLACED_BY]` skip (it is not in the command today). Leftover-cancelled cleanup stays MASTER-2041. |
+| 3 | Dead IDs | Live IDs only. Add the `[CANCELLED]` / `[REPLACED_BY: ...]` skip (it is not in the command today). Leftover-cancelled cleanup stays MASTER-2041. |
 | 4 | True gaps | Existing §5 (handoff / list-only / per-gap). No new auto-create. |
 | 5 | Agent | Keep `agent: build` (gated test-file edits plus optional per-gap Asana writes). |
 | 6 | Proper-test keep | Keep the current "automated test that asserts the rule" language as the test for *where* to add a mention. Coverage *signal* is the ID token. |
@@ -102,7 +102,7 @@ Token discipline: each GREEN must not introduce a later test's tokens.
 
 | # | Kind | Step | Model |
 | --- | --- | --- | --- |
-| 3 | RED | New test: scan live IDs only; skip `[CANCELLED]` / `[REPLACED_BY]`. Tokens: `/cancelled/`, `/replaced_by/`. | cheap |
+| 3 | RED | New test: scan live IDs only; skip `[CANCELLED]` / `[REPLACED_BY: ...]`. Tokens: `/cancelled/`, `/replaced_by/`. | cheap |
 | 4 | GREEN | Add the skip to §3. Do not mention leftover-cancelled cleanup (MASTER-2041). Forbidden: `add the mention`, `one confirm`, `existing tests`. | premium |
 
 ### Phase C — unlabeled-but-pinning is a gated write, not a gap
@@ -122,7 +122,7 @@ Token discipline: each GREEN must not introduce a later test's tokens.
 | 10 | GREEN | Rewrite intro, frontmatter `description:`, and §6 to match. Command stays `agent: build`. §5 unchanged. | premium |
 | 11 | REFACTOR | Coherence pass on intro + §3–§6 and the new tests. Suite stays green. No behavior change. | premium |
 | 12 | VERIFY | `bun test ./opencode/.config/opencode/commands-validate/` green. Restart opencode. Smoke `/bam-specs-gaps` on a throwaway path far enough to see live-ID skip + mention-vs-gap split + the one-confirm ask; **stop before writing tests or Asana**. | premium |
-| 13 | DEPLOY | Per `@rules/workflow.md`: squash to one Conventional-Commits commit, push, PR with base `m`, `/bam-copilot-loop` until "no new comments". Merge on explicit confirm. | premium |
+| 13 | DEPLOY (human-gated) | Per `@rules/workflow.md`: squash to one Conventional-Commits commit, push, PR with base `m`, `/bam-copilot-loop` until "no new comments". Merge on explicit confirm. | premium |
 
 ## Testing strategy
 
@@ -209,6 +209,6 @@ After each step completes, post the next trigger verbatim.
 - After 9 → ▶️ Step 10 of 13 — GREEN: rewrite intro + §6 — model: premium — plan: `docs/plans/bam-specs-gaps-id-mentions/PLAN.md`
 - After 10 → ▶️ Step 11 of 13 — REFACTOR: coherence pass — model: premium — plan: `docs/plans/bam-specs-gaps-id-mentions/PLAN.md`
 - After 11 → ▶️ Step 12 of 13 — VERIFY: suite + smoke — model: premium — plan: `docs/plans/bam-specs-gaps-id-mentions/PLAN.md`
-- After 12 → ▶️ Step 13 of 13 — DEPLOY: squash, PR, merge — model: premium — plan: `docs/plans/bam-specs-gaps-id-mentions/PLAN.md`
+- After 12 → ▶️ Step 13 of 13 — DEPLOY (human-gated): squash, PR, merge — model: premium — plan: `docs/plans/bam-specs-gaps-id-mentions/PLAN.md`
 
 ▶️ Step 1 of 13 — RED: coverage = ID mention in name / fact title / comment / assert — model: cheap — plan: `docs/plans/bam-specs-gaps-id-mentions/PLAN.md`
