@@ -60,7 +60,8 @@ Run: `bun test ./opencode/.config/opencode/commands-validate/`
         (name, fact title, comment, or assert message).
       - Unlabeled-but-pinning: after one confirm per run, add the mention
         to that test. Do not put it on the gap list.
-      - No pin: miss. Record searched locations.
+      - No pin and no ID-token hit: miss. Record searched locations.
+      - Stray exact-ID mention (no pin) is covered.
 
 ## 4. List the gaps
       - One row per live ID with no ID-token hit (true miss only).

@@ -34,14 +34,14 @@ Docs and process notes do not count. They qualify only in the rare case where a 
 
 Scan `constitution.md` for live IDs. Skip `[CANCELLED]` and `[REPLACED_BY: ...]`.
 
-A live rule is covered only if a test mentions that exact ID in the name, fact title, comment, or assert message. Match the ID as a standalone token, not as a substring of a longer ID (HH-1 does not cover HH-10). Inferred behavior without that ID token does not count.
+A live rule is covered only if a test mentions that exact ID in the name, fact title, comment, or assert message. Match the ID as a standalone token, not as a substring of a longer ID (HH-1 does not cover HH-10). A stray mention of the exact ID still counts as covered, even if that test does not assert the rule. Inferred behavior without that ID token does not count.
 
 If a test already pins the rule (it asserts the rule) but does not mention the ID, add the mention to that test after one confirm per run. Ask with the `question` tool, recommended default first: one yes/no over the full candidate set (`file:line` for each unlabeled pin). One mention-write ask per run, not per ID. That ask does not replace the §2 scope question or the §5 filing-mode question. Mentions go only onto tests that already assert the rule. The allowed edit is add-only: insert the ID into a test name, comment, or assert message; do not change test logic. Do not put that rule on the gap list. If the confirm is declined, leave the tests unlabeled: they are not covered and still not a gap; the next run asks again.
 
 With the definition set, diff the law against the repo, one live rule at a time:
 
 - **Search** — for each live rule, read its ID and text, then search the target repo for an automated test that asserts it and for that exact ID in a test name, fact title, comment, or assert message. Search test directories, files matching `*test*`, validator suites, and CI config.
-- **Record** — ID token hit: covered (`file:line`). Pin without the ID: unlabeled-but-pinning (not a gap; add the mention after the one confirm above). Miss (no pin): record the locations searched. One live rule, one verdict. No batching of verdicts. The mention confirm is still one ask over the full candidate set. Do not skip live IDs.
+- **Record** — ID token hit: covered (`file:line`), including a stray mention. Pin without the ID: unlabeled-but-pinning (not a gap; add the mention after the one confirm above). Miss (no pin and no ID-token hit): record the locations searched. One live rule, one verdict. No batching of verdicts. The mention confirm is still one ask over the full candidate set. Do not skip live IDs.
 
 ## 4. List the gaps
 

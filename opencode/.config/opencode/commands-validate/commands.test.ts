@@ -588,6 +588,7 @@ describe("bam-specs-gaps command", () => {
     expect(/assert message/.test(s3)).toBe(true);
     expect(/name, fact title, comment/.test(s3)).toBe(true);
     expect(/standalone/.test(s3)).toBe(true);
+    expect(/stray/.test(s3)).toBe(true);
   });
 
   test("scans live IDs only; skips [CANCELLED] / [REPLACED_BY] (§3)", () => {
