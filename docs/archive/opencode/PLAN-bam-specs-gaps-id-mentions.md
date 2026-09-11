@@ -1,5 +1,11 @@
 # `/bam-specs-gaps`: every live ID named in a test (MASTER-2040)
 
+> **Status:** shipped; archived 2026-09-11. Nothing supersedes it.
+> Merged to `m` via PR #28 (squash `68a6899`). Asana MASTER-2040 → DONE.
+> Shipped artifact: `opencode/.config/opencode/commands/bam-specs-gaps.md`
+> (live-ID coverage = explicit test mention; unlabeled pins get the ID after one confirm).
+> Decision history below preserved as-is.
+
 **Asana:** MASTER-2040 (GID `1218396585569979`) — `/bam-specs-gaps`: every constitution ID must be named in a test
 **Permalink:** https://app.asana.com/1/1203819684139908/project/1204506183888935/task/1218396585569979
 **Plan path:** `docs/plans/bam-specs-gaps-id-mentions/PLAN.md`
@@ -160,7 +166,7 @@ Token discipline: each GREEN must not introduce a later test's tokens.
 - [x] Step 10 — GREEN: rewrite intro + §6
 - [x] Step 11 — REFACTOR: coherence pass
 - [x] Step 12 — VERIFY: suite + smoke (suite 52/52; worktree `OPENCODE_CONFIG_DIR` loads `/bam-specs-gaps` `agent: build` with mention/cancelled/replaced_by/one confirm; smoke on `/tmp/opencode/bam-specs-gaps-id-mentions-smoke`: skip SMOKE-3/SMOKE-4, SMOKE-1 covered `tests/widget.test.ts:1`, SMOKE-2 unlabeled-but-pinning not a gap, SMOKE-5 miss; stopped before mention write or Asana. Remaining gate: live `~/.config/opencode/commands` still points at main, so TUI re-smoke folds into step 13.)
-- [ ] Step 13 — DEPLOY: squash, PR, merge
+- [x] Step 13 — DEPLOY: squash, PR, merge (PR #28 squash `68a6899`)
 
 ## Session exit (MANDATORY)
 
