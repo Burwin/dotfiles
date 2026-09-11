@@ -1,11 +1,11 @@
 ---
-description: "Diff a repo against constitution.md; a live ID is covered only when a test mentions it. Add unlabeled mentions after one confirm. True misses: handoff (default), list-only, or per-gap. Runnable after init or amend."
+description: "Diff a repo against constitution.md; a live ID is covered only when a test mentions it. Leftover dead-ID mentions are tagged cleanup on the same list. Add unlabeled mentions after one confirm. Lists only; tdd-plan specifies deletes. Handoff (default), list-only, or per-gap. Runnable after init or amend."
 agent: build
 ---
 
-Diff a repo against `constitution.md`. A live ID is covered only when a test mentions that ID. Unlabeled tests that already pin a rule get the ID added after one confirm per run; they are not gaps. True misses stay on the gap list and use §5 (handoff default, list-only, or per-gap). The flow: resolve the **target** (§1), set the **scope** (§2), define a **proper test** and **diff each live rule** (§3), **list the gaps** (§4), **ask filing mode** then hand off or file per the pick (§5), then **stop** (§6). Do not implement missing tests or missing code.
+Diff a repo against `constitution.md`. A live ID is covered only when a test mentions that ID. Unlabeled tests that already pin a rule get the ID added after one confirm per run; they are not gaps. True misses stay on the gap list. Leftover mentions of `[CANCELLED]` / `[REPLACED_BY: ...]` IDs are tagged cleanup rows on the same list. The flow: resolve the **target** (§1), set the **scope** (§2), define a **proper test** and **diff each live rule** (§3), **list the gaps** (§4), **ask filing mode** then hand off or file per the pick (§5), then **stop** (§6). Mentions stay the only write. Do not implement missing tests or missing code.
 
-This command is `agent: build`. Runnable after `/bam-specs-init` or `/bam-specs-amend`. It does not init and does not amend.
+This command is `agent: build`. Runnable after `/bam-specs-init` or `/bam-specs-amend`. It does not init and does not amend. It lists only; `/bam-tdd-plan` specifies the deletes, and running that plan executes them.
 
 $ARGUMENTS   (optional path; optional prefix/section filter)
 
@@ -32,11 +32,17 @@ A **proper test** is an automated test that asserts the rule holds in almost all
 
 Docs and process notes do not count. They qualify only in the rare case where a test really does not make sense, and when that exception is claimed the reason must be stated explicitly. That exception is not coverage: coverage still requires the ID token in a test. Do not invent a mention write for it. Record it as a gap with the stated reason.
 
-Scan `constitution.md` for live IDs. Skip `[CANCELLED]` and `[REPLACED_BY: ...]`.
+Scan `constitution.md` for live IDs. Skip `[CANCELLED]` and `[REPLACED_BY: ...]` for live coverage.
 
 A live rule is covered only if a test mentions that exact ID in the name, fact title, comment, or assert message. Match the ID as a standalone token, not as a substring of a longer ID (HH-1 does not cover HH-10). A stray mention of the exact ID still counts as covered, even if that test does not assert the rule. Inferred behavior without that ID token does not count.
 
 If a test already pins the rule (it asserts the rule) but does not mention the ID, add the mention to that test after one confirm per run. Ask with the `question` tool, recommended default first: one yes/no over the full candidate set (`file:line` for each unlabeled pin). One mention-write ask per run, not per ID. That ask does not replace the §2 scope question or the §5 filing-mode question. Mentions go only onto tests that already assert the rule. The allowed edit is add-only: insert the ID into a test name, fact title, comment, or assert message; do not change test logic. Do not put that rule on the gap list. If the confirm is declined, leave the tests unlabeled: they are not covered and still not a gap; the next run asks again.
+
+Then a second pass over those skipped IDs. For each skipped ID, search the same locations as the live scan (test directories, files matching `*test*` or `*spec*`, validator suites, and CI config) for a standalone-token mention:
+
+- A leftover pin is an exact mention of that dead ID in a test (name, fact title, comment, or assert message). Match the dead ID as a standalone token, not as a substring of a longer ID (HH-1 does not match HH-10). Unlabeled leftover behavior is not a leftover pin.
+- A dead ID with a leftover mention is a cleanup candidate for §4.
+- Omit a dead ID with no leftover mention.
 
 With the definition set, diff the law against the repo, one live rule at a time:
 
@@ -45,11 +51,21 @@ With the definition set, diff the law against the repo, one live rule at a time:
 
 ## 4. List the gaps
 
-Emit a gap list: one row per live ID with no ID-token hit (true miss only). Unlabeled-but-pinning never appears here. A claimed rare docs exception still appears, with the stated reason. Each row carries:
+Emit a gap list.
+
+**Live true-miss rows** — one row per live ID with no ID-token hit (true miss only). Unlabeled-but-pinning never appears here. A claimed rare docs exception still appears, with the stated reason. Each live-miss row carries:
 
 - the rule **ID**
 - a one-line **gist** of the rule
 - **why** the current coverage does not count
+- the **locations searched**
+
+**Tagged cleanup rows** — leftover mentions of dead IDs, on the same list. Each cleanup row carries:
+
+- the dead-ID **ID**
+- a one-line **gist**
+- **why** it is a leftover mention
+- the mention **file:line** (every matching leftover location)
 - the **locations searched**
 
 Then stop for §5. Do not file anything before the human picks a mode.
@@ -64,7 +80,9 @@ Then stop for §5. Do not file anything before the human picks a mode.
 
 ### 5b. Default: one-plan /bam-tdd-plan handoff
 
-- **Default:** one plan on the current card. That plan covers the missing tests plus the code that makes them pass.
+- **Default:** one plan on the current card. The mixed list from §4 goes in one handoff.
+- **Live-miss rows:** missing tests plus the code that makes them pass.
+- **Cleanup rows:** remove leftover coverage of those dead IDs and orphaned production code. Preserve or split assertions that still pin a live successor or another live rule. Do not add new tests of cancelled/replaced-old text. Living successors stay the new-tests-plus-code path. Before removing production code, confirm it has no remaining callers or consumers (live successor, other live rule, or unrelated path).
 - **Resolve the current card** the same way as `/bam-specs-amend` §1:
   1. If the worktree directory name ends in a task id (`MASTER-NNNN` or similar), that is the card. Confirm the GID and summary.
   2. If the worktree name has no task id, ask for a task id or permalink via the `question` tool before searching. Do not guess. `$ARGUMENTS` is path/filter only, not a task id.
@@ -73,15 +91,20 @@ Then stop for §5. Do not file anything before the human picks a mode.
   5. If still ambiguous, narrow with `projects_any` filtered to the relevant project.
   Confirm the match by `permalink_url` or project membership, not by name. The card name usually looks unrelated to the id. Fetch GID and summary either way so the snippet can be formed.
 - **Handoff:** when the human picks handoff in §5a, emit a copy-paste `/bam-tdd-plan` prompt for a **fresh session**. Do **not** author the plan inline. This command never writes a `PLAN.md` and never creates a plan subtask. Do not invoke `/bam-tdd-plan` in this session.
-- **Snippet payload:** `/bam-tdd-plan {TASK-ID} (GID {gid}): {summary}`, plus the gap list from §4.
+- **Snippet payload:** `/bam-tdd-plan {TASK-ID} (GID {gid}): {summary}`, plus the gap list from §4, plus the live-miss and cleanup row-handling rules from this section.
 
 ### 5c. Alternatives
 
 - **list-only:** stop after the gap list. No snippet, no cards.
-- **per-gap cards:** resolve the current card first (same as §5b) so creates land in that project. Then file one card per gap via `asana_create_tasks` (test + code per gap). This is the only create path.
+- **per-gap cards:** resolve the current card first (same as §5b) so creates land in that project. Then file one card per row via `asana_create_tasks`. Live-miss cards: missing tests plus the code that makes them pass. Cleanup cards: remove leftover coverage and orphaned production code, preserving or splitting live assertions, not add. Same no-remaining-callers check as §5b before removing production code. This is the only create path.
 
 ## 6. Relations + stop
 
-Runnable after `/bam-specs-init` or `/bam-specs-amend`. This command does not init (no new law, no new prefix or section) and does not amend (no `constitution.md` edit). Do not implement missing tests or missing code. Writing ID mentions into existing tests is the allowed write. This command never writes a plan file.
+Runnable after `/bam-specs-init` or `/bam-specs-amend`. This command does not init (no new law, no new prefix or section) and does not amend (no `constitution.md` edit). This command never writes a plan file.
+
+- This command lists only.
+- Do not implement missing tests or missing code.
+- Mentions stay the only write to the repo: writing ID mentions into existing tests. Per-gap Asana card creation (§5c) remains allowed.
+- This command does not delete tests or production code. `/bam-tdd-plan` specifies the deletes; running that plan executes them.
 
 Stop after mentions (if any), then the chosen §5 path: the handoff snippet, list-only, or per-gap filing.

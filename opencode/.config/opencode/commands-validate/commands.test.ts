@@ -485,8 +485,7 @@ describe("bam-specs-gaps command", () => {
   // Load the command inside each test (never at describe/module-init) so a
   // missing file surfaces as a normal assertion failure — same pattern as
   // readBamSpecsAmend() above — and re-assert the validator is clean on every read.
-  // Each test pins one behavior via a token that was newly-absent before its
-  // authoring GREEN, so the red→green history stayed incremental.
+  // Each test pins one behavior via a focused token.
   function readBamSpecsGaps(): { content: string; frontmatter: string; body: string } {
     const fileName = "bam-specs-gaps.md";
     const filePath = join(commandsDir, fileName);
@@ -529,6 +528,10 @@ describe("bam-specs-gaps command", () => {
 
   function slice5b(body: string): string {
     return sliceSection(body, /### 5b\. .*?([\s\S]*?)(?=\n### 5c\. |\n## \d\. |$)/);
+  }
+
+  function slice5c(body: string): string {
+    return sliceSection(body, /### 5c\. .*?([\s\S]*?)(?=\n## \d\. |$)/);
   }
 
   function slice6(body: string): string {
@@ -600,6 +603,41 @@ describe("bam-specs-gaps command", () => {
     expect(/skip/.test(s3)).toBe(true);
     expect(/\[cancelled\]/.test(s3)).toBe(true);
     expect(/\[replaced_by:/.test(s3)).toBe(true);
+  });
+
+  test("leftover pin = exact dead-ID mention only, not unlabeled leftover behavior (§3)", () => {
+    const { body } = readBamSpecsGaps();
+    // Leftover pin = exact dead-ID mention (name / fact title / comment /
+    // assert). Unlabeled leftover behavior is not a leftover pin.
+    const s3 = slice3(body);
+    expect(/leftover/.test(s3)).toBe(true);
+    expect(/exact mention of that dead id/.test(s3)).toBe(true);
+    expect(/dead id as a standalone token/.test(s3)).toBe(true);
+    expect(/search the same locations/.test(s3)).toBe(true);
+    expect(/unlabeled leftover behavior is not/.test(s3)).toBe(true);
+  });
+
+  test("leftover mentions go on the same gap list, tagged cleanup (§4)", () => {
+    const { body } = readBamSpecsGaps();
+    // Leftover mentions on dead IDs produce cleanup rows on the same §4
+    // gap list. Scope /cleanup/ to slice4.
+    const s4 = slice4(body);
+    expect(/cleanup/.test(s4)).toBe(true);
+    expect(/tagged cleanup/.test(s4)).toBe(true);
+    expect(/dead-id/.test(s4)).toBe(true);
+    expect(/why.*leftover mention/.test(s4)).toBe(true);
+    expect(/gist/.test(s4)).toBe(true);
+    expect(/file:line/.test(s4)).toBe(true);
+    expect(/every matching leftover location/.test(s4)).toBe(true);
+    expect(/locations searched/.test(s4)).toBe(true);
+  });
+
+  test("dead ID with no leftover mention is omitted (not a gap row) (§3)", () => {
+    const { body } = readBamSpecsGaps();
+    // Dead ID with no mention in tests is omitted from the gap list.
+    // Token /omit/. Scope to slice3. Do not pin /silent/.
+    const s3 = slice3(body);
+    expect(/omit a dead id with no leftover mention/.test(s3)).toBe(true);
   });
 
   test("if a test already pins the rule but does not mention the ID, add the mention; do not put that rule on the gap list (§3/§4)", () => {
@@ -693,6 +731,7 @@ describe("bam-specs-gaps command", () => {
     expect(/gid/.test(s5b)).toBe(true);
     expect(/summary/.test(s5b)).toBe(true);
     expect(/gap list/.test(s5b)).toBe(true);
+    expect(/row-handling rules/.test(s5b)).toBe(true);
     expect(/do not guess/.test(s5b)).toBe(true);
     expect(/permalink/.test(s5b)).toBe(true);
     expect(/handoff/.test(s5a)).toBe(true);
@@ -700,6 +739,27 @@ describe("bam-specs-gaps command", () => {
     expect(/per-gap/.test(s5a)).toBe(true);
     expect(/asana_create_tasks/.test(s5)).toBe(true);
     expect(/per-gap.*asana_create_tasks|asana_create_tasks.*per-gap/.test(s5)).toBe(true);
+  });
+
+  test("cleanup rows in the handoff mean remove leftover tests + orphaned production code; living successors stay new-tests-plus-code (§5)", () => {
+    const { body } = readBamSpecsGaps();
+    // Cleanup handoff = remove tests + orphaned code; successors stay add.
+    // Tokens: /orphaned/, /successor/. Scope to ## 5. Keep /code/ and /bam-tdd-plan/.
+    const s5 = slice5(body);
+    const s5b = slice5b(body);
+    expect(/orphaned/.test(s5)).toBe(true);
+    expect(/successor/.test(s5)).toBe(true);
+    expect(/preserve or split/.test(s5b)).toBe(true);
+    expect(/do not add new tests/.test(s5b)).toBe(true);
+    expect(/new-tests-plus-code/.test(s5b)).toBe(true);
+    expect(/no remaining callers/.test(s5b)).toBe(true);
+    const s5c = slice5c(body);
+    expect(/cleanup cards/.test(s5c)).toBe(true);
+    expect(/preserving or splitting/.test(s5c)).toBe(true);
+    expect(/no-remaining-callers/.test(s5c)).toBe(true);
+    // keep the prior pins that live in §5b (per step instruction)
+    expect(/code/.test(s5b)).toBe(true);
+    expect(/bam-tdd-plan/.test(s5b)).toBe(true);
   });
 
   test("body states relations + stop (§6)", () => {
@@ -719,6 +779,16 @@ describe("bam-specs-gaps command", () => {
     // Allowed write is ID mentions on existing tests; missing tests/code stay
     // out of scope. Pin scoped to ## 6.
     expect(/existing tests/.test(s6)).toBe(true);
+    // This command lists only; tdd-plan specifies the deletes; mentions
+    // stay the only write. Scope /deletes/ to ## 6. Keep /do not implement/
+    // and /existing tests/. The stale "tdd-plan does the deletes" phrase
+    // must stay absent.
+    expect(/lists only/.test(s6)).toBe(true);
+    expect(/tdd-plan does the deletes/.test(s6)).toBe(false);
+    expect(/mentions stay the only write/.test(s6)).toBe(true);
+    expect(/deletes/.test(s6)).toBe(true);
+    expect(/per-gap asana card creation/.test(s6)).toBe(true);
+    expect(/specifies the deletes/.test(s6)).toBe(true);
     const intro = body.split(/\n## /)[0];
     expect(/file cards/.test(intro)).toBe(false);
   });
