@@ -7,7 +7,7 @@
 
 ## TL;DR
 
-A `[CANCELLED]` / `[REPLACED_BY: ...]` ID is not a silent skip when a test still names that dead ID. Those leftover mentions are tagged **cleanup** rows on the **same** §4 gap list and the **same** §5 handoff: remove those tests and orphaned production code. Do not add new tests of cancelled/replaced-old text. Living successors stay new-tests-plus-code. This command **lists** only; `/bam-tdd-plan` does the deletes. Mentions stay the only write.
+A `[CANCELLED]` / `[REPLACED_BY: ...]` ID is not a silent skip when a test still names that dead ID. Those leftover mentions are tagged **cleanup** rows on the **same** §4 gap list and the **same** §5 handoff: remove those tests and orphaned production code. Do not add new tests of cancelled/replaced-old text. Living successors stay new-tests-plus-code. This command **lists** only; `/bam-tdd-plan` specifies the deletes, and running that plan executes them. Mentions stay the only write.
 
 **Done** = `bam-specs-gaps.md` §3/§4/§5/§6/intro + content tests. No validator/installer. No ImportTests / HH-86–HH-90 work.
 

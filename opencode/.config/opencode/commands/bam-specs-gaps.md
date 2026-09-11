@@ -38,7 +38,7 @@ A live rule is covered only if a test mentions that exact ID in the name, fact t
 
 If a test already pins the rule (it asserts the rule) but does not mention the ID, add the mention to that test after one confirm per run. Ask with the `question` tool, recommended default first: one yes/no over the full candidate set (`file:line` for each unlabeled pin). One mention-write ask per run, not per ID. That ask does not replace the §2 scope question or the §5 filing-mode question. Mentions go only onto tests that already assert the rule. The allowed edit is add-only: insert the ID into a test name, fact title, comment, or assert message; do not change test logic. Do not put that rule on the gap list. If the confirm is declined, leave the tests unlabeled: they are not covered and still not a gap; the next run asks again.
 
-Then a second pass over those skipped IDs:
+Then a second pass over those skipped IDs. For each skipped ID, search the same locations as the live scan (test directories, files matching `*test*` or `*spec*`, validator suites, and CI config) for a standalone-token mention:
 
 - A leftover pin is an exact mention of that dead ID in a test (name, fact title, comment, or assert message). Match the dead ID as a standalone token, not as a substring of a longer ID (HH-1 does not match HH-10). Unlabeled leftover behavior is not a leftover pin.
 - A dead ID with a leftover mention is a cleanup candidate for §4.
@@ -82,7 +82,7 @@ Then stop for §5. Do not file anything before the human picks a mode.
 
 - **Default:** one plan on the current card. The mixed list from §4 goes in one handoff.
 - **Live-miss rows:** missing tests plus the code that makes them pass.
-- **Cleanup rows:** remove leftover coverage of those dead IDs and orphaned production code. Preserve or split assertions that still pin a live successor or another live rule. Do not add new tests of cancelled/replaced-old text. Living successors stay the new-tests-plus-code path. Check that production code is unused by a live successor before removing it.
+- **Cleanup rows:** remove leftover coverage of those dead IDs and orphaned production code. Preserve or split assertions that still pin a live successor or another live rule. Do not add new tests of cancelled/replaced-old text. Living successors stay the new-tests-plus-code path. Before removing production code, confirm it has no remaining callers or consumers (live successor, other live rule, or unrelated path).
 - **Resolve the current card** the same way as `/bam-specs-amend` §1:
   1. If the worktree directory name ends in a task id (`MASTER-NNNN` or similar), that is the card. Confirm the GID and summary.
   2. If the worktree name has no task id, ask for a task id or permalink via the `question` tool before searching. Do not guess. `$ARGUMENTS` is path/filter only, not a task id.
@@ -96,7 +96,7 @@ Then stop for §5. Do not file anything before the human picks a mode.
 ### 5c. Alternatives
 
 - **list-only:** stop after the gap list. No snippet, no cards.
-- **per-gap cards:** resolve the current card first (same as §5b) so creates land in that project. Then file one card per row via `asana_create_tasks`. Live-miss cards: missing tests plus the code that makes them pass. Cleanup cards: remove leftover coverage and orphaned production code, preserving or splitting live assertions, not add. This is the only create path.
+- **per-gap cards:** resolve the current card first (same as §5b) so creates land in that project. Then file one card per row via `asana_create_tasks`. Live-miss cards: missing tests plus the code that makes them pass. Cleanup cards: remove leftover coverage and orphaned production code, preserving or splitting live assertions, not add. Same no-remaining-callers check as §5b before removing production code. This is the only create path.
 
 ## 6. Relations + stop
 

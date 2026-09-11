@@ -530,6 +530,10 @@ describe("bam-specs-gaps command", () => {
     return sliceSection(body, /### 5b\. .*?([\s\S]*?)(?=\n### 5c\. |\n## \d\. |$)/);
   }
 
+  function slice5c(body: string): string {
+    return sliceSection(body, /### 5c\. .*?([\s\S]*?)(?=\n## \d\. |$)/);
+  }
+
   function slice6(body: string): string {
     return sliceSection(body, /## 6\. .*?([\s\S]*?)(?=\n## \d\. |$)/);
   }
@@ -609,6 +613,7 @@ describe("bam-specs-gaps command", () => {
     expect(/leftover/.test(s3)).toBe(true);
     expect(/exact mention of that dead id/.test(s3)).toBe(true);
     expect(/dead id as a standalone token/.test(s3)).toBe(true);
+    expect(/search the same locations/.test(s3)).toBe(true);
     expect(/unlabeled leftover behavior is not/.test(s3)).toBe(true);
   });
 
@@ -619,6 +624,8 @@ describe("bam-specs-gaps command", () => {
     const s4 = slice4(body);
     expect(/cleanup/.test(s4)).toBe(true);
     expect(/tagged cleanup/.test(s4)).toBe(true);
+    expect(/dead-id/.test(s4)).toBe(true);
+    expect(/why.*leftover mention/.test(s4)).toBe(true);
     expect(/gist/.test(s4)).toBe(true);
     expect(/file:line/.test(s4)).toBe(true);
     expect(/locations searched/.test(s4)).toBe(true);
@@ -743,6 +750,11 @@ describe("bam-specs-gaps command", () => {
     expect(/preserve or split/.test(s5b)).toBe(true);
     expect(/do not add new tests/.test(s5b)).toBe(true);
     expect(/new-tests-plus-code/.test(s5b)).toBe(true);
+    expect(/no remaining callers/.test(s5b)).toBe(true);
+    const s5c = slice5c(body);
+    expect(/cleanup cards/.test(s5c)).toBe(true);
+    expect(/preserving or splitting/.test(s5c)).toBe(true);
+    expect(/no-remaining-callers/.test(s5c)).toBe(true);
     // keep the prior pins that live in §5b (per step instruction)
     expect(/code/.test(s5b)).toBe(true);
     expect(/bam-tdd-plan/.test(s5b)).toBe(true);
