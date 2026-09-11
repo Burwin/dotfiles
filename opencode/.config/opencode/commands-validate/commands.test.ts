@@ -628,6 +628,7 @@ describe("bam-specs-gaps command", () => {
     expect(/why.*leftover mention/.test(s4)).toBe(true);
     expect(/gist/.test(s4)).toBe(true);
     expect(/file:line/.test(s4)).toBe(true);
+    expect(/every matching leftover location/.test(s4)).toBe(true);
     expect(/locations searched/.test(s4)).toBe(true);
   });
 

@@ -65,7 +65,7 @@ Emit a gap list.
 - the dead-ID **ID**
 - a one-line **gist**
 - **why** it is a leftover mention
-- the mention **file:line**
+- the mention **file:line** (every matching leftover location)
 - the **locations searched**
 
 Then stop for §5. Do not file anything before the human picks a mode.

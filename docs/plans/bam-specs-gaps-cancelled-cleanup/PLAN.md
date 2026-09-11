@@ -64,29 +64,31 @@ Keep `scans live IDs only; skips [CANCELLED] / [REPLACED_BY] (§3)` green. Live 
 ## 4. List the gaps
       - Live true-miss rows unchanged.
       - Plus tagged cleanup rows on the same list (ID, gist, why leftover
-        mention, file:line, locations searched).
+        mention, every matching file:line, locations searched).
       - Unlabeled-but-pinning still never appears.
       - Then stop for §5.
 
 ## 5. Filing mode
       - Same three modes. Mixed list in one handoff.
       - Live-miss rows: missing tests plus the code that makes them pass.
-      - Cleanup rows: remove those tests and orphaned production code.
-        Do not add new tests of cancelled/replaced-old text.
+      - Cleanup rows: remove leftover coverage and orphaned production
+        code. Preserve or split assertions that still pin a live successor
+        or another live rule. Do not add new tests of cancelled/replaced-old
+        text.
       - Living successors stay the new-tests-plus-code path.
       - Per-gap cards: one card per row; cleanup cards are remove, not add.
 
 ## 6. Relations + stop
-      - Mentions stay the only write.
+      - Mentions stay the only repo-file write. Per-gap Asana remains allowed.
       - This command does not delete tests or production code.
-      - tdd-plan does the deletes.
+      - tdd-plan specifies the deletes; running that plan executes them.
 ```
 
 ### Test seam
 
-Same as MASTER-2040: `readBamSpecsGaps()`, `slice3`/`slice4`/`slice5`/`slice5b`/`slice6`. One focused test per behavior. Keep existing §1/§2/§3a/live-mention/live-skip/unlabeled-but-pinning/§5/§6 pins.
+Same as MASTER-2040: `readBamSpecsGaps()`, `slice3`/`slice4`/`slice5`/`slice5b`/`slice5c`/`slice6`. One focused test per behavior. Keep existing §1/§2/§3a/live-mention/live-skip/unlabeled-but-pinning/§5/§6 pins.
 
-**Keep** live skip test (`commands.test.ts:594`) and `/do not implement/` in §6.
+**Keep** the live skip test and `/do not implement/` in §6.
 
 Tokens **absent today** in `bam-specs-gaps.md` (use these for RED): `leftover`, `cleanup`, `omit`, `orphaned`, `successor`, `deletes`.
 
