@@ -608,6 +608,7 @@ describe("bam-specs-gaps command", () => {
     const s3 = slice3(body);
     expect(/leftover/.test(s3)).toBe(true);
     expect(/exact mention of that dead id/.test(s3)).toBe(true);
+    expect(/dead id as a standalone token/.test(s3)).toBe(true);
     expect(/unlabeled leftover behavior is not/.test(s3)).toBe(true);
   });
 
@@ -617,6 +618,10 @@ describe("bam-specs-gaps command", () => {
     // gap list. Scope /cleanup/ to slice4.
     const s4 = slice4(body);
     expect(/cleanup/.test(s4)).toBe(true);
+    expect(/tagged cleanup/.test(s4)).toBe(true);
+    expect(/gist/.test(s4)).toBe(true);
+    expect(/file:line/.test(s4)).toBe(true);
+    expect(/locations searched/.test(s4)).toBe(true);
   });
 
   test("dead ID with no leftover mention is omitted (not a gap row) (§3)", () => {
@@ -735,6 +740,9 @@ describe("bam-specs-gaps command", () => {
     const s5b = slice5b(body);
     expect(/orphaned/.test(s5)).toBe(true);
     expect(/successor/.test(s5)).toBe(true);
+    expect(/preserve or split/.test(s5b)).toBe(true);
+    expect(/do not add new tests/.test(s5b)).toBe(true);
+    expect(/new-tests-plus-code/.test(s5b)).toBe(true);
     // keep the prior pins that live in §5b (per step instruction)
     expect(/code/.test(s5b)).toBe(true);
     expect(/bam-tdd-plan/.test(s5b)).toBe(true);
@@ -764,6 +772,8 @@ describe("bam-specs-gaps command", () => {
     expect(/tdd-plan does the deletes/.test(s6)).toBe(true);
     expect(/mentions stay the only write/.test(s6)).toBe(true);
     expect(/deletes/.test(s6)).toBe(true);
+    expect(/per-gap asana card creation/.test(s6)).toBe(true);
+    expect(/specifies them/.test(s6)).toBe(true);
     const intro = body.split(/\n## /)[0];
     expect(/file cards/.test(intro)).toBe(false);
   });

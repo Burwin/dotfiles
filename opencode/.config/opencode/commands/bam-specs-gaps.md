@@ -1,11 +1,11 @@
 ---
-description: "Diff a repo against constitution.md; a live ID is covered only when a test mentions it. Leftover dead-ID mentions are tagged cleanup on the same list. Add unlabeled mentions after one confirm. Lists only; tdd-plan deletes. Handoff (default), list-only, or per-gap. Runnable after init or amend."
+description: "Diff a repo against constitution.md; a live ID is covered only when a test mentions it. Leftover dead-ID mentions are tagged cleanup on the same list. Add unlabeled mentions after one confirm. Lists only; tdd-plan specifies deletes. Handoff (default), list-only, or per-gap. Runnable after init or amend."
 agent: build
 ---
 
 Diff a repo against `constitution.md`. A live ID is covered only when a test mentions that ID. Unlabeled tests that already pin a rule get the ID added after one confirm per run; they are not gaps. True misses stay on the gap list. Leftover mentions of `[CANCELLED]` / `[REPLACED_BY: ...]` IDs are tagged cleanup rows on the same list. The flow: resolve the **target** (§1), set the **scope** (§2), define a **proper test** and **diff each live rule** (§3), **list the gaps** (§4), **ask filing mode** then hand off or file per the pick (§5), then **stop** (§6). Mentions stay the only write. Do not implement missing tests or missing code.
 
-This command is `agent: build`. Runnable after `/bam-specs-init` or `/bam-specs-amend`. It does not init and does not amend. It lists only; `/bam-tdd-plan` does the deletes.
+This command is `agent: build`. Runnable after `/bam-specs-init` or `/bam-specs-amend`. It does not init and does not amend. It lists only; `/bam-tdd-plan` specifies the deletes, and running that plan executes them.
 
 $ARGUMENTS   (optional path; optional prefix/section filter)
 
@@ -40,7 +40,7 @@ If a test already pins the rule (it asserts the rule) but does not mention the I
 
 Then a second pass over those skipped IDs:
 
-- A leftover pin is an exact mention of that dead ID in a test (name, fact title, comment, or assert message). Unlabeled leftover behavior is not a leftover pin.
+- A leftover pin is an exact mention of that dead ID in a test (name, fact title, comment, or assert message). Match the dead ID as a standalone token, not as a substring of a longer ID (HH-1 does not match HH-10). Unlabeled leftover behavior is not a leftover pin.
 - A dead ID with a leftover mention is a cleanup candidate for §4.
 - Omit a dead ID with no leftover mention.
 
@@ -82,7 +82,7 @@ Then stop for §5. Do not file anything before the human picks a mode.
 
 - **Default:** one plan on the current card. The mixed list from §4 goes in one handoff.
 - **Live-miss rows:** missing tests plus the code that makes them pass.
-- **Cleanup rows:** remove those leftover tests and orphaned production code. Do not add new tests of cancelled/replaced-old text. Living successors stay the new-tests-plus-code path.
+- **Cleanup rows:** remove leftover coverage of those dead IDs and orphaned production code. Preserve or split assertions that still pin a live successor or another live rule. Do not add new tests of cancelled/replaced-old text. Living successors stay the new-tests-plus-code path. Check that production code is unused by a live successor before removing it.
 - **Resolve the current card** the same way as `/bam-specs-amend` §1:
   1. If the worktree directory name ends in a task id (`MASTER-NNNN` or similar), that is the card. Confirm the GID and summary.
   2. If the worktree name has no task id, ask for a task id or permalink via the `question` tool before searching. Do not guess. `$ARGUMENTS` is path/filter only, not a task id.
@@ -96,7 +96,7 @@ Then stop for §5. Do not file anything before the human picks a mode.
 ### 5c. Alternatives
 
 - **list-only:** stop after the gap list. No snippet, no cards.
-- **per-gap cards:** resolve the current card first (same as §5b) so creates land in that project. Then file one card per row via `asana_create_tasks`. Live-miss cards: missing tests plus the code that makes them pass. Cleanup cards: remove leftover tests and orphaned production code, not add. This is the only create path.
+- **per-gap cards:** resolve the current card first (same as §5b) so creates land in that project. Then file one card per row via `asana_create_tasks`. Live-miss cards: missing tests plus the code that makes them pass. Cleanup cards: remove leftover coverage and orphaned production code, preserving or splitting live assertions, not add. This is the only create path.
 
 ## 6. Relations + stop
 
@@ -104,7 +104,7 @@ Runnable after `/bam-specs-init` or `/bam-specs-amend`. This command does not in
 
 - This command lists only.
 - Do not implement missing tests or missing code.
-- Mentions stay the only write: writing ID mentions into existing tests.
-- This command does not delete tests or production code. tdd-plan does the deletes.
+- Mentions stay the only write to the repo: writing ID mentions into existing tests. Per-gap Asana card creation (§5c) remains allowed.
+- This command does not delete tests or production code. tdd-plan does the deletes: `/bam-tdd-plan` specifies them; running that plan executes them.
 
 Stop after mentions (if any), then the chosen §5 path: the handoff snippet, list-only, or per-gap filing.
