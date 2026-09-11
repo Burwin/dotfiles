@@ -67,14 +67,17 @@ Before touching anything, **echo the resolved step** so the human can sanity-che
 Only after the §5 confirm, execute **exactly one step** — the step resolved in §3, and nothing beyond it:
 
 1. **Do the work the step names** — follow the plan's own instructions for that step and its TDD discipline (RED = one failing test; GREEN = the minimal change that makes it pass; REFACTOR = tidy with the suite green), running the plan's verification check before calling it done.
-2. **Commit on the plan's cadence** — keep this step's change as its own Conventional-Commits commit per `@rules/workflow.md`, so the red→green history stays legible (the per-step commits are squashed at deploy).
-3. **Don't run ahead** — stop at this one step even when the next looks trivial. One step per session is what keeps the human review checkpoint and the §4 tier warning meaningful.
+2. **Tick Progress** — edit the plan's `## Progress` line for this step from `- [ ]` to `- [x]`. A step is not done until that tick is **on disk**; do this **before** the commit.
+3. **Commit on the plan's cadence** — keep this step's change as its own Conventional-Commits commit per `@rules/workflow.md`, so the red→green history stays legible (the per-step commits are squashed at deploy). Include the plan file with the tick.
+4. **Don't run ahead** — stop at this one step even when the next looks trivial. One step per session is what keeps the human review checkpoint and the §4 tier warning meaningful.
 
 ## 7. Post the next trigger
 
-With the step done, **emit the next step's trigger verbatim** for the following row of the plan's step table — in the exact canonical shape from `@rules/plans.md` (backticked fields; one logical line that may wrap onto two; the `— plan:` path never dropped):
+Before you output *anything* that looks like a trigger, **use the Read tool** on the plan from §2. Read `## Progress`. **Explicitly confirm** in your reasoning that the line for the step you just finished now contains `[x]`. If it does not, go back to §6 and tick it.
+
+Only then emit the next step's trigger **verbatim** as the last output — for the following row of the plan's step table, in the exact canonical shape from `@rules/plans.md` (backticked fields; one logical line that may wrap onto two; the `— plan:` path never dropped):
 
 > ▶️ Step `N` of `M` — `<label>` — model: `<tier>` — plan:
 > `docs/plans/<topic>/PLAN.md`
 
-Then **stop** — ready to paste into a fresh session. Do not begin that next step here; resuming it is the next invocation's job.
+Nothing after the trigger. Then **stop** — ready to paste into a fresh session. Do not begin that next step here; resuming it is the next invocation's job.

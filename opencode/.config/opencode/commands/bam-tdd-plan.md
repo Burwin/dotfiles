@@ -28,10 +28,11 @@ Rules for the decomposition:
 - Group steps into phases; every phase should be independently shippable.
 - Only mark a step as already done if that work genuinely exists.
 - Any step that needs sudo, a TTY, or a human must include `human-gated` in the label (or model tier). `sudo` in the step body (not `sudo-free`) also gates even if unmarked. The runner advances only when that step's Progress box is `[x]` on disk.
+- The agent that later **runs** a step follows **Session exit (MANDATORY)** in the generated plan (see §5). Ticking that step's Progress box to `[x]` is part of the step, not optional cleanup.
 
 ## 3. Trigger sentence per step
 
-**Every step carries an explicit trigger sentence** so the next step — and the model that should run it — is unambiguous. When a step completes, the executing agent posts the **next** step's trigger verbatim. Use the canonical shape from `@rules/plans.md` (`N` = step number, `M` = total step count; `<label>` is the step label — for TDD, `<kind>: <title>` where `<kind>` is `RED` / `GREEN` / `REFACTOR`):
+**Every step carries an explicit trigger sentence** so the next step — and the model that should run it — is unambiguous. A step is complete only after Session exit: the executing agent **Read**s the plan, confirms that step's Progress line is `[x]` on disk, and **only then** posts the **next** step's trigger verbatim. Use the canonical shape from `@rules/plans.md` (`N` = step number, `M` = total step count; `<label>` is the step label — for TDD, `<kind>: <title>` where `<kind>` is `RED` / `GREEN` / `REFACTOR`):
 
 > ▶️ Step `N` of `M` — `<label>` — model: `<tier>` — plan:
 > `docs/plans/<topic>/PLAN.md`
@@ -56,6 +57,7 @@ Output the plan to `docs/plans/<topic>/PLAN.md` (kebab-case `<topic>` derived fr
 - **Design** — the shape of what's being built (interfaces, file layout).
 - **TDD implementation order** — the numbered step table (`# | Kind | Step | Model`), grouped by phase, with `M` = the total step count.
 - **Testing strategy**, **risks & gotchas**, **progress checkboxes**, **references**.
+- **Session exit (MANDATORY)** — required section whose body matches `@rules/plans.md` Session exit (the 4-step order: finish the work, edit Progress to `[x]`, **use the Read tool** on the plan and **explicitly confirm** `[x]` **before you output *anything* that looks like a trigger**, then commit on cadence and print the next trigger last). Do not invent a fifth step. Prefer pasting that section into the generated `PLAN.md` so a child session that never loads `@rules/plans.md` still follows it.
 - The **kickoff trigger** sentence at the end.
 
 ## 6. Stop

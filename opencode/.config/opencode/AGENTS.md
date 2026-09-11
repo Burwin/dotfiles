@@ -276,11 +276,12 @@ plan:
 3. Follow the phase order — each phase is independently shippable
 
 Plans are run **one step per fresh LLM session**. Each step carries a **trigger
-sentence** for the next step and a **model tier** (cheap / premium); when a step completes, post the next step's trigger verbatim so the
-human can paste it into a new session. Authoring and executing conventions —
-the canonical trigger shape, the four required parts, and the friendly-name →
-model-id mapping — live in `@rules/plans.md`. `/bam-tdd-plan` applies them to
-TDD plans.
+sentence** for the next step and a **model tier** (cheap / premium). A step is
+not done until that step's Progress line is `[x]` **on disk**; Read Progress
+and confirm the tick before printing any trigger. Authoring and executing
+conventions — the canonical trigger shape, the four required parts, and the
+friendly-name → model-id mapping — live in `@rules/plans.md`. `/bam-tdd-plan`
+applies them to TDD plans.
 
 The cost-tracker plan was archived 2026-06-10 to
 `docs/archive/opencode/PLAN-cost-tracker.md`; its per-task successor
