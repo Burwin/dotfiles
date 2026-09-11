@@ -583,6 +583,7 @@ describe("bam-specs-gaps command", () => {
     expect(/exact id/.test(s3)).toBe(true);
     expect(/assert message/.test(s3)).toBe(true);
     expect(/name, fact title, comment/.test(s3)).toBe(true);
+    expect(/standalone/.test(s3)).toBe(true);
   });
 
   test("scans live IDs only; skips [CANCELLED] / [REPLACED_BY] (§3)", () => {
@@ -617,6 +618,8 @@ describe("bam-specs-gaps command", () => {
     expect(/`question` tool/.test(s3)).toBe(true);
     expect(/recommended default first/.test(s3)).toBe(true);
     expect(/not per id/.test(s3)).toBe(true);
+    expect(/yes\/no/.test(s3)).toBe(true);
+    expect(/add-only/.test(s3)).toBe(true);
   });
 
   test("body diffs each rule and lists the gaps (§3b/§4)", () => {
