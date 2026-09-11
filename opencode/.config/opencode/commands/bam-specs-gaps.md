@@ -30,7 +30,7 @@ Confirm the resolved `{path}` before scanning.
 
 A **proper test** is an automated test that asserts the rule holds in almost all cases. Any of these shapes can be a proper test: a unit test, an integration test, a content/validator test (e.g. `commands.test.ts`), a systemd-timer check, or a CLI smoke run with an assertion.
 
-Docs and process notes do not count. They qualify only in the rare case where a test really does not make sense, and when that exception is claimed the reason must be stated explicitly. That exception is not coverage: coverage still requires the ID token in a test. Do not invent a mention write for it.
+Docs and process notes do not count. They qualify only in the rare case where a test really does not make sense, and when that exception is claimed the reason must be stated explicitly. That exception is not coverage: coverage still requires the ID token in a test. Do not invent a mention write for it. Record it as a gap with the stated reason.
 
 Scan `constitution.md` for live IDs. Skip `[CANCELLED]` and `[REPLACED_BY: ...]`.
 
@@ -45,7 +45,7 @@ With the definition set, diff the law against the repo, one live rule at a time:
 
 ## 4. List the gaps
 
-Emit a gap list: one row per live ID with no ID-token hit and no proper test (true miss only). Unlabeled-but-pinning never appears here. Each row carries:
+Emit a gap list: one row per live ID with no ID-token hit (true miss only). Unlabeled-but-pinning never appears here. A claimed rare docs exception still appears, with the stated reason. Each row carries:
 
 - the rule **ID**
 - a one-line **gist** of the rule

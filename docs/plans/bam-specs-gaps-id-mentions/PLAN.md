@@ -63,8 +63,9 @@ Run: `bun test ./opencode/.config/opencode/commands-validate/`
       - No pin: miss. Record searched locations.
 
 ## 4. List the gaps
-      - One row per live ID with no ID-token hit and no proper test (true miss only).
+      - One row per live ID with no ID-token hit (true miss only).
       - Unlabeled-but-pinning never appears here.
+      - A claimed rare docs exception still appears, with the stated reason.
 
 ## 5. Filing mode
       - Unchanged (handoff default / list-only / per-gap).

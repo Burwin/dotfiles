@@ -515,6 +515,10 @@ describe("bam-specs-gaps command", () => {
     return sliceSection(body, /## 3\. .*?([\s\S]*?)(?=\n## \d\. |$)/);
   }
 
+  function slice4(body: string): string {
+    return sliceSection(body, /## 4\. .*?([\s\S]*?)(?=\n## \d\. |$)/);
+  }
+
   function slice5(body: string): string {
     return sliceSection(body, /## 5\. .*?([\s\S]*?)(?=\n## \d\. |$)/);
   }
@@ -606,6 +610,10 @@ describe("bam-specs-gaps command", () => {
     expect(/not a gap/.test(s3)).toBe(true);
     expect(/already pins/.test(s3)).toBe(true);
     expect(/asserts the rule/.test(s3)).toBe(true);
+    const s4 = slice4(body);
+    expect(/no id-token hit/.test(s4)).toBe(true);
+    expect(/unlabeled-but-pinning never appears/.test(s4)).toBe(true);
+    expect(/rare/.test(s4)).toBe(true);
   });
 
   test("adding mentions waits for one confirm per run (question tool, recommended default first) (§3)", () => {
