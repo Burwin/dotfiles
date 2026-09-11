@@ -629,6 +629,8 @@ describe("bam-specs-gaps command", () => {
     expect(/not per id/.test(s3)).toBe(true);
     expect(/yes\/no/.test(s3)).toBe(true);
     expect(/add-only/.test(s3)).toBe(true);
+    expect(/file:line/.test(s3)).toBe(true);
+    expect(/do not change test logic/.test(s3)).toBe(true);
   });
 
   test("body diffs each rule and lists the gaps (§3b/§4)", () => {

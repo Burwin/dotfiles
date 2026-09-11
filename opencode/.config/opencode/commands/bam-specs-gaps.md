@@ -1,5 +1,5 @@
 ---
-description: Diff a repo against constitution.md; a live ID is covered only when a test mentions it. Add unlabeled mentions after one confirm. True misses: handoff (default), list-only, or per-gap. Runnable after init or amend.
+description: "Diff a repo against constitution.md; a live ID is covered only when a test mentions it. Add unlabeled mentions after one confirm. True misses: handoff (default), list-only, or per-gap. Runnable after init or amend."
 agent: build
 ---
 
