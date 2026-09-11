@@ -782,11 +782,11 @@ describe("bam-specs-gaps command", () => {
     // the only write. Scope /deletes/ to ## 6. Keep /do not implement/
     // and /existing tests/.
     expect(/lists only/.test(s6)).toBe(true);
-    expect(/tdd-plan does the deletes/.test(s6)).toBe(true);
+    expect(/tdd-plan does the deletes/.test(s6)).toBe(false);
     expect(/mentions stay the only write/.test(s6)).toBe(true);
     expect(/deletes/.test(s6)).toBe(true);
     expect(/per-gap asana card creation/.test(s6)).toBe(true);
-    expect(/specifies them/.test(s6)).toBe(true);
+    expect(/specifies the deletes/.test(s6)).toBe(true);
     const intro = body.split(/\n## /)[0];
     expect(/file cards/.test(intro)).toBe(false);
   });

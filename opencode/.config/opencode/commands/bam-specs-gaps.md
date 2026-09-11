@@ -105,6 +105,6 @@ Runnable after `/bam-specs-init` or `/bam-specs-amend`. This command does not in
 - This command lists only.
 - Do not implement missing tests or missing code.
 - Mentions stay the only write to the repo: writing ID mentions into existing tests. Per-gap Asana card creation (§5c) remains allowed.
-- This command does not delete tests or production code. tdd-plan does the deletes: `/bam-tdd-plan` specifies them; running that plan executes them.
+- This command does not delete tests or production code. `/bam-tdd-plan` specifies the deletes; running that plan executes them.
 
 Stop after mentions (if any), then the chosen §5 path: the handoff snippet, list-only, or per-gap filing.
