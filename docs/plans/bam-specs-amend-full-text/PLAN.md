@@ -107,7 +107,7 @@ No RED: review Q1 forbade a new test. Each step is still a single move.
 
 - [x] Step 1 — GREEN: edit §4 so description is the on-disk constitution line
 - [x] Step 2 — VERIFY: commands-validate suite
-- [x] Step 3 — DEPLOY: squash, PR → m, copilot-loop, merge on confirm
+- [ ] Step 3 — DEPLOY: squash, PR → m, copilot-loop, merge on confirm
 
 ## Session exit (MANDATORY)
 
