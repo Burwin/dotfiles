@@ -580,7 +580,7 @@ describe("bam-specs-gaps command", () => {
     const s3 = slice3(body);
     expect(/mention/.test(s3)).toBe(true);
     expect(/fact title/.test(s3)).toBe(true);
-    expect(/exact/.test(s3)).toBe(true);
+    expect(/exact id/.test(s3)).toBe(true);
     expect(/assert message/.test(s3)).toBe(true);
     expect(/name, fact title, comment/.test(s3)).toBe(true);
   });
@@ -603,7 +603,8 @@ describe("bam-specs-gaps command", () => {
     const s3 = slice3(body);
     expect(/add the mention/.test(s3)).toBe(true);
     expect(/not a gap/.test(s3)).toBe(true);
-    expect(/already assert/.test(s3)).toBe(true);
+    expect(/already pins/.test(s3)).toBe(true);
+    expect(/asserts the rule/.test(s3)).toBe(true);
   });
 
   test("adding mentions waits for one confirm per run (question tool, recommended default first) (§3)", () => {
@@ -698,7 +699,9 @@ describe("bam-specs-gaps command", () => {
     const s6 = slice6(body);
     expect(/stop/.test(s6)).toBe(true);
     expect(/stop after.*(handoff|snippet|list-only|per-gap)/.test(s6)).toBe(true);
-    expect(/do not implement/.test(body)).toBe(true);
+    expect(/do not implement/.test(s6)).toBe(true);
+    expect(/missing tests/.test(s6)).toBe(true);
+    expect(/missing code/.test(s6)).toBe(true);
     // Allowed write is ID mentions on existing tests; missing tests/code stay
     // out of scope. Pin scoped to ## 6.
     expect(/existing tests/.test(s6)).toBe(true);

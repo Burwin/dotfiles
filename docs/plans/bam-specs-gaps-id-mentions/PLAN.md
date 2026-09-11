@@ -35,7 +35,7 @@ From the 2026-09-11 MASTER-2040 review:
 | --- | --- | --- |
 | 1 | Unlabeled-but-pinning | This command adds the ID after one confirm per run. Those are not gap cards. |
 | 2 | Covered | Exact live ID token in a test (name, title, comment, or assert) is enough. Mentions are added only onto tests that already pin the rule. Already-labeled IDs are not re-judged. Stray mentions still count as covered. |
-| 3 | Dead IDs | Live IDs only. Add the `[CANCELLED]` / `[REPLACED_BY: ...]` skip (it is not in the command today). Leftover-cancelled cleanup stays MASTER-2041. |
+| 3 | Dead IDs | Live IDs only. Add the `[CANCELLED]` / `[REPLACED_BY: ...]` skip. Leftover-cancelled cleanup stays MASTER-2041. |
 | 4 | True gaps | Existing §5 (handoff / list-only / per-gap). No new auto-create. |
 | 5 | Agent | Keep `agent: build` (gated test-file edits plus optional per-gap Asana writes). |
 | 6 | Proper-test keep | Keep the current "automated test that asserts the rule" language as the test for *where* to add a mention. Coverage *signal* is the ID token. |
@@ -140,7 +140,7 @@ Token discipline: each GREEN must not introduce a later test's tokens.
 | `confirm` already in §1 | Pin the phrase `one confirm`, not `/confirm/`. |
 | `do not implement` in intro blocks gated writes | Steps 9–10 narrow it to missing tests/code. Until then GREEN 6–8 live in §3/§4 only. |
 | Folding MASTER-2041 | Out of scope. Skip dead IDs; do not put leftover cancelled tests on the gap list. |
-| Command writes tests (new) | One confirm per run. Still never implements true-gap tests or production code. |
+| Command writes ID mentions into existing tests (new) | One confirm per run. Still never implements true-gap tests or production code. |
 | Clobber MASTER-2029 plan | New dir `docs/plans/bam-specs-gaps-id-mentions/`. |
 | Restart required | Steps 12–13 include restart + smoke. |
 
