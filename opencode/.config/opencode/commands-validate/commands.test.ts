@@ -778,9 +778,10 @@ describe("bam-specs-gaps command", () => {
     // Allowed write is ID mentions on existing tests; missing tests/code stay
     // out of scope. Pin scoped to ## 6.
     expect(/existing tests/.test(s6)).toBe(true);
-    // This command lists only; tdd-plan does the deletes; mentions stay
-    // the only write. Scope /deletes/ to ## 6. Keep /do not implement/
-    // and /existing tests/.
+    // This command lists only; tdd-plan specifies the deletes; mentions
+    // stay the only write. Scope /deletes/ to ## 6. Keep /do not implement/
+    // and /existing tests/. The stale "tdd-plan does the deletes" phrase
+    // must stay absent.
     expect(/lists only/.test(s6)).toBe(true);
     expect(/tdd-plan does the deletes/.test(s6)).toBe(false);
     expect(/mentions stay the only write/.test(s6)).toBe(true);

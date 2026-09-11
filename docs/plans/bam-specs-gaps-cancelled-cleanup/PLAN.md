@@ -56,7 +56,8 @@ Keep `scans live IDs only; skips [CANCELLED] / [REPLACED_BY] (§3)` green. Live 
 ## 3. … diff each live rule
       - Live scan unchanged: skip [CANCELLED] / [REPLACED_BY: ...] for coverage.
       - Leftover pin: exact mention of that dead ID in a test (name, fact
-        title, comment, assert message). Unlabeled leftover behavior is not
+        title, comment, assert message). Match as a standalone token
+        (HH-1 does not match HH-10). Unlabeled leftover behavior is not
         a leftover pin.
       - Dead ID with leftover mention → cleanup candidate.
       - Dead ID with no leftover mention → omit.
