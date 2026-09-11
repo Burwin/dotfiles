@@ -511,6 +511,14 @@ describe("bam-specs-gaps command", () => {
     return match![1];
   }
 
+  function slice3(body: string): string {
+    return sliceSection(body, /## 3\. .*?([\s\S]*?)(?=\n## \d\. |$)/);
+  }
+
+  function slice4(body: string): string {
+    return sliceSection(body, /## 4\. .*?([\s\S]*?)(?=\n## \d\. |$)/);
+  }
+
   function slice5(body: string): string {
     return sliceSection(body, /## 5\. .*?([\s\S]*?)(?=\n## \d\. |$)/);
   }
@@ -567,6 +575,62 @@ describe("bam-specs-gaps command", () => {
     expect(/automated/.test(body)).toBe(true);
     expect(/assert/.test(body)).toBe(true);
     expect(/rare/.test(body)).toBe(true);
+  });
+
+  test("a live rule is covered only if a test mentions that ID in the name, fact title, comment, or assert message (§3)", () => {
+    const { body } = readBamSpecsGaps();
+    // §3 coverage signal: ID mention (name / fact title / comment / assert).
+    // Keep §3a proper-test pin as-is.
+    const s3 = slice3(body);
+    expect(/mention/.test(s3)).toBe(true);
+    expect(/fact title/.test(s3)).toBe(true);
+    expect(/exact id/.test(s3)).toBe(true);
+    expect(/assert message/.test(s3)).toBe(true);
+    expect(/name, fact title, comment/.test(s3)).toBe(true);
+    expect(/standalone/.test(s3)).toBe(true);
+    expect(/stray/.test(s3)).toBe(true);
+  });
+
+  test("scans live IDs only; skips [CANCELLED] / [REPLACED_BY] (§3)", () => {
+    const { body } = readBamSpecsGaps();
+    // Only live rules are in scope. Skip [CANCELLED] and [REPLACED_BY].
+    const s3 = slice3(body);
+    expect(/cancelled/.test(s3)).toBe(true);
+    expect(/replaced_by/.test(s3)).toBe(true);
+    expect(/skip/.test(s3)).toBe(true);
+    expect(/\[cancelled\]/.test(s3)).toBe(true);
+    expect(/\[replaced_by:/.test(s3)).toBe(true);
+  });
+
+  test("if a test already pins the rule but does not mention the ID, add the mention; do not put that rule on the gap list (§3/§4)", () => {
+    const { body } = readBamSpecsGaps();
+    // A proper-test pin without the ID gets the mention written onto that
+    // test; it is not a gap. Scope the write token to §3.
+    const s3 = slice3(body);
+    expect(/add the mention/.test(s3)).toBe(true);
+    expect(/not a gap/.test(s3)).toBe(true);
+    expect(/already pins/.test(s3)).toBe(true);
+    expect(/asserts the rule/.test(s3)).toBe(true);
+    const s4 = slice4(body);
+    expect(/no id-token hit/.test(s4)).toBe(true);
+    expect(/unlabeled-but-pinning never appears/.test(s4)).toBe(true);
+    expect(/rare/.test(s4)).toBe(true);
+  });
+
+  test("adding mentions waits for one confirm per run (question tool, recommended default first) (§3)", () => {
+    const { body } = readBamSpecsGaps();
+    // Unlabeled-but-pinning writes wait for one confirm per run via the
+    // `question` tool, recommended default first. Pin the phrase so §1's
+    // path `confirm` cannot satisfy this.
+    const s3 = slice3(body);
+    expect(/one confirm/.test(s3)).toBe(true);
+    expect(/`question` tool/.test(s3)).toBe(true);
+    expect(/recommended default first/.test(s3)).toBe(true);
+    expect(/not per id/.test(s3)).toBe(true);
+    expect(/yes\/no/.test(s3)).toBe(true);
+    expect(/add-only/.test(s3)).toBe(true);
+    expect(/file:line/.test(s3)).toBe(true);
+    expect(/do not change test logic/.test(s3)).toBe(true);
   });
 
   test("body diffs each rule and lists the gaps (§3b/§4)", () => {
@@ -649,7 +713,12 @@ describe("bam-specs-gaps command", () => {
     const s6 = slice6(body);
     expect(/stop/.test(s6)).toBe(true);
     expect(/stop after.*(handoff|snippet|list-only|per-gap)/.test(s6)).toBe(true);
-    expect(/do not implement/.test(body)).toBe(true);
+    expect(/do not implement/.test(s6)).toBe(true);
+    expect(/missing tests/.test(s6)).toBe(true);
+    expect(/missing code/.test(s6)).toBe(true);
+    // Allowed write is ID mentions on existing tests; missing tests/code stay
+    // out of scope. Pin scoped to ## 6.
+    expect(/existing tests/.test(s6)).toBe(true);
     const intro = body.split(/\n## /)[0];
     expect(/file cards/.test(intro)).toBe(false);
   });

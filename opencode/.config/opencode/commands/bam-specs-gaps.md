@@ -1,9 +1,9 @@
 ---
-description: Diff a repo against constitution.md, list rules with no proper test, then emit a /bam-tdd-plan handoff snippet (default) or list-only / per-gap cards. Runnable after init or amend.
+description: "Diff a repo against constitution.md; a live ID is covered only when a test mentions it. Add unlabeled mentions after one confirm. True misses: handoff (default), list-only, or per-gap. Runnable after init or amend."
 agent: build
 ---
 
-Diff a repo against `constitution.md`, list rules with no proper test, then emit a `/bam-tdd-plan` handoff snippet for the missing tests plus the code that makes them pass (or list-only / per-gap cards). The flow: resolve the **target** (§1), set the **scope** (§2), define a **proper test** and **diff each rule** (§3), **list the gaps** (§4), **ask filing mode** then hand off or file per the pick (§5), then **stop** (§6). Do not implement.
+Diff a repo against `constitution.md`. A live ID is covered only when a test mentions that ID. Unlabeled tests that already pin a rule get the ID added after one confirm per run; they are not gaps. True misses stay on the gap list and use §5 (handoff default, list-only, or per-gap). The flow: resolve the **target** (§1), set the **scope** (§2), define a **proper test** and **diff each live rule** (§3), **list the gaps** (§4), **ask filing mode** then hand off or file per the pick (§5), then **stop** (§6). Do not implement missing tests or missing code.
 
 This command is `agent: build`. Runnable after `/bam-specs-init` or `/bam-specs-amend`. It does not init and does not amend.
 
@@ -26,20 +26,26 @@ Confirm the resolved `{path}` before scanning.
 - **Ambiguity:** if an argument could be a path, a prefix, or a section name, ask the human which they meant via the `question` tool, **one at a time**, recommended default first, before scanning.
 - **The filter never rewrites the law:** it only narrows which rules this run examines. No edits to `constitution.md`, and no new prefixes or sections.
 
-## 3. Define a proper test, then diff each rule
+## 3. Define a proper test, then diff each live rule
 
-A rule counts as covered only when a **proper test** pins it: an automated test that asserts the rule holds in almost all cases. Any of these shapes can be a proper test: a unit test, an integration test, a content/validator test (e.g. `commands.test.ts`), a systemd-timer check, or a CLI smoke run with an assertion.
+A **proper test** is an automated test that asserts the rule holds in almost all cases. Any of these shapes can be a proper test: a unit test, an integration test, a content/validator test (e.g. `commands.test.ts`), a systemd-timer check, or a CLI smoke run with an assertion.
 
-Docs and process notes do not count. They qualify only in the rare case where a test really does not make sense, and when that exception is claimed the reason must be stated explicitly.
+Docs and process notes do not count. They qualify only in the rare case where a test really does not make sense, and when that exception is claimed the reason must be stated explicitly. That exception is not coverage: coverage still requires the ID token in a test. Do not invent a mention write for it. Record it as a gap with the stated reason.
 
-With the definition set, diff the law against the repo, one rule at a time:
+Scan `constitution.md` for live IDs. Skip `[CANCELLED]` and `[REPLACED_BY: ...]`.
 
-- **Search** — for each rule, read its ID and text, then search the target repo for an automated test that asserts it. Search test directories, files matching `*test*`, validator suites, and CI config.
-- **Record** — a hit gets `file:line`; a miss gets the locations searched. One rule, one verdict. No batching, no skipping.
+A live rule is covered only if a test mentions that exact ID in the name, fact title, comment, or assert message. Match the ID as a standalone token, not as a substring of a longer ID (HH-1 does not cover HH-10). A stray mention of the exact ID still counts as covered, even if that test does not assert the rule. Inferred behavior without that ID token does not count.
+
+If a test already pins the rule (it asserts the rule) but does not mention the ID, add the mention to that test after one confirm per run. Ask with the `question` tool, recommended default first: one yes/no over the full candidate set (`file:line` for each unlabeled pin). One mention-write ask per run, not per ID. That ask does not replace the §2 scope question or the §5 filing-mode question. Mentions go only onto tests that already assert the rule. The allowed edit is add-only: insert the ID into a test name, fact title, comment, or assert message; do not change test logic. Do not put that rule on the gap list. If the confirm is declined, leave the tests unlabeled: they are not covered and still not a gap; the next run asks again.
+
+With the definition set, diff the law against the repo, one live rule at a time:
+
+- **Search** — for each live rule, read its ID and text, then search the target repo for an automated test that asserts it and for that exact ID in a test name, fact title, comment, or assert message. Search test directories, files matching `*test*` or `*spec*`, validator suites, and CI config.
+- **Record** — ID token hit: covered (`file:line`), including a stray mention. Pin without the ID: unlabeled-but-pinning (not a gap; add the mention after the one confirm above). Miss (no pin and no ID-token hit): record the locations searched. One live rule, one verdict. No batching of verdicts. The mention confirm is still one ask over the full candidate set. Do not skip live IDs.
 
 ## 4. List the gaps
 
-Emit a gap list: one row per rule with no proper test. Each row carries:
+Emit a gap list: one row per live ID with no ID-token hit (true miss only). Unlabeled-but-pinning never appears here. A claimed rare docs exception still appears, with the stated reason. Each row carries:
 
 - the rule **ID**
 - a one-line **gist** of the rule
@@ -76,6 +82,6 @@ Then stop for §5. Do not file anything before the human picks a mode.
 
 ## 6. Relations + stop
 
-Runnable after `/bam-specs-init` or `/bam-specs-amend`. This command does not init (no new law, no new prefix or section) and does not amend (no `constitution.md` edit). Do not implement the missing tests or the missing code. This command never writes a plan file.
+Runnable after `/bam-specs-init` or `/bam-specs-amend`. This command does not init (no new law, no new prefix or section) and does not amend (no `constitution.md` edit). Do not implement missing tests or missing code. Writing ID mentions into existing tests is the allowed write. This command never writes a plan file.
 
-Stop after the handoff snippet, or after list-only, or after per-gap filing.
+Stop after mentions (if any), then the chosen §5 path: the handoff snippet, list-only, or per-gap filing.
