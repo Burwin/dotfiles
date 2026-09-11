@@ -1,5 +1,11 @@
 # `/bam-specs-amend` — amendment table shows full constitution line (MASTER-2039)
 
+> **Status:** shipped; archived 2026-09-11. Nothing supersedes it.
+> Merged to `m` via PR #27 (squash `68f30b8`). Asana MASTER-2039 → DONE.
+> Shipped artifact: `opencode/.config/opencode/commands/bam-specs-amend.md` §4
+> (full on-disk constitution line in the amendment table; no new test).
+> Decision history below preserved as-is.
+
 **Asana:** MASTER-2039 (GID `1218419098261639`) — specs-amend: amendment table must show full constitution rule text
 **Permalink:** https://app.asana.com/1/1203819684139908/project/1204506183888935/task/1218419098261639
 **Plan path:** `docs/plans/bam-specs-amend-full-text/PLAN.md`
@@ -107,7 +113,7 @@ No RED: review Q1 forbade a new test. Each step is still a single move.
 
 - [x] Step 1 — GREEN: edit §4 so description is the on-disk constitution line
 - [x] Step 2 — VERIFY: commands-validate suite
-- [ ] Step 3 — DEPLOY: squash, PR → m, copilot-loop, merge on confirm
+- [x] Step 3 — DEPLOY: squash, PR → m, copilot-loop, merge on confirm
 
 ## Session exit (MANDATORY)
 
