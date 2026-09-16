@@ -41,12 +41,19 @@ Ask from the **stakeholder / user perspective** (the same voice as existing cons
 
 ## 4. Propose the amendment table
 
-Compose a proposed `constitution.md` diff and show it as a table:
+Compose a proposed `constitution.md` diff and show it as a table in the message body as regular output. Do not put the table in the question tool.
 
 | ID | description | action |
 | --- | --- | --- |
 
 Action values: `add` / `replace with <id>` / `drop` / `replaces <id>`.
+
+Worked example (copy-pasteable GFM, two-row replace pair). Action on the old row is `replace with <new id>`, not `replace with <old id>`:
+
+| ID | description | action |
+| --- | --- | --- |
+| XX-1 | Old rule text. [REPLACED_BY: XX-2] | replace with XX-2 |
+| XX-2 | New rule text. [REPLACES: XX-1] | replaces XX-1 |
 
 - Related replace-pairs (`replace with` + `replaces`) sit next to each other.
 - Otherwise chronological: existing IDs in order, new IDs after.
@@ -56,10 +63,15 @@ Action values: `add` / `replace with <id>` / `drop` / `replaces <id>`.
 - Description is the actual constitution line that will land on disk, not a shorthand paraphrase.
 - Put the tags that will be written in that cell: `add` is the new sentence(s); `replace with <id>` is the complete existing line (including any tags already on it) plus `[REPLACED_BY: <new>]`; `replaces <id>` is the new sentence(s) plus `[REPLACES: <old>]`; `drop` is the complete existing line (including any tags already on it) plus `[CANCELLED]`.
 - If the line contains `|`, write it as `\|` in the table only so the markdown table holds. Unescape to `|` before writing `constitution.md`.
+- Never format-hop. If the first table is badly formed, fix that GFM table. Do not switch to bullets, ASCII, fenced-as-escape, or paraphrases.
 
 ## 5. Iterate until accepted
 
-Offer keep / modify / drop options for the rows. Apply the human's changes and show the table again. Keep iterating until the human accepts the table. Do not commit until they accept.
+Offer keep / modify / drop options for the rows. After the table is in the message body, ask accept / modify / drop as a plain-text question in that same message. Do not call the question tool on that turn.
+
+Apply the human's changes and show the table again. Keep iterating until the human accepts the table.
+
+Rendering complaints, "try again", and format complaints are not accept. Do not commit until the human gives an explicit accept.
 
 ## 6. Commit constitution.md and stop
 

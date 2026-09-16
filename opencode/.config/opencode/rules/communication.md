@@ -63,11 +63,13 @@ three, and chatbot closers. Exempt: code, logs, quotes, user samples.
 ## Drafts and the question tool
 
 When asking for approval of a draft, revision, or any content the user must
-read to answer (via the `question` tool), embed the content in the question
-text itself. The question UI can take over the screen, so message text that
-precedes the tool call may never be seen — "as shown above" is not reliable.
-If the content is too long to embed, ask a plain-text (non-tool) question in
-the message body instead and wait for the reply.
+read to answer, embed short non-table drafts in the `question` tool text
+itself. The question UI can take over the screen, so message text that
+precedes the tool call may never be seen; "as shown above" is not reliable.
+If the content is too long to embed, or is a GFM table, put it in the
+message body as regular output and ask a plain-text (non-tool) question in
+that same message. Do not call the question tool on that turn. Wait for
+the reply.
 
 ## Implementing plans
 

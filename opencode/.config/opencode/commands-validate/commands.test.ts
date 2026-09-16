@@ -460,6 +460,22 @@ describe("bam-specs-amend command", () => {
     expect(/replaces/.test(body)).toBe(true);
   });
 
+  test("body shows the amendment table as regular output (§4)", () => {
+    const { body } = readBamSpecsAmend();
+    // §4 must show the GFM table in the message body as regular output,
+    // with a worked example. Tokens newly-absent before MASTER-2048.
+    expect(/regular output/.test(body)).toBe(true);
+    expect(/message body/.test(body)).toBe(true);
+    expect(/worked example/.test(body)).toBe(true);
+  });
+
+  test("body forbids format-hop (§4)", () => {
+    const { body } = readBamSpecsAmend();
+    // §4 must never format-hop: fix the GFM table, do not switch media.
+    // Token newly-absent before MASTER-2048 step 4.
+    expect(/format-hop/.test(body)).toBe(true);
+  });
+
   test("body iterates until accepted (§5)", () => {
     const { body } = readBamSpecsAmend();
     // keep / modify / drop is §5-specific; iterate/accept also appear in
@@ -467,6 +483,13 @@ describe("bam-specs-amend command", () => {
     expect(/keep \/ modify \/ drop/.test(body)).toBe(true);
     expect(/iterate/.test(body)).toBe(true);
     expect(/accept/.test(body)).toBe(true);
+  });
+
+  test("body requires explicit accept before commit (§5)", () => {
+    const { body } = readBamSpecsAmend();
+    // §5 must not commit until the human explicitly accepts.
+    // Token newly-absent before MASTER-2048 step 6.
+    expect(/explicit accept/.test(body)).toBe(true);
   });
 
   test("body commits constitution.md and excludes tests/cards (§6)", () => {
