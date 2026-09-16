@@ -1,5 +1,12 @@
 # `/bam-specs-amend` table guardrails (MASTER-2048)
 
+> **Status:** shipped; archived 2026-09-16. Nothing supersedes it.
+> Merged to `m` via PR #30 (squash `ab16d05`). Asana MASTER-2048 → DONE.
+> Shipped artifact: `opencode/.config/opencode/commands/bam-specs-amend.md` §4/§5
+> (table as regular TUI output, no format-hop, explicit accept) plus the
+> `communication.md` GFM-table hatch and three commands.test.ts pins.
+> Decision history below preserved as-is.
+
 **Asana:** MASTER-2048 (GID `1218542806195503`) — MASTER / IN PROGRESS
 **Permalink:** https://app.asana.com/1/1203819684139908/project/1204506183888935/task/1218542806195503
 **Worktree:** `~/src/dotfiles/MASTER-2048`
