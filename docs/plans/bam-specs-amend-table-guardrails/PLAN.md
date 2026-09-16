@@ -185,7 +185,7 @@ the lowercased body.
 - [x] Step 6 — GREEN: §5 explicit accept
 - [x] Step 7 — GREEN: communication.md hatch
 - [x] Step 8 — VERIFY: commands-validate suite
-- [x] Step 9 — DEPLOY: squash, PR → m, copilot-loop, merge on confirm
+- [x] Step 9 — DEPLOY: squash, PR → m, copilot-loop (merge/ff/restart gated)
 
 ## Session exit (MANDATORY)
 
