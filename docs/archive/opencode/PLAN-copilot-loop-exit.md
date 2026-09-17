@@ -1,5 +1,11 @@
 # Copilot loop exit signals (MASTER-2049)
 
+> **Status:** shipped; archived 2026-09-17. Nothing supersedes it.
+> Merged to `m` via PR #31 (squash `9f242e1`). Asana MASTER-2049 → DONE.
+> Shipped artifact: AGENTS.md Copilot loop-exit paragraph, `/bam-copilot-loop`
+> and `/bam-deploy-dev` either-signal exits, plus three commands.test.ts pins.
+> Decision history below preserved as-is.
+
 **Asana:** MASTER-2049 (GID `1218544511796219`) — Update Copilot PR review driver to recognize new GitHub success messages
 **Permalink:** https://app.asana.com/1/1203819684139908/project/1204506183888935/task/1218544511796219
 **Project:** MASTER / IN PROGRESS
@@ -153,7 +159,7 @@ commit.
 - [x] Step 5 — RED: pin AGENTS.md Copilot Comments generated: 0 new
 - [x] Step 6 — GREEN: AGENTS.md Loop exit signal
 - [x] Step 7 — VERIFY: suite + restart + smoke (suite 62/62. CLI smoke with `OPENCODE_CONFIG` + `OPENCODE_CONFIG_DIR` pointed at this worktree (fresh process, same as a restart): resolved `/bam-copilot-loop` description and body name both `generated no new comments` and `Comments generated: 0 new`. Remaining gate: live `~/.config/opencode` still points at the main checkout, so a post-merge TUI re-smoke (ff main, restart) folds into Step 8.)
-- [ ] Step 8 — DEPLOY (human-gated): squash, PR → m, copilot-loop, merge, archive
+- [x] Step 8 — DEPLOY (human-gated): squash, PR → m, copilot-loop, merge, archive
 
 ## Session exit (MANDATORY)
 
