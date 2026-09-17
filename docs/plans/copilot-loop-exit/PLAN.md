@@ -153,7 +153,7 @@ commit.
 - [x] Step 5 — RED: pin AGENTS.md Copilot Comments generated: 0 new
 - [x] Step 6 — GREEN: AGENTS.md Loop exit signal
 - [x] Step 7 — VERIFY: suite + restart + smoke (suite 62/62. CLI smoke with `OPENCODE_CONFIG` + `OPENCODE_CONFIG_DIR` pointed at this worktree (fresh process, same as a restart): resolved `/bam-copilot-loop` description and body name both `generated no new comments` and `Comments generated: 0 new`. Remaining gate: live `~/.config/opencode` still points at the main checkout, so a post-merge TUI re-smoke (ff main, restart) folds into Step 8.)
-- [x] Step 8 — DEPLOY (human-gated): squash, PR → m, copilot-loop (merge/ff/restart/archive gated)
+- [ ] Step 8 — DEPLOY (human-gated): squash, PR → m, copilot-loop, merge, archive
 
 ## Session exit (MANDATORY)
 
