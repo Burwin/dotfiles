@@ -204,10 +204,10 @@ Why cheap on 4: run an existing suite.
 
 ## Progress
 
-- [ ] Step 1 — GREEN: AGENTS.md escalate guard
-- [ ] Step 2 — GREEN: bam-copilot-loop §6 escalate path
-- [ ] Step 3 — GREEN: bam-deploy-dev blocked-is-not-clean exception
-- [ ] Step 4 — VERIFY: commands-validate suite
+- [x] Step 1 — GREEN: AGENTS.md escalate guard
+- [x] Step 2 — GREEN: bam-copilot-loop §6 escalate path
+- [x] Step 3 — GREEN: bam-deploy-dev blocked-is-not-clean exception
+- [x] Step 4 — VERIFY: commands-validate suite
 - [ ] Step 5 — DEPLOY (human-gated): squash, PR → m, copilot-loop, merge on confirm, ff + restart + archive
 
 ## Session exit (MANDATORY)

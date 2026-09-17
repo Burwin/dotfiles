@@ -36,6 +36,8 @@ In the PR body, summarize the *why* in 1–3 bullets, then list the notable chan
 
 Hand off to **`/bam-copilot-loop <PR>`** to re-request Copilot, reply to inline comments, and iterate until the review reports **"generated no new comments"**. Address each substantive comment with a real fix (and a "Fixed in `<sha>`" reply) rather than dismissing it. Re-running this command is the loop's job — don't duplicate the re-trigger mechanics here.
 
+If the loop stops **blocked** (escalated), that is not clean: do not merge; wait for the human.
+
 ## 5. Confirm CI green AND Copilot clean
 
 Gate the merge on **both**, not either:
