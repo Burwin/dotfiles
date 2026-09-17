@@ -257,9 +257,14 @@ Validation gotchas:
   to submitted review. Poll `gh pr view <PR> --json reviews` for
   a new entry with `author.login = "copilot-pull-request-reviewer"`.
 
-Loop exit signal: Copilot's review body reads "Copilot reviewed
+Loop exit signal: Copilot's review body is clean when it contains
+either "generated no new comments" (full signal: "Copilot reviewed
 N out of N changed files in this pull request and generated no
-new comments." That's the clean state; merge can proceed.
+new comments") or "Comments generated: 0 new" (substring match:
+"Comments generated: 0 new, 2 resolved" still counts). Do not
+exit solely on "Approval recommended" or "No unresolved blocking
+issues were identified" (those can sit next to nits). That's the
+clean state; merge can proceed.
 
 Reply-then-re-request etiquette: reply to each inline comment via
 `POST /repos/.../pulls/{n}/comments/{comment_id}/replies` with a
