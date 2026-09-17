@@ -1,5 +1,5 @@
 ---
-description: Ship the current branch end-to-end — commit, push, open a PR against the correct base branch, run the Copilot review loop until clean, confirm CI is green, then merge. Follows the workflow + safety rules.
+description: Ship the current branch end-to-end — commit, push, open a PR against the correct base branch, run the Copilot review loop until clean (stop if blocked), confirm CI is green, then merge. Follows the workflow + safety rules.
 agent: build
 ---
 
@@ -34,7 +34,9 @@ In the PR body, summarize the *why* in 1–3 bullets, then list the notable chan
 
 ## 4. Run the Copilot review loop
 
-Hand off to **`/bam-copilot-loop <PR>`** to re-request Copilot, reply to inline comments, and iterate until the review **body** contains **"generated no new comments"** or **"Comments generated: 0 new"**. Address each substantive comment with a real fix (and a "Fixed in `<sha>`" reply) rather than dismissing it. Do **not** exit solely on **"Approval recommended"** or **"No unresolved blocking issues were identified"** (those can sit next to nits). Re-running this command is the loop's job — don't duplicate the re-trigger mechanics here.
+Hand off to **`/bam-copilot-loop <PR>`** to re-request Copilot, reply to inline comments, and iterate until the review **body** contains **"generated no new comments"** or **"Comments generated: 0 new"**. Address each in-loop comment with a real fix (and a "Fixed in `<sha>`" reply) rather than dismissing it; escalations follow the blocked path below. Do **not** exit solely on **"Approval recommended"** or **"No unresolved blocking issues were identified"** (those can sit next to nits). Re-running this command is the loop's job — don't duplicate the re-trigger mechanics here.
+
+If the loop stops **blocked** (escalated), that is not clean: do not merge; wait for the human.
 
 ## 5. Confirm CI green AND Copilot clean
 

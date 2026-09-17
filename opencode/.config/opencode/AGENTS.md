@@ -271,6 +271,29 @@ Reply-then-re-request etiquette: reply to each inline comment via
 brief "Fixed in <sha>" note before re-requesting. Future human
 reviewers see the resolution trail without having to diff commits.
 
+### Escalate, do not auto-accept
+
+Copilot suggestions are not auto-accepted when they would change law or
+user-visible behavior. Triage each new comment before implementing.
+
+Escalate (do not implement inside the loop) if the suggestion would:
+- amend `constitution.md`
+- change user-visible behavior (CLI, API, or UX)
+- change a test pinned to a constitution rule (the test names a
+  constitution ID, or is otherwise the pin for that rule)
+
+Stay in-loop for nits, docs, internal refactors, and tests not pinned
+to a constitution rule.
+
+On escalate:
+- Reply on the inline comment that it is out of loop and needs a human
+  / constitution decision. Do not implement. Do not dismiss.
+- If some comments are in-loop, fix those, reply "Fixed in <sha>", then
+  escalate the rest.
+- Stop **blocked**, not clean. Do not re-request until the human decides.
+
+Canonical for `/bam-copilot-loop` §6 and `/bam-deploy-dev`.
+
 ## Plans
 
 Active implementation plans live in `docs/plans/`. When asked to work on a
