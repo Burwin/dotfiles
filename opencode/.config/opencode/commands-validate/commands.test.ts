@@ -202,6 +202,34 @@ describe("bam-copilot-loop command", () => {
   });
 });
 
+describe("copilot loop exit signals (MASTER-2049)", () => {
+  test("bam-copilot-loop.md body (frontmatter stripped, lowercased) contains `comments generated: 0 new` and still contains `no new comments`", () => {
+    const filePath = join(commandsDir, "bam-copilot-loop.md");
+    expect(existsSync(filePath)).toBe(true);
+    const content = readFileSync(filePath, "utf8");
+    const body = stripFrontmatter(content).toLowerCase();
+    expect(body).toContain("comments generated: 0 new");
+    expect(body).toContain("no new comments");
+  });
+
+  test("bam-deploy-dev.md body contains `comments generated: 0 new`", () => {
+    const filePath = join(commandsDir, "bam-deploy-dev.md");
+    expect(existsSync(filePath)).toBe(true);
+    const content = readFileSync(filePath, "utf8");
+    const body = stripFrontmatter(content).toLowerCase();
+    expect(body).toContain("comments generated: 0 new");
+  });
+
+  test("AGENTS.md Copilot section contains `comments generated: 0 new` and still contains `generated no new comments`", () => {
+    const agentsPath = join(import.meta.dir, "..", "AGENTS.md");
+    expect(existsSync(agentsPath)).toBe(true);
+    const content = readFileSync(agentsPath, "utf8");
+    const copilot = (content.match(/## GitHub Copilot review re-trigger([\s\S]*?)(?=\n## |$)/) || ["", ""])[1].toLowerCase();
+    expect(copilot).toContain("comments generated: 0 new");
+    expect(copilot).toContain("generated no new comments");
+  });
+});
+
 describe("bam-resume command", () => {
   // Load the command inside each test (never at describe/module-init) so a
   // missing file surfaces as a normal assertion failure — following the

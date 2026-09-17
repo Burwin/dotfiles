@@ -34,7 +34,7 @@ In the PR body, summarize the *why* in 1–3 bullets, then list the notable chan
 
 ## 4. Run the Copilot review loop
 
-Hand off to **`/bam-copilot-loop <PR>`** to re-request Copilot, reply to inline comments, and iterate until the review reports **"generated no new comments"**. Address each substantive comment with a real fix (and a "Fixed in `<sha>`" reply) rather than dismissing it. Re-running this command is the loop's job — don't duplicate the re-trigger mechanics here.
+Hand off to **`/bam-copilot-loop <PR>`** to re-request Copilot, reply to inline comments, and iterate until the review **body** contains **"generated no new comments"** or **"Comments generated: 0 new"**. Address each substantive comment with a real fix (and a "Fixed in `<sha>`" reply) rather than dismissing it. Do **not** exit solely on **"Approval recommended"** or **"No unresolved blocking issues were identified"** (those can sit next to nits). Re-running this command is the loop's job — don't duplicate the re-trigger mechanics here.
 
 If the loop stops **blocked** (escalated), that is not clean: do not merge; wait for the human.
 
@@ -43,7 +43,7 @@ If the loop stops **blocked** (escalated), that is not clean: do not merge; wait
 Gate the merge on **both**, not either:
 
 - **CI green** — `gh pr checks <PR>` shows every required check passing (not pending, not failing).
-- **Copilot clean** — the step 4 loop exited on "no new comments".
+- **Copilot clean** — the step 4 loop exited on **"generated no new comments"** or **"Comments generated: 0 new"**.
 
 If anything is red or still pending, fix it and return to step 4. Never disable or skip a failing check just to force a pass.
 

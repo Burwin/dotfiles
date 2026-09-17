@@ -1,9 +1,9 @@
 ---
-description: Drive a PR's Copilot review to a clean state — reply "Fixed in <sha>" to inline comments, re-request via the @copilot reviewer (GraphQL botIds fallback), validate via REST, poll for the new review, and loop until it reports "no new comments".
+description: "Drive a PR's Copilot review to a clean state. Reply \"Fixed in <sha>\" to inline comments, re-request via the @copilot reviewer (GraphQL botIds fallback), validate via REST, poll for the new review, and loop until the review body contains \"generated no new comments\" or \"Comments generated: 0 new\"."
 agent: build
 ---
 
-Drive a pull request's Copilot review to a clean state: **reply → re-request → validate → poll → repeat**, exiting on clean **or** stopping blocked (see §6). The re-trigger mechanics are non-obvious — the plain REST call silently no-ops — so follow this sequence exactly rather than improvising. Full background lives in `AGENTS.md` → "GitHub Copilot review re-trigger".
+Drive a pull request's Copilot review to a clean state: **reply → re-request → validate → poll → repeat**, exiting on clean (**"generated no new comments"** or **"Comments generated: 0 new"**) **or** stopping blocked (see §6). The re-trigger mechanics are non-obvious: the plain REST call silently no-ops, so follow this sequence exactly rather than improvising. Full background lives in `AGENTS.md` → "GitHub Copilot review re-trigger".
 
 Target PR (a number; else inferred from the current branch): $ARGUMENTS
 
@@ -89,6 +89,9 @@ Triage every new comment against `AGENTS.md` → "GitHub Copilot review re-trigg
 
 - **In-loop** (nits, docs, internal refactors, tests not pinned to a constitution rule) → real fixes, commit, reply "Fixed in <sha>", return to **step 2** with the new sha.
 - **Escalate** (would amend `constitution.md`, change user-visible CLI/API/UX, or change a test pinned to a constitution rule) → reply that it is out of loop (needs human/constitution decision). Do not implement. Do not dismiss. If mixed, still apply the in-loop fixes first. Then **stop blocked** (not clean). Do not re-request until the human decides.
-- **Clean** → exit when the review body reads **"generated no new comments"** (full signal: "Copilot reviewed N out of N changed files in this pull request and generated no new comments"). Report that clean state so the caller (e.g. `/bam-deploy-dev`) can proceed.
+- **Clean** → exit when the review **body** contains **either**:
+  1. Legacy: **"generated no new comments"** (full signal: "Copilot reviewed N out of N changed files in this pull request and generated no new comments")
+  2. New: **"Comments generated: 0 new"** (substring match: `Comments generated: 0 new, 2 resolved` still counts)
+- Do **not** exit solely on **"Approval recommended"** or **"No unresolved blocking issues were identified"** (those can sit next to nits).
 
 Stop at clean or blocked. This command only drives the review. **Do not merge**; merging is the caller's explicit, separately-confirmed step.
