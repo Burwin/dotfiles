@@ -1,5 +1,11 @@
 # Copilot loop: escalate constitution / user-visible suggestions (MASTER-2050)
 
+> **Status:** shipped; archived 2026-09-17. Nothing supersedes it.
+> Merged to `m` via PR #32 (squash `641b56c`). Asana MASTER-2050 → DONE.
+> Shipped artifact: AGENTS.md `### Escalate, do not auto-accept`,
+> `/bam-copilot-loop` §6 blocked path, `/bam-deploy-dev` blocked-is-not-clean
+> exception. Decision history below preserved as-is.
+
 **Asana:** MASTER-2050 (GID `1218544467298175`) — Clarify Copilot review process: escalate (do not auto-accept) Copilot recommendations that would require a constitution.md amendment or significantly change user-visible functionality
 **Permalink:** https://app.asana.com/1/1203819684139908/project/1204506183888935/task/1218544467298175
 **Plan path:** `docs/plans/copilot-loop-escalate/PLAN.md`
@@ -208,7 +214,7 @@ Why cheap on 4: run an existing suite.
 - [x] Step 2 — GREEN: bam-copilot-loop §6 escalate path
 - [x] Step 3 — GREEN: bam-deploy-dev blocked-is-not-clean exception
 - [x] Step 4 — VERIFY: commands-validate suite
-- [ ] Step 5 — DEPLOY (human-gated): squash, PR → m, copilot-loop, merge on confirm, ff + restart + archive
+- [x] Step 5 — DEPLOY (human-gated): squash, PR → m, copilot-loop, merge on confirm, ff + restart + archive
 
 ## Session exit (MANDATORY)
 
