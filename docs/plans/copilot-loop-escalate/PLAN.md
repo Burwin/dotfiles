@@ -183,7 +183,7 @@ Why cheap on 4: run an existing suite.
 ## Testing strategy
 
 - No new coverage. The content suite is a regression gate only.
-- No AGENTS.md content tests exist; do not add one.
+- No AGENTS.md tests for this Copilot subsection; do not add one.
 - Interactive loop behavior is smoke-only after deploy, on the next real
   Copilot drive. Do not invent a fake Copilot review as part of this card.
 

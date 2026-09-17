@@ -1,5 +1,5 @@
 ---
-description: "Drive a PR's Copilot review to a clean state. Reply \"Fixed in <sha>\" to inline comments, re-request via the @copilot reviewer (GraphQL botIds fallback), validate via REST, poll for the new review, and loop until the review body contains \"generated no new comments\" or \"Comments generated: 0 new\"."
+description: "Drive a PR's Copilot review to a clean state, or stop blocked on escalate. Reply \"Fixed in <sha>\" to inline comments, re-request via the @copilot reviewer (GraphQL botIds fallback), validate via REST, poll for the new review, and loop until the review body contains \"generated no new comments\" or \"Comments generated: 0 new\"."
 agent: build
 ---
 
